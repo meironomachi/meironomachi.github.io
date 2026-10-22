@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>페이지를 찾을 수 없어요</title>
+<script>
+// 예전 meiro.kr 주소(교안이 맨 앞에 있던 시절)를 /bioscience/ 아래 새 주소로 옮겨 줍니다
+(function () {
+  var p = location.pathname;
+  if (/^\/(weeks|quiz|pdf)(\/|$)/.test(p)) location.replace("/bioscience" + p + location.search + location.hash);
+})();
+</script>
+</head>
+<body style="font-family:Pretendard,-apple-system,sans-serif;padding:40px 20px">
+<p>찾는 페이지가 없어요. <a href="/">meiro.kr 처음으로 가기</a></p>
+</body>
+</html>
