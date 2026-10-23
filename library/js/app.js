@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
   sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
-} from "./library.js?v=202610231540";
-import { richEditor, toHtml } from "./richtext.js?v=202610231540";
+} from "./library.js?v=202610231546";
+import { richEditor, toHtml } from "./richtext.js?v=202610231546";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -731,6 +731,8 @@ async function start() {
   }
   sb = window.__LIBRARY_TEST_CLIENT__ ?? (await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"))
     .createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true } });
+  window.__meiroSb = sb; // 페이지 아래 FEEDBACK 칸도 같은 로그인을 씀
+  dispatchEvent(new Event("meiro-sb"));
   const { data } = await sb.auth.getSession();
   state.user = data.session?.user ?? null;
   if (new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + (state.user ? "#/" : "#/login"));

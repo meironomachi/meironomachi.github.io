@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610231540";
+} from "./money.js?v=202610231546";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -801,6 +801,8 @@ async function start() {
   }
   sb = window.__MONEY_TEST_CLIENT__ ?? (await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"))
     .createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true } });
+  window.__meiroSb = sb; // 페이지 아래 FEEDBACK 칸도 같은 로그인을 씀
+  dispatchEvent(new Event("meiro-sb"));
   const { data } = await sb.auth.getSession();
   state.user = data.session?.user ?? null;
   sb.auth.onAuthStateChange((event, session) => {

@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
 import {
   KIND_NAME, safeColor, kstDay, isDay, isMonth, shiftMonth, plainText, textStats, num,
   postFields, sameFields, isBlank, draftKey, readLocalDraft, pickResume, filterPosts, monthReport,
-} from "./note.js?v=202610231540";
-import { richEditor, toHtml } from "./richtext.js?v=202610231540";
+} from "./note.js?v=202610231546";
+import { richEditor, toHtml } from "./richtext.js?v=202610231546";
 
 const BUCKET = "diary-photos"; // 일기장과 같은 사진 저장소 (내 폴더 안 note/ 아래)
 const AUTO_MS = 4000; // 입력이 멈추고 4초 뒤 서버에 자동 저장
@@ -716,6 +716,8 @@ async function start() {
   }
   sb = window.__NOTE_TEST_CLIENT__ ?? (await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"))
     .createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true } });
+  window.__meiroSb = sb; // 페이지 아래 FEEDBACK 칸도 같은 로그인을 씀
+  dispatchEvent(new Event("meiro-sb"));
   const { data } = await sb.auth.getSession();
   state.user = data.session?.user ?? null;
   if (new URLSearchParams(location.search).has("code")) history.replaceState(null, "", location.pathname + (state.user ? "#/" : "#/login"));

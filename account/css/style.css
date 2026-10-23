@@ -277,3 +277,13 @@ label.field .input { color: var(--fg); }
 .edit-form .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .btn.danger-fill { background: var(--danger); color: #fff; }
+
+/* 피드백 */
+.fb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.fb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.fb-list li { padding: 16px 18px; }
+.fb-list li.unread { border-left: 4px solid var(--primary); }
+.fb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.fb-meta .badge { margin-left: 0; }
+.badge.guest { background: var(--muted); color: var(--muted-fg); }
+.fb-text { margin: 8px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }

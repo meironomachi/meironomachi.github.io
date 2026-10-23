@@ -1,4 +1,4 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
 
 // meiro.kr의 로그인하는 사이트(일기장, MEIROBOOK, $TDL, MEIRONOTE)가 함께 쓰는 회원 관리
 const PHOTO_BUCKET = "diary-photos";
@@ -33,6 +33,7 @@ function toast(msg, kind = "") {
 
 const ICON = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M1 21a8 8 0 0 1 16 0M17 4a4 4 0 0 1 0 8M23 21a8 8 0 0 0-5-7.4"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
@@ -68,9 +69,10 @@ document.addEventListener("click", (e) => {
 });
 
 /* ---------- 공통 틀 ---------- */
-function shell(current, inner, pending = 0) {
+function shell(current, inner, counts = {}) {
   const back = fromSite();
-  const tabs = [{ path: "/", label: "내 정보", icon: "user" }, ...(state.isAdmin ? [{ path: "/members", label: "회원 목록", icon: "users" }] : [])];
+  const tabs = [{ path: "/", label: "내 정보", icon: "user" },
+    ...(state.isAdmin ? [{ path: "/members", label: "회원 목록", icon: "users", n: counts.pending }, { path: "/feedback", label: "피드백", icon: "message", n: counts.unread }] : [])];
   return `<main class="wrap narrow">
     <header class="top">
       <h1 class="acc-mark"><a href="#/">회원 관리</a></h1>
@@ -81,7 +83,7 @@ function shell(current, inner, pending = 0) {
         <button class="btn ghost sm" type="button" data-act="logout">로그아웃</button>
       </div>
     </header>
-    <nav class="tabs" aria-label="회원 관리 메뉴">${tabs.map((t) => `<a href="#${t.path}" ${t.path === current ? 'aria-current="page"' : ""}>${icon(t.icon)}${t.label}${t.path === "/members" && pending ? `<span class="count">${pending}</span>` : ""}</a>`).join("")}</nav>
+    <nav class="tabs" aria-label="회원 관리 메뉴">${tabs.map((t) => `<a href="#${t.path}" ${t.path === current ? 'aria-current="page"' : ""}>${icon(t.icon)}${t.label}${t.n ? `<span class="count">${t.n}</span>` : ""}</a>`).join("")}</nav>
     ${inner}
   </main>`;
 }
@@ -128,7 +130,7 @@ async function renderMe() {
   const { data } = await sb.auth.getUser();
   const user = data?.user ?? state.user;
   const p = state.profile;
-  const pending = state.isAdmin ? await pendingCount() : 0;
+  const counts = state.isAdmin ? await adminCounts() : {};
   app.innerHTML = shell("/", `
     <section class="paper card">
       <h2>내 계정</h2>
@@ -158,7 +160,7 @@ async function renderMe() {
         <label class="field">새 비밀번호 한 번 더<input class="input" id="pw-new2" type="password" minlength="6" required autocomplete="new-password"></label>
         <div class="actions"><button class="btn primary" type="submit">비밀번호 바꾸기</button></div>
       </form>
-    </section>`, pending);
+    </section>`, counts);
   bindShell();
 
   $("#nick-form").onsubmit = async (e) => {
@@ -210,9 +212,13 @@ async function renderMe() {
 }
 
 /* ---------- 회원 목록 (관리자) ---------- */
-async function pendingCount() {
-  const { data } = await sb.from("profiles").select("id, approved");
-  return (data ?? []).filter((x) => !x.approved).length;
+/** 탭에 띄울 숫자: 승인 대기 회원, 안 읽은 피드백 */
+async function adminCounts() {
+  const [{ data: people }, { data: fb }] = await Promise.all([
+    sb.from("profiles").select("id, approved"),
+    sb.from("feedback").select("id, is_read"),
+  ]);
+  return { pending: (people ?? []).filter((x) => !x.approved).length, unread: (fb ?? []).filter((x) => !x.is_read).length };
 }
 
 async function renderMembers() {
@@ -227,6 +233,7 @@ async function renderMembers() {
   const list = (people ?? []).map((p) => ({ ...p, isAdmin: admins.has(p.id), self: p.id === state.user.id }))
     .sort((a, b) => Number(a.approved) - Number(b.approved)); // 승인 대기를 위로
   const pending = list.filter((p) => !p.approved).length;
+  const counts = { ...(await adminCounts()), pending };
   app.innerHTML = shell("/members", `
     <p class="muted small" style="margin:0 0 12px">회원 ${list.length}명${pending ? ` · 승인 대기 ${pending}명` : ""}</p>
     <ul class="paper people">${list.map((p) => `<li>
@@ -238,7 +245,7 @@ async function renderMembers() {
           : `<button class="btn primary sm" type="button" data-approve="${p.id}" data-v="true">승인</button>`}
         <button class="btn outline sm" type="button" data-edit="${p.id}">수정</button>
         ${p.self ? "" : `<button class="btn ghost sm danger" type="button" data-remove="${p.id}">계정 삭제</button>`}
-      </span></li>`).join("")}</ul>`, pending);
+      </span></li>`).join("")}</ul>`, counts);
   bindShell();
   const byId = new Map(list.map((p) => [p.id, p]));
   $$("[data-approve]").forEach((b) => b.onclick = async () => {
@@ -250,6 +257,48 @@ async function renderMembers() {
   });
   $$("[data-edit]").forEach((b) => b.onclick = () => editMember(byId.get(b.dataset.edit)));
   $$("[data-remove]").forEach((b) => b.onclick = () => removeAccount(byId.get(b.dataset.remove)));
+}
+
+/* ---------- 피드백 (관리자) ---------- */
+const stamp = (iso) => {
+  const t = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${t.getUTCFullYear()}.${p(t.getUTCMonth() + 1)}.${p(t.getUTCDate())} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+};
+const PAGE_NAME = { "/": "메인", "/saytqtul/": "일기장", "/library/": "MEIROBOOK", "/money/": "$TDL", "/note/": "MEIRONOTE" };
+
+async function renderFeedback() {
+  document.title = "피드백 — 회원 관리";
+  if (!state.isAdmin) return go("#/", true);
+  const { data, error } = await sb.from("feedback").select("*").order("created_at", { ascending: false });
+  if (error) { app.innerHTML = shell("/feedback", '<div class="paper notice"><h2>불러오지 못했어요</h2><p>잠시 뒤 새로고침해 주세요.</p></div>'); bindShell(); return; }
+  const list = data ?? [];
+  const unread = list.filter((f) => !f.is_read).length;
+  const counts = { ...(await adminCounts()), unread };
+  app.innerHTML = shell("/feedback", `
+    <div class="fb-head"><p class="muted small" style="margin:0">피드백 ${list.length}개${unread ? ` · 안 읽음 ${unread}개` : ""}</p>
+      ${unread ? '<button class="btn outline sm" type="button" id="read-all">모두 읽음으로</button>' : ""}</div>
+    ${list.length ? `<ul class="fb-list">${list.map((f) => `<li class="paper ${f.is_read ? "" : "unread"}">
+      <div class="fb-meta"><span class="pname">${esc(f.nickname)}</span>${f.user_id ? '<span class="badge ok">회원</span>' : '<span class="badge guest">비회원</span>'}
+        <span class="muted small">${stamp(f.created_at)} · ${esc(PAGE_NAME[f.page] ?? f.page)}</span></div>
+      <p class="fb-text">${esc(f.content)}</p>
+      <div class="person-acts"><button class="btn ghost sm" type="button" data-read="${f.id}" data-v="${!f.is_read}">${f.is_read ? "안 읽음으로" : "읽음으로"}</button>
+        <button class="btn ghost sm danger" type="button" data-del="${f.id}">삭제</button></div>
+    </li>`).join("")}</ul>` : '<div class="paper notice"><h2>아직 피드백이 없어요</h2><p>사이트 맨 아래 FEEDBACK 칸으로 보낸 의견이 여기에 모여요.</p></div>'}`, counts);
+  bindShell();
+  $$("[data-read]").forEach((b) => b.onclick = async () => {
+    await sb.from("feedback").update({ is_read: b.dataset.v === "true" }).eq("id", b.dataset.read);
+    renderFeedback();
+  });
+  $$("[data-del]").forEach((b) => b.onclick = async () => {
+    if (!confirm("이 피드백을 지울까요?")) return;
+    await sb.from("feedback").delete().eq("id", b.dataset.del);
+    renderFeedback();
+  });
+  $("#read-all")?.addEventListener("click", async () => {
+    await sb.from("feedback").update({ is_read: true }).eq("is_read", false);
+    renderFeedback();
+  });
 }
 
 /** 관리자가 직접 바꾸기: 닉네임, 이메일, 비밀번호, 승인, 관리자 권한 */
@@ -335,6 +384,7 @@ async function route() {
   if (!state.user) return go("#/login", true);
   if (!state.profile) await loadMe();
   if (p === "/members") return renderMembers();
+  if (p === "/feedback") return renderFeedback();
   return renderMe();
 }
 

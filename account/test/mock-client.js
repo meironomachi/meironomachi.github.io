@@ -7,6 +7,10 @@ const db = {
     { id: "u3", nickname: "새 회원", email: "new@example.com", approved: false, created_at: "2026-10-22T00:00:00Z" },
   ],
   user_roles: [{ user_id: "u1", role: "admin" }],
+  feedback: [
+    { id: "f1", user_id: null, nickname: "지나가던 사람", content: "메인 페이지 시계가 예뻐요!\n초 단위 말고 날짜도 크게 보면 좋겠어요.", page: "/", is_read: false, created_at: "2026-10-23T14:00:00Z" },
+    { id: "f2", user_id: "u2", nickname: "친구", content: "MEIRONOTE에 글자 수 목표 기능이 있으면 좋겠어요.", page: "/note/", is_read: true, created_at: "2026-10-22T09:30:00Z" },
+  ],
 };
 const log = (window.__ACCOUNT_LOG__ = []);
 const asAdmin = !location.search.includes("member");
@@ -16,12 +20,14 @@ class Query {
   eq(k, v) { this.f.push([k, v]); return this; }
   order() { return this; }
   update(p) { this.op = "update"; this.patch = p; return this; }
+  delete() { this.op = "delete"; return this; }
   maybeSingle() { this.one = true; return this; }
   run() {
     const uid = asAdmin ? me : "u2";
     let rows = (db[this.t] ?? []).filter((r) => this.f.every(([k, v]) => String(r[k]) === String(v)));
     if (this.t === "profiles" && !asAdmin) rows = rows.filter((r) => r.id === uid);
     if (this.op === "update") { rows.forEach((r) => Object.assign(r, this.patch)); log.push(`update ${this.t} ${JSON.stringify(this.patch)}`); }
+    if (this.op === "delete") { db[this.t] = db[this.t].filter((r) => !rows.includes(r)); log.push(`delete ${this.t} ${rows.length}`); }
     rows = structuredClone(rows);
     return { data: this.one ? rows[0] ?? null : rows, error: null };
   }
