@@ -1,4 +1,4 @@
-// STDL 圖書館 규칙: 책 상태, 밑줄 붙여넣기, 서식 있는 감상, 서재 정리
+// MEIROBOOK 규칙: 책 상태, 밑줄 붙여넣기, 서식 있는 감상, 서재 정리
 
 export const STATUSES = [
   { id: "reading", name: "읽는 중" },

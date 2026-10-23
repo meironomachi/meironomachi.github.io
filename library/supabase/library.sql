@@ -1,4 +1,4 @@
--- STDL 圖書館 데이터베이스
+-- MEIROBOOK 데이터베이스
 -- 일기장과 같은 Supabase 프로젝트에서 실행합니다. (일기장의 is_approved 함수를 함께 씁니다)
 -- Supabase 대시보드 → SQL Editor → + New query 에 이 파일 전체를 붙여 넣고 Run.
 -- 여러 번 실행해도 괜찮습니다.

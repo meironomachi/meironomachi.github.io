@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231300";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231518";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
   sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
-} from "./library.js?v=202610231300";
-import { richEditor, toHtml } from "./richtext.js?v=202610231300";
+} from "./library.js?v=202610231518";
+import { richEditor, toHtml } from "./richtext.js?v=202610231518";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -73,7 +73,7 @@ function shell(current, inner) {
   const name = state.profile?.nickname || state.user.email;
   return `<main class="wrap">
     <header class="top">
-      <h1 class="lib-mark"><a href="#/">STDL <span>圖書館</span></a></h1>
+      <h1 class="lib-mark"><a href="#/">MEIRO<span>BOOK</span></a></h1>
       <div class="who">
         <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
         <span>${esc(name)}</span>
@@ -143,11 +143,11 @@ async function loadBooks() {
 
 /* ---------- 로그인 ---------- */
 function renderLogin() {
-  document.title = "로그인 — STDL 圖書館";
+  document.title = "로그인 — MEIROBOOK";
   let mode = "in";
   const draw = () => {
     app.innerHTML = `<a class="home-link" href="/" title="meiro.kr 처음으로">← MEIRO</a>${themeButton("corner")}<main class="auth"><div class="paper">
-      <h1 class="lib-mark" style="text-align:center"><a href="#/">STDL <span>圖書館</span></a></h1>
+      <h1 class="lib-mark" style="text-align:center"><a href="#/">MEIRO<span>BOOK</span></a></h1>
       <p class="muted small" style="text-align:center;margin:8px 0 0">${mode === "in" ? "일기장과 같은 계정으로 들어가요" : "새 계정을 만들어요"}</p>
       <form id="auth-form">
         ${mode === "up" ? '<label class="field">닉네임<input class="input" id="nick" required autocomplete="nickname"></label>' : ""}
@@ -180,7 +180,7 @@ function renderLogin() {
 
 /* ---------- 서재 ---------- */
 async function renderShelf() {
-  document.title = "STDL 圖書館";
+  document.title = "MEIROBOOK";
   app.innerHTML = shell("/", loading());
   bindShell();
   const year = thisYear();
@@ -227,7 +227,7 @@ async function renderShelf() {
 
 /* ---------- 책 추가 ---------- */
 function renderAdd(params) {
-  document.title = "책 추가 — STDL 圖書館";
+  document.title = "책 추가 — MEIROBOOK";
   app.innerHTML = shell("/add", `
     <form class="search" id="search"><input class="input" id="q" type="search" placeholder="책 제목, 저자, ISBN" aria-label="책 검색" value="${esc(params.get("q") ?? "")}" autofocus>
       <button class="btn primary" type="submit">${icon("search")}검색</button></form>
@@ -464,7 +464,7 @@ async function renderBook(id, params = new URLSearchParams()) {
     sb.from("highlights").select("*").eq("book_id", id).order("page", { ascending: true, nullsFirst: false }),
   ]);
   if (!b) { $("main").lastElementChild.outerHTML = '<p class="empty">책을 찾을 수 없어요.</p>'; return; }
-  document.title = `${b.title} — STDL 圖書館`;
+  document.title = `${b.title} — MEIROBOOK`;
   const highlights = hs ?? [];
   const answered = QUESTIONS.filter((q) => b[q.key]?.trim());
   const hasReview = plainText(b.review).trim();
@@ -561,7 +561,7 @@ async function renderEdit(id) {
   bindShell();
   const { data: b } = await sb.from("books").select("*").eq("id", id).maybeSingle();
   if (!b) { $("main").lastElementChild.outerHTML = '<p class="empty">책을 찾을 수 없어요.</p>'; return; }
-  document.title = `정리하기: ${b.title} — STDL 圖書館`;
+  document.title = `정리하기: ${b.title} — MEIROBOOK`;
 
   // 임시저장: 쓰던 감상이 날아가지 않게 이 기기에 저장
   const key = `library-draft:${state.user.id}:${b.id}`;
@@ -657,7 +657,7 @@ async function renderHighlights(id) {
   bindShell();
   const { data: b } = await sb.from("books").select("id, title, authors, cover_url").eq("id", id).maybeSingle();
   if (!b) { $("main").lastElementChild.outerHTML = '<p class="empty">책을 찾을 수 없어요.</p>'; return; }
-  document.title = `밑줄 추가: ${b.title} — STDL 圖書館`;
+  document.title = `밑줄 추가: ${b.title} — MEIROBOOK`;
   let color = "yellow";
   $("main").lastElementChild.remove();
   $("main").insertAdjacentHTML("beforeend", `

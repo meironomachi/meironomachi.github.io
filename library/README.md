@@ -1,4 +1,4 @@
-# STDL 圖書館
+# MEIROBOOK
 
 다 읽은 책을 천천히 정리하고, 감상을 남겨 두는 서재. `meiro.kr/library/` 에서 열립니다.
 일기장(STDL)과 같은 Supabase 프로젝트와 로그인을 씁니다.
