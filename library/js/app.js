@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610230941";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231209";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
   sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
-} from "./library.js?v=202610230941";
-import { richEditor, toHtml } from "./richtext.js?v=202610230941";
+} from "./library.js?v=202610231209";
+import { richEditor, toHtml } from "./richtext.js?v=202610231209";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -75,6 +75,7 @@ function shell(current, inner) {
     <header class="top">
       <h1 class="lib-mark"><a href="#/">STDL <span>圖書館</span></a></h1>
       <div class="who">
+        <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
         <span>${esc(name)}</span>
         <a class="btn ghost sm" href="/saytqtul/">${icon("diary")}일기장</a>
         ${themeButton()}
@@ -145,7 +146,7 @@ function renderLogin() {
   document.title = "로그인 — STDL 圖書館";
   let mode = "in";
   const draw = () => {
-    app.innerHTML = `${themeButton("corner")}<main class="auth"><div class="paper">
+    app.innerHTML = `<a class="home-link" href="/" title="meiro.kr 처음으로">← MEIRO</a>${themeButton("corner")}<main class="auth"><div class="paper">
       <h1 class="lib-mark" style="text-align:center"><a href="#/">STDL <span>圖書館</span></a></h1>
       <p class="muted small" style="text-align:center;margin:8px 0 0">${mode === "in" ? "일기장과 같은 계정으로 들어가요" : "새 계정을 만들어요"}</p>
       <form id="auth-form">

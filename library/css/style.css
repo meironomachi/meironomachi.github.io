@@ -315,3 +315,10 @@ textarea.paste { line-height: 1.7; resize: vertical; }
 .rc-grid i.today { outline: 2px solid var(--fg); outline-offset: 1px; }
 .rc-legend { margin: 8px 0 32px; }
 @media (min-width: 900px) { .rc { --cell: 14px; } }
+
+/* meiro.kr 처음으로 */
+.meiro-btn { font-weight: 800; letter-spacing: .04em; color: var(--fg); }
+.home-link { position: fixed; z-index: 20; top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+  height: 36px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--card); color: var(--fg); font-size: 13px; font-weight: 800; letter-spacing: .04em; text-decoration: none; }
+.home-link:hover { background: var(--muted); }
