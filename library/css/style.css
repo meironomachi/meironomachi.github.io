@@ -261,3 +261,57 @@ textarea.paste { line-height: 1.7; resize: vertical; }
 .star-input button { font-size: 30px; line-height: 1; padding: 2px; border: 0; background: none; cursor: pointer; color: var(--border); }
 .star-input button.on { color: #f5a524; }
 .star-input .small { margin-left: 10px; }
+
+/* 독서 타이머 */
+.runbar { display: flex; align-items: center; gap: 12px; margin: -12px 0 24px; padding: 10px 14px; border-radius: 12px; background: var(--accent); color: var(--accent-fg); text-decoration: none; font-size: 14px; }
+.runbar-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runbar time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.runbar .btn { background: var(--card); }
+.pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); flex: none; animation: pulse 1.6s ease-in-out infinite; }
+.pulse.paused { animation: none; opacity: .4; }
+@keyframes pulse { 50% { opacity: .3; } }
+.timer { margin-top: 32px; padding: 20px 24px; display: grid; gap: 16px; }
+.timer-main { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
+.timer-label { margin: 0; font-size: 13px; font-weight: 700; color: var(--primary); }
+.timer-clock { display: block; font-size: 40px; font-weight: 800; letter-spacing: .02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.timer-total { margin: 2px 0; font-size: 24px; font-weight: 800; }
+.timer-main .muted { margin: 2px 0 0; }
+.timer-btns { display: flex; gap: 8px; }
+.timer-btns .btn { padding: 10px 20px; font-size: 15px; }
+@media (max-width: 560px) { .timer-btns { width: 100%; } .timer-btns .btn { flex: 1; padding: 14px; font-size: 16px; } }
+.timer-alert { padding: 12px 14px; border-radius: 10px; background: var(--muted); font-size: 14px; }
+.timer-alert p { margin: 0 0 8px; }
+.finish { display: grid; gap: 12px; padding: 16px; border-radius: 10px; border: 1px solid var(--border); max-width: 420px; }
+.finish-input { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 15px; }
+.finish-input .input { width: 120px; font-size: 18px; font-weight: 700; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.sessions summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted-fg); padding: 4px 0; }
+.session-list { list-style: none; margin: 8px 0 0; padding: 0; font-size: 14px; }
+.session-list li { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; padding: 8px 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .session-list li { grid-template-columns: auto 1fr; } .session-list .s-actions { grid-column: 1 / -1; justify-self: end; } }
+.session-list li > .s-edit { grid-column: 1 / -1; }
+.s-actions { display: flex; gap: 2px; }
+.manual-session { display: grid; gap: 10px; margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--muted); }
+
+/* 서재: 연속 기록, 독서 달력 */
+.year-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; margin-bottom: 12px; }
+.year-head .year-count { margin: 0; }
+.year-stats { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
+.streak b { color: var(--primary); font-size: 17px; }
+.rc-scroll { overflow-x: auto; padding-bottom: 4px; }
+.rc { --cell: 12px; --gap: 3px; width: max-content; }
+.rc-months, .rc-grid { display: grid; grid-template-columns: repeat(var(--weeks), var(--cell)); column-gap: var(--gap); }
+.rc-months { font-size: 11px; color: var(--muted-fg); height: 16px; }
+.rc-months span { white-space: nowrap; }
+.rc-grid { grid-template-rows: repeat(7, var(--cell)); grid-auto-flow: column; row-gap: var(--gap); }
+.rc-grid i, .rc-legend i { display: block; width: var(--cell, 12px); height: var(--cell, 12px); border-radius: 3px; background: var(--muted); }
+.rc-legend i { display: inline-block; width: 11px; height: 11px; vertical-align: -1px; margin: 0 1px; }
+.lv1 { background: color-mix(in srgb, var(--primary) 25%, var(--muted)) !important; }
+.lv2 { background: color-mix(in srgb, var(--primary) 50%, var(--muted)) !important; }
+.lv3 { background: color-mix(in srgb, var(--primary) 75%, var(--muted)) !important; }
+.lv4 { background: var(--primary) !important; }
+.rc-grid i.future { opacity: .35; }
+.rc-grid i.today { outline: 2px solid var(--fg); outline-offset: 1px; }
+.rc-legend { margin: 8px 0 32px; }
+@media (min-width: 900px) { .rc { --cell: 14px; } }

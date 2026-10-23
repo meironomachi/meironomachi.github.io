@@ -59,3 +59,30 @@ CREATE POLICY "own highlights all" ON public.highlights FOR ALL TO authenticated
   USING (auth.uid() = user_id AND public.is_approved(auth.uid()))
   WITH CHECK (auth.uid() = user_id AND public.is_approved(auth.uid())
     AND EXISTS (SELECT 1 FROM public.books b WHERE b.id = book_id AND b.user_id = auth.uid()));
+
+-- 독서 기록 (타이머). 끝(ended_at)이 비어 있으면 지금 읽는 중
+-- pauses: 잠깐 멈춘 구간 [{"from": 시각, "to": 시각 또는 null}]
+CREATE TABLE IF NOT EXISTS public.reading_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid(),
+  book_id uuid NOT NULL REFERENCES public.books(id) ON DELETE CASCADE,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  ended_at timestamptz,
+  pauses jsonb NOT NULL DEFAULT '[]'::jsonb,
+  progress_from integer,
+  progress_to integer,
+  manual boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (ended_at IS NULL OR ended_at >= started_at)
+);
+-- 한 사람당 동시에 재는 타이머는 하나
+CREATE UNIQUE INDEX IF NOT EXISTS reading_one_running ON public.reading_sessions (user_id) WHERE ended_at IS NULL;
+CREATE INDEX IF NOT EXISTS reading_by_time ON public.reading_sessions (user_id, started_at);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.reading_sessions TO authenticated;
+GRANT ALL ON public.reading_sessions TO service_role;
+ALTER TABLE public.reading_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "own reading all" ON public.reading_sessions;
+CREATE POLICY "own reading all" ON public.reading_sessions FOR ALL TO authenticated
+  USING (auth.uid() = user_id AND public.is_approved(auth.uid()))
+  WITH CHECK (auth.uid() = user_id AND public.is_approved(auth.uid())
+    AND EXISTS (SELECT 1 FROM public.books b WHERE b.id = book_id AND b.user_id = auth.uid()));

@@ -1,9 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610230926";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610230941";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
-} from "./library.js?v=202610230926";
-import { richEditor, toHtml } from "./richtext.js?v=202610230926";
+  sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
+} from "./library.js?v=202610230941";
+import { richEditor, toHtml } from "./richtext.js?v=202610230941";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -81,9 +82,34 @@ function shell(current, inner) {
       </div>
     </header>
     <nav class="tabs" aria-label="서재 메뉴">${TABS.map((t) => `<a href="#${t.path}" ${t.path === current ? 'aria-current="page"' : ""}>${icon(t.icon)}${t.label}</a>`).join("")}</nav>
+    ${runBar(current)}
     ${inner}
   </main>`;
 }
+/* 지금 재고 있는 타이머 (어느 화면에서든 보이게) */
+let running = null;
+async function loadRunning() {
+  const { data } = await sb.from("reading_sessions").select("*").is("ended_at", null).maybeSingle();
+  running = data ?? null;
+  if (running) {
+    const { data: bk } = await sb.from("books").select("title").eq("id", running.book_id).maybeSingle();
+    running.title = bk?.title ?? "";
+  }
+}
+function runBar(current) {
+  if (!running || current === `/book/${running.book_id}`) return "";
+  return `<a class="runbar" href="#/book/${running.book_id}?finish=1">
+    <span class="pulse ${isPaused(running) ? "paused" : ""}" aria-hidden="true"></span>
+    <span class="runbar-text">${isPaused(running) ? "잠깐 멈춤" : "지금 읽는 중"} · <b>${esc(running.title)}</b></span>
+    <time data-run-clock>${clockOf(sessionMs(running))}</time><span class="btn sm outline">끝내기</span></a>`;
+}
+// 1초마다 화면의 타이머 숫자를 갱신 (시작 시각에서 계산하므로 화면이 꺼져 있어도 정확함)
+setInterval(() => {
+  if (!running) return;
+  const t = clockOf(sessionMs(running));
+  $$("[data-run-clock]").forEach((el) => { el.textContent = t; });
+}, 1000);
+
 function bindShell() {
   $('[data-act="logout"]')?.addEventListener("click", async () => { await sb.auth.signOut(); go("#/login", true); });
 }
@@ -155,9 +181,15 @@ async function renderShelf() {
   document.title = "STDL 圖書館";
   app.innerHTML = shell("/", loading());
   bindShell();
-  const books = await loadBooks();
-  const s = shelve(books);
   const year = thisYear();
+  const [books, { data: yearSessions }] = await Promise.all([
+    loadBooks(),
+    sb.from("reading_sessions").select("started_at, ended_at, pauses").gte("started_at", new Date(dayStartMs(`${year}-01-01`) - 86400000).toISOString()),
+  ]);
+  const s = shelve(books);
+  const byDay = minutesByDay((yearSessions ?? []).map((x) => (running && !x.ended_at ? running : x)));
+  const yearMin = Object.entries(byDay).filter(([d]) => d.startsWith(`${year}-`)).reduce((a, [, m]) => a + m, 0);
+  const days = streak(byDay, dayKey(Date.now()));
   const small = (list, title) => list.length ? `<section class="shelf-row"><h2>${title} <span class="muted">${list.length}</span></h2>
       <ul class="row-list">${list.map((b) => `<li><a href="#/book/${b.id}">${cover(b, "sm")}<span class="row-info"><b>${esc(b.title)}</b>
         <span class="muted small">${esc((b.authors ?? []).join(", "))}</span>
@@ -175,13 +207,20 @@ async function renderShelf() {
 
   $("main").lastElementChild.remove();
   $("main").insertAdjacentHTML("beforeend", `
-    <p class="year-count"><b>${year}년</b>에 읽은 책 <b class="num">${doneInYear(books, year)}</b>권</p>
+    <div class="year-head">
+      <p class="year-count"><b>${year}년</b>에 읽은 책 <b class="num">${doneInYear(books, year)}</b>권</p>
+      <p class="year-stats">${days ? `<span class="streak"><b>${days}일</b>째 읽는 중</span>` : `<span class="muted">오늘 읽으면 연속 기록이 시작돼요</span>`}${yearMin ? `<span class="muted">올해 독서 ${durationOf(yearMin * 60000)}</span>` : ""}</p>
+    </div>
+    ${readingCalendar(byDay, year)}
     ${books.length ? "" : `<div class="paper notice"><h2>서재가 비어 있어요</h2><p>첫 책을 추가해 보세요.</p><p style="margin-top:20px"><a class="btn primary" href="#/add">${icon("plus")}책 추가</a></p></div>`}
     ${small(s.reading, "읽는 중")}
     ${done}
     ${small(s.want, "읽고 싶은")}
     ${small(s.dropped, "그만둠")}`);
   bindCovers();
+  const rc = $("#rc");
+  const todayCell = $("#rc .today");
+  if (rc && todayCell) rc.scrollLeft = Math.max(0, todayCell.offsetLeft - rc.clientWidth + 48); // 휴대폰에서는 이번 주가 보이게
 }
 
 /* ---------- 책 추가 ---------- */
@@ -248,9 +287,175 @@ async function addBook(fields, status) {
   go(status === "done" ? `#/book/${data.id}/edit` : `#/book/${data.id}`);
 }
 
+/* ---------- 독서 타이머 ---------- */
+const nowIso = () => new Date().toISOString();
+const closePauses = (pauses, at) => (pauses ?? []).map((p) => (p.to ? p : { ...p, to: at }));
+
+async function finishSession(s, { endAt = nowIso(), progressTo = null } = {}) {
+  const { error } = await sb.from("reading_sessions").update({ ended_at: endAt, pauses: closePauses(s.pauses, endAt), progress_to: progressTo }).eq("id", s.id);
+  if (error) throw error;
+  if (progressTo !== null) await sb.from("books").update({ progress: progressTo, updated_at: nowIso() }).eq("id", s.book_id);
+  if (running?.id === s.id) running = null;
+}
+
+async function startTimer(book) {
+  if (running) await finishSession(running); // 한 번에 한 권만
+  const { data, error } = await sb.from("reading_sessions").insert({ book_id: book.id, started_at: nowIso(), progress_from: book.progress ?? 0 }).select().single();
+  if (error) { toast("타이머를 시작하지 못했어요.", "error"); return; }
+  if (book.status !== "reading") await sb.from("books").update({ status: "reading", started_on: book.started_on ?? ymd(new Date()), updated_at: nowIso() }).eq("id", book.id);
+  running = { ...data, title: book.title };
+}
+
+async function togglePause() {
+  const pauses = isPaused(running) ? closePauses(running.pauses, nowIso()) : [...(running.pauses ?? []), { from: nowIso(), to: null }];
+  const { error } = await sb.from("reading_sessions").update({ pauses }).eq("id", running.id);
+  if (error) { toast("바꾸지 못했어요.", "error"); return; }
+  running.pauses = pauses;
+}
+
+const toLocalInput = (ms) => { const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const hm = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const md = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}.${d.getDate()}`; };
+const pText = (b, v) => (b.progress_unit === "page" ? `${v}쪽` : `${v}%`);
+
+async function timerCard(el, b, params) {
+  const { data } = await sb.from("reading_sessions").select("*").eq("book_id", b.id).order("started_at", { ascending: false });
+  const sessions = (data ?? []).filter((x) => x.ended_at);
+  const mine = running?.book_id === b.id ? running : null;
+  const total = sessions.reduce((sum, x) => sum + sessionMs(x), 0) + (mine ? sessionMs(mine) : 0);
+  const max = b.progress_unit === "page" ? (b.total_pages ?? 99999) : 100;
+  const long = mine && Date.now() - Date.parse(mine.started_at) > 3 * 3600 * 1000;
+
+  el.innerHTML = `
+    <div class="timer-main">
+      <div>
+        <p class="timer-label">${mine ? (isPaused(mine) ? "잠깐 멈춤" : "읽는 중") : "독서 시간"}</p>
+        ${mine ? `<time class="timer-clock" data-run-clock>${clockOf(sessionMs(mine))}</time>`
+          : `<p class="timer-total">${total ? durationOf(total) : "아직 기록 없음"}</p>`}
+        <p class="muted small">${mine ? `이 책 총 ${durationOf(total)}` : sessions.length ? `${sessions.length}번 읽음` : "읽기 시작을 누르면 시간을 재요"}</p>
+      </div>
+      <div class="timer-btns">${mine
+        ? `<button class="btn outline" type="button" id="t-pause">${isPaused(mine) ? "다시 읽기" : "잠깐 멈춤"}</button><button class="btn primary" type="button" id="t-finish">끝내기</button>`
+        : `<button class="btn primary lg-ish" type="button" id="t-start">읽기 시작</button>`}</div>
+    </div>
+    ${long ? `<div class="timer-alert" id="t-long"><p>3시간 넘게 재고 있어요. 아직 읽는 중인가요?</p>
+      <div class="add-as"><button class="btn sm outline" type="button" id="t-keep">계속 읽는 중</button><button class="btn sm outline" type="button" id="t-fix">끝낸 시각 정하기</button></div></div>` : ""}
+    <form class="finish" id="t-done" hidden>
+      <label class="field" id="t-end-field" hidden>끝낸 시각<input class="input" type="datetime-local" id="t-end"></label>
+      <label class="field">몇 ${b.progress_unit === "page" ? "쪽" : "%"}까지 읽었어요?
+        <span class="finish-input"><input class="input" type="number" id="t-progress" min="0" max="${max}" value="${b.progress ?? 0}" inputmode="numeric"><span>${b.progress_unit === "page" ? "쪽" : "%"}</span></span></label>
+      <label class="check" id="t-done-wrap" hidden><input type="checkbox" id="t-mark-done"> 다 읽었어요 (다 읽음으로 바꾸고 정리하기)</label>
+      <div class="add-as"><button class="btn primary" type="submit">저장하고 끝내기</button><button class="btn ghost" type="button" id="t-skip">진도 없이 끝내기</button></div>
+    </form>
+    <details class="sessions" ${params.get("log") ? "open" : ""}><summary>읽은 기록 ${sessions.length}</summary>
+      <ul class="session-list">${sessions.map((x) => `<li data-id="${x.id}">
+          <span>${md(x.started_at)} ${hm(x.started_at)}~${hm(x.ended_at)}</span><b>${durationOf(sessionMs(x))}</b>
+          <span class="muted">${x.progress_to != null ? `${x.progress_from != null ? `${pText(b, x.progress_from)}→` : ""}${pText(b, x.progress_to)}` : ""}${x.manual ? " · 직접 입력" : ""}</span>
+          <span class="s-actions"><button class="btn ghost sm" type="button" data-edit>고치기</button><button class="btn ghost sm danger" type="button" data-del>삭제</button></span>
+        </li>`).join("") || '<li class="muted">아직 기록이 없어요.</li>'}</ul>
+      <form class="manual-session" id="t-manual">
+        <p class="small" style="margin:0;font-weight:700">직접 입력 <span class="muted" style="font-weight:400">타이머를 못 켰을 때</span></p>
+        <div class="grid2">
+          <label class="field">시작<input class="input" type="datetime-local" id="m-start" value="${toLocalInput(Date.now() - 30 * 60000)}" required></label>
+          <label class="field">읽은 시간(분)<input class="input" type="number" id="m-min" min="1" max="1440" value="30" required></label>
+          <label class="field">어디까지 (${b.progress_unit === "page" ? "쪽" : "%"}, 선택)<input class="input" type="number" id="m-progress" min="0" max="${max}"></label>
+        </div>
+        <div><button class="btn outline sm" type="submit">기록 추가</button></div>
+      </form>
+    </details>`;
+
+  const redraw = (opts = "") => go(`#/book/${b.id}${opts}`, true);
+  $("#t-start", el)?.addEventListener("click", async () => { await startTimer(b); toast("읽기 시작! 다 읽으면 끝내기를 눌러 주세요"); redraw(); });
+  $("#t-pause", el)?.addEventListener("click", async () => { await togglePause(); timerCard(el, b, params); });
+  const openFinish = (withEnd = false) => {
+    $("#t-done", el).hidden = false;
+    if (withEnd) { $("#t-end-field", el).hidden = false; $("#t-end", el).value = toLocalInput(Date.parse(mine.started_at) + 60 * 60000); }
+    $("#t-progress", el).focus();
+  };
+  $("#t-finish", el)?.addEventListener("click", () => openFinish());
+  $("#t-keep", el)?.addEventListener("click", () => { $("#t-long", el).remove(); });
+  $("#t-fix", el)?.addEventListener("click", () => openFinish(true));
+  const doneWrap = () => { const v = Number($("#t-progress", el)?.value); $("#t-done-wrap", el).hidden = !(v >= max && b.status !== "done"); };
+  $("#t-progress", el)?.addEventListener("input", doneWrap);
+  const finish = async (progressTo) => {
+    const endInput = $("#t-end", el);
+    const endAt = endInput && !$("#t-end-field", el).hidden && endInput.value ? new Date(endInput.value).toISOString() : nowIso();
+    if (Date.parse(endAt) < Date.parse(mine.started_at)) { toast("끝낸 시각이 시작보다 빨라요.", "error"); return; }
+    try { await finishSession(mine, { endAt, progressTo }); } catch { toast("저장하지 못했어요.", "error"); return; }
+    toast(`${durationOf(sessionMs({ ...mine, ended_at: endAt, pauses: closePauses(mine.pauses, endAt) }))} 읽었어요`);
+    if ($("#t-mark-done", el)?.checked) {
+      await sb.from("books").update({ status: "done", finished_on: ymd(new Date()), updated_at: nowIso() }).eq("id", b.id);
+      go(`#/book/${b.id}/edit`, true);
+    } else redraw();
+  };
+  $("#t-done", el).onsubmit = (e) => { e.preventDefault(); const v = $("#t-progress", el).value; finish(v === "" ? null : Math.max(0, Math.min(max, Number(v)))); };
+  $("#t-skip", el).onclick = () => finish(null);
+  if (mine && params.get("finish")) openFinish();
+  doneWrap();
+
+  // 기록 고치기·삭제
+  $$(".session-list li[data-id]", el).forEach((li) => {
+    const x = sessions.find((y) => y.id === li.dataset.id);
+    $("[data-del]", li).onclick = async () => {
+      if (!confirm("이 기록을 지울까요?")) return;
+      await sb.from("reading_sessions").delete().eq("id", x.id);
+      redraw("?log=1");
+    };
+    $("[data-edit]", li).onclick = () => {
+      li.innerHTML = `<form class="grid2 s-edit"><label class="field">시작<input class="input" type="datetime-local" value="${toLocalInput(Date.parse(x.started_at))}" required></label>
+        <label class="field">읽은 시간(분)<input class="input" type="number" min="1" max="1440" value="${Math.round(sessionMs(x) / 60000)}" required></label>
+        <div class="add-as" style="align-self:end"><button class="btn sm primary" type="submit">저장</button><button class="btn sm ghost" type="button">취소</button></div></form>`;
+      const [start, min] = $$("input", li);
+      $("button[type=button]", li).onclick = () => redraw("?log=1");
+      $("form", li).onsubmit = async (e) => {
+        e.preventDefault();
+        const st = new Date(start.value).getTime();
+        await sb.from("reading_sessions").update({ started_at: new Date(st).toISOString(), ended_at: new Date(st + Number(min.value) * 60000).toISOString(), pauses: [] }).eq("id", x.id);
+        toast("고쳤어요");
+        redraw("?log=1");
+      };
+    };
+  });
+  $("#t-manual", el).onsubmit = async (e) => {
+    e.preventDefault();
+    const st = new Date($("#m-start", el).value).getTime(), min = Number($("#m-min", el).value), pv = $("#m-progress", el).value;
+    const row = { book_id: b.id, started_at: new Date(st).toISOString(), ended_at: new Date(st + min * 60000).toISOString(), manual: true,
+      progress_from: pv === "" ? null : b.progress ?? 0, progress_to: pv === "" ? null : Math.min(max, Number(pv)) };
+    const { error } = await sb.from("reading_sessions").insert(row);
+    if (error) { toast("추가하지 못했어요.", "error"); return; }
+    if (row.progress_to !== null) await sb.from("books").update({ progress: row.progress_to, updated_at: nowIso() }).eq("id", b.id);
+    toast(`${durationOf(min * 60000)} 기록을 추가했어요`);
+    redraw("?log=1");
+  };
+}
+
+/* ---------- 독서 달력 (서재) ---------- */
+function readingCalendar(byDay, year) {
+  const today = dayKey(Date.now());
+  const first = new Date(Date.UTC(year, 0, 1));
+  const cells = [];
+  for (let i = 0; i < first.getUTCDay(); i++) cells.push(null); // 일요일부터 시작하도록 앞을 비움
+  for (let d = new Date(first); d.getUTCFullYear() === year; d.setUTCDate(d.getUTCDate() + 1)) cells.push(d.toISOString().slice(0, 10));
+  const weeks = Math.ceil(cells.length / 7);
+  const months = Array.from({ length: 12 }, (_, m) => {
+    const idx = cells.indexOf(`${year}-${String(m + 1).padStart(2, "0")}-01`);
+    return `<span style="grid-column:${Math.floor(idx / 7) + 1}">${m + 1}월</span>`;
+  }).join("");
+  return `<div class="rc-scroll" id="rc"><div class="rc" style="--weeks:${weeks}">
+      <div class="rc-months">${months}</div>
+      <div class="rc-grid">${cells.map((d) => {
+        if (!d) return "<i></i>";
+        const min = byDay[d] ?? 0;
+        const [, mo, da] = d.split("-").map(Number);
+        return `<i class="lv${readingLevel(min)} ${d > today ? "future" : ""} ${d === today ? "today" : ""}" title="${mo}월 ${da}일${min ? ` · ${durationOf(min * 60000)}` : ""}"></i>`;
+      }).join("")}</div>
+    </div></div>
+    <p class="rc-legend muted small">적게 <i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> 많이 · 하루는 새벽 6시에 바뀌어요</p>`;
+}
+
 /* ---------- 책 한 권 ---------- */
-async function renderBook(id) {
-  app.innerHTML = shell("", loading());
+async function renderBook(id, params = new URLSearchParams()) {
+  app.innerHTML = shell(`/book/${id}`, loading());
   bindShell();
   const [{ data: b }, { data: hs }] = await Promise.all([
     sb.from("books").select("*").eq("id", id).maybeSingle(),
@@ -275,7 +480,7 @@ async function renderBook(id) {
             <select class="input status" id="status">${STATUSES.map((s) => `<option value="${s.id}" ${s.id === b.status ? "selected" : ""}>${s.name}</option>`).join("")}</select>
             <span class="muted small">${b.format === "paper" ? "종이책" : "전자책"}</span>
           </div>
-          ${b.status === "reading" ? `<div class="progress">
+          ${b.status === "reading" && running?.book_id !== b.id ? `<div class="progress">
             <input type="range" id="progress" min="0" max="${b.progress_unit === "page" ? (b.total_pages ?? 1000) : 100}" value="${b.progress ?? 0}" aria-label="진도">
             <output id="progress-out">${progressText(b)}</output></div>` : ""}
           <p class="dates muted small">${[b.started_on && `${dotDate(b.started_on)} 시작`, b.finished_on && `${dotDate(b.finished_on)} 완독`].filter(Boolean).join(" · ")}</p>
@@ -288,6 +493,8 @@ async function renderBook(id) {
           </div>
         </div>
       </header>
+
+      <section class="paper timer" id="timer" aria-label="독서 타이머"></section>
 
       ${b.one_line ? `<blockquote class="one-line">${esc(b.one_line)}</blockquote>` : ""}
 
@@ -307,6 +514,7 @@ async function renderBook(id) {
       </section>
     </article>`);
   bindCovers();
+  timerCard($("#timer"), b, params);
 
   // 상태 바꾸기: 다 읽음이면 완독일, 읽는 중이면 시작일을 오늘로 채움
   $("#status").onchange = async (e) => {
@@ -499,11 +707,12 @@ async function route() {
   }
   if (!state.profile.approved) { app.innerHTML = shell("/", waiting()); bindShell(); return; }
   try {
+    await loadRunning().catch(() => { running = null; });
     if (parts[0] === "add") return renderAdd(params);
     if (parts[0] === "book" && parts[1]) {
       if (parts[2] === "edit") return await renderEdit(parts[1]);
       if (parts[2] === "highlights") return await renderHighlights(parts[1]);
-      return await renderBook(parts[1]);
+      return await renderBook(parts[1], params);
     }
     return await renderShelf();
   } catch {

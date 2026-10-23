@@ -58,3 +58,32 @@ test("카카오 표지는 큰 크기로, 감상은 글자만 뽑기", () => {
   assert.equal(bigCover("https://example.com/a.jpg"), "https://example.com/a.jpg");
   assert.equal(plainText(`${RICH_MARK}<div><b>좋았다</b> &amp; 슬펐다</div>`), "좋았다 & 슬펐다");
 });
+
+test("독서 타이머: 멈춘 시간은 빼고, 하루는 새벽 6시 기준", async () => {
+  const { activeIntervals, sessionMs, dayKey, minutesByDay, streak, clockOf, durationOf, readingLevel } = await import("../js/library.js");
+  // 한국 21:00~22:00, 21:20~21:30 멈춤 → 50분
+  const s = { started_at: "2026-10-23T12:00:00Z", ended_at: "2026-10-23T13:00:00Z", pauses: [{ from: "2026-10-23T12:20:00Z", to: "2026-10-23T12:30:00Z" }] };
+  assert.equal(activeIntervals(s).length, 2);
+  assert.equal(sessionMs(s), 50 * 60000);
+  // 아직 멈춘 채로 진행 중: 멈춘 뒤로는 안 셈
+  const running = { started_at: "2026-10-23T12:00:00Z", ended_at: null, pauses: [{ from: "2026-10-23T12:10:00Z", to: null }] };
+  assert.equal(sessionMs(running, Date.parse("2026-10-23T13:00:00Z")), 10 * 60000);
+  // 한국 새벽 1시는 전날, 아침 7시는 그날
+  assert.equal(dayKey(Date.parse("2026-10-23T16:00:00Z")), "2026-10-23"); // 10.24 01:00 KST
+  assert.equal(dayKey(Date.parse("2026-10-23T22:00:00Z")), "2026-10-24"); // 10.24 07:00 KST
+  // 새벽 5:30~6:30 → 30분씩 나눔
+  const cross = { started_at: "2026-10-23T20:30:00Z", ended_at: "2026-10-23T21:30:00Z", pauses: [] };
+  assert.deepEqual(minutesByDay([cross]), { "2026-10-23": 30, "2026-10-24": 30 });
+  assert.equal(clockOf(3725000), "01:02:05");
+  assert.equal(durationOf(42 * 60000), "42분");
+  assert.equal(durationOf(125 * 60000), "2시간 5분");
+  assert.deepEqual([0, 10, 20, 45, 90].map(readingLevel), [0, 1, 2, 3, 4]);
+});
+
+test("연속 기록: 오늘 아직 안 읽었으면 어제까지 이어진 날", async () => {
+  const { streak } = await import("../js/library.js");
+  const byDay = { "2026-10-20": 10, "2026-10-21": 30, "2026-10-22": 5 };
+  assert.equal(streak(byDay, "2026-10-23"), 3);
+  assert.equal(streak({ ...byDay, "2026-10-23": 12 }, "2026-10-23"), 4);
+  assert.equal(streak({ "2026-10-20": 10 }, "2026-10-23"), 0);
+});

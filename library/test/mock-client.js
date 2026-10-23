@@ -25,12 +25,27 @@ const db = {
     { id: "h2", user_id: uid, book_id: "b1", text: "즉, 북한은 유교적 심성과 가족주의를 국가의 지배논리로 변화시켰다면, 남한은 공식관계 이면에서 그러한 공식관계를 유지, 재생산하기 위한 기제로 활용하고 있다.", page: 24, highlighted_at: "2026-10-23T09:16:00Z", color: "yellow", note: "", created_at: now() },
     { id: "h3", user_id: uid, book_id: "b1", text: "가족은 국가가 책임지지 않는 영역을 떠맡아 왔다.", page: 57, highlighted_at: "2026-10-23T10:02:00Z", color: "sky", note: "", created_at: now() },
   ],
+  // 독서 기록: 최근 여러 날 + 지금 재는 중인 '총, 균, 쇠'
+  reading_sessions: (() => {
+    const out = [];
+    const t0 = Date.parse("2026-10-23T12:00:00Z"); // 한국 21:00
+    const mins = [0, 25, 40, 0, 15, 70, 30, 45, 0, 0, 20, 35, 50, 30, 10, 0, 0, 60, 25, 40, 90, 30, 0, 45, 20, 30, 55, 35, 40, 25];
+    mins.forEach((m, i) => {
+      if (!m) return;
+      const st = t0 - (mins.length - i) * 86400000;
+      out.push({ id: `s${i}`, user_id: uid, book_id: i % 3 ? "b5" : "b1", started_at: new Date(st).toISOString(), ended_at: new Date(st + m * 60000).toISOString(), pauses: [], progress_from: null, progress_to: null, manual: false, created_at: now() });
+    });
+    out.push({ id: "s-run", user_id: uid, book_id: "b5", started_at: new Date(Date.now() - 23 * 60000).toISOString(), ended_at: null, pauses: [], progress_from: 42, progress_to: null, manual: false, created_at: now() });
+    return out;
+  })(),
 };
 
 class Query {
   constructor(table) { this.table = table; this.filters = []; this.op = "select"; this.one = null; this.sort = null; }
   select() { return this; }
   eq(k, v) { this.filters.push([k, v]); return this; }
+  is(k, v) { this.filters.push([k, v, "is"]); return this; }
+  gte(k, v) { this.filters.push([k, v, "gte"]); return this; }
   order(k, o = {}) { this.sort = [k, o.ascending !== false, o.nullsFirst]; return this; }
   insert(row) { this.op = "insert"; this.rows = Array.isArray(row) ? row : [row]; return this; }
   update(patch) { this.op = "update"; this.patch = patch; return this; }
@@ -39,7 +54,7 @@ class Query {
   single() { this.one = "single"; return this; }
   run() {
     const rows = db[this.table];
-    const match = (r) => this.filters.every(([k, v]) => String(r[k]) === String(v));
+    const match = (r) => this.filters.every(([k, v, op]) => op === "is" ? (r[k] ?? null) === v : op === "gte" ? String(r[k]) >= String(v) : String(r[k]) === String(v));
     let out;
     if (this.op === "insert") { out = this.rows.map((r) => ({ id: rid(), user_id: uid, created_at: now(), updated_at: now(), ...(this.table === "books" ? book({}) : {}), ...r })); rows.push(...out); }
     else if (this.op === "update") { out = rows.filter(match); out.forEach((r) => Object.assign(r, this.patch)); }

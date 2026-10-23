@@ -130,3 +130,73 @@ export function plainText(content) {
 }
 
 export const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/* ---------- 독서 타이머 ---------- */
+// 기록 하나 = 시작~끝 사이에서 멈춘 구간(pauses)을 뺀 시간. 끝이 없으면 아직 읽는 중
+// 하루의 기준은 일기장 타임테이블처럼 한국 시간 새벽 6시 (새벽 1시에 읽은 건 전날 밤)
+export const DAY_START_HOUR = 6;
+const KST = 9 * 3600 * 1000;
+
+/** 실제로 읽은 구간들 [[시작ms, 끝ms], …] */
+export function activeIntervals(s, now = Date.now()) {
+  const start = Date.parse(s.started_at);
+  const end = s.ended_at ? Date.parse(s.ended_at) : now;
+  const pauses = (s.pauses ?? []).map((p) => [Date.parse(p.from), p.to ? Date.parse(p.to) : end]).filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let cur = start;
+  for (const [a, b] of pauses) {
+    if (a > cur) out.push([cur, Math.min(a, end)]);
+    cur = Math.max(cur, b);
+    if (cur >= end) break;
+  }
+  if (cur < end) out.push([cur, end]);
+  return out.filter(([a, b]) => b > a);
+}
+export const sessionMs = (s, now) => activeIntervals(s, now).reduce((sum, [a, b]) => sum + (b - a), 0);
+export const isPaused = (s) => !s.ended_at && (s.pauses ?? []).some((p) => !p.to);
+
+/** 그 시각이 속한 하루 (YYYY-MM-DD, 새벽 6시 기준) */
+export function dayKey(ms) {
+  const d = new Date(ms + KST - DAY_START_HOUR * 3600 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+/** 그 하루가 시작하는 시각(ms) */
+export const dayStartMs = (day) => Date.parse(`${day}T00:00:00Z`) - KST + DAY_START_HOUR * 3600 * 1000;
+
+/** 하루별 읽은 분 { "2026-10-23": 42, … } — 하루 경계를 넘는 기록은 나눠서 셈 */
+export function minutesByDay(sessions, now = Date.now()) {
+  const out = {};
+  for (const s of sessions) {
+    for (let [a, b] of activeIntervals(s, now)) {
+      while (a < b) {
+        const day = dayKey(a);
+        const cut = Math.min(b, dayStartMs(day) + 24 * 3600 * 1000);
+        out[day] = (out[day] ?? 0) + (cut - a) / 60000;
+        a = cut;
+      }
+    }
+  }
+  for (const k of Object.keys(out)) out[k] = Math.round(out[k]);
+  return out;
+}
+
+/** 오늘(아직 안 읽었으면 어제)부터 거꾸로 이어서 읽은 날 수 */
+export function streak(byDay, today) {
+  const prev = (day) => dayKey(dayStartMs(day) - 3600 * 1000);
+  let day = byDay[today] > 0 ? today : prev(today);
+  let n = 0;
+  while (byDay[day] > 0) { n++; day = prev(day); }
+  return n;
+}
+
+/** 독서 달력 칸 색 단계 0~4 */
+export const readingLevel = (min) => (!min ? 0 : min < 15 ? 1 : min < 30 ? 2 : min < 60 ? 3 : 4);
+
+export const clockOf = (ms) => {
+  const t = Math.floor(ms / 1000), p = (n) => String(n).padStart(2, "0");
+  return `${p(Math.floor(t / 3600))}:${p(Math.floor(t / 60) % 60)}:${p(t % 60)}`;
+};
+export const durationOf = (ms) => {
+  const m = Math.round(ms / 60000), h = Math.floor(m / 60);
+  return h ? `${h}시간${m % 60 ? ` ${m % 60}분` : ""}` : `${m}분`;
+};
