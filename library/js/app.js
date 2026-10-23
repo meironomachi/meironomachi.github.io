@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231518";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
   sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
-} from "./library.js?v=202610231518";
-import { richEditor, toHtml } from "./richtext.js?v=202610231518";
+} from "./library.js?v=202610231540";
+import { richEditor, toHtml } from "./richtext.js?v=202610231540";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -78,6 +78,7 @@ function shell(current, inner) {
         <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
         <span>${esc(name)}</span>
         <a class="btn ghost sm" href="/saytqtul/">${icon("diary")}일기장</a>
+        <a class="btn ghost sm" href="/account/?from=library">회원 관리</a>
         ${themeButton()}
         <button class="btn ghost sm" type="button" data-act="logout">로그아웃</button>
       </div>

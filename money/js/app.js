@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231510";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610231510";
+} from "./money.js?v=202610231540";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -88,6 +88,7 @@ function shell(current, inner) {
       <div class="who">
         <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
         <span>${esc(name)}</span>
+        <a class="btn ghost sm" href="/account/?from=money">회원 관리</a>
         ${themeButton()}
         <button class="btn ghost sm" type="button" data-act="logout">로그아웃</button>
       </div>

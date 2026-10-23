@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231531";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231540";
 import {
   KIND_NAME, safeColor, kstDay, isDay, isMonth, shiftMonth, plainText, textStats, num,
   postFields, sameFields, isBlank, draftKey, readLocalDraft, pickResume, filterPosts, monthReport,
-} from "./note.js?v=202610231531";
-import { richEditor, toHtml } from "./richtext.js?v=202610231531";
+} from "./note.js?v=202610231540";
+import { richEditor, toHtml } from "./richtext.js?v=202610231540";
 
 const BUCKET = "diary-photos"; // 일기장과 같은 사진 저장소 (내 폴더 안 note/ 아래)
 const AUTO_MS = 4000; // 입력이 멈추고 4초 뒤 서버에 자동 저장
@@ -46,7 +46,6 @@ const ICON = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
-  diary: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4Z"/><path d="M8 4v16"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
@@ -92,7 +91,7 @@ function shell(current, inner) {
       <div class="who">
         <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
         <span>${esc(name)}</span>
-        <a class="btn ghost sm" href="/saytqtul/">${icon("diary")}일기장</a>
+        <a class="btn ghost sm" href="/account/?from=note">회원 관리</a>
         ${themeButton()}
         <button class="btn ghost sm" type="button" data-act="logout">로그아웃</button>
       </div>
