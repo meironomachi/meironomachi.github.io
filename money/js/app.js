@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231300";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231448";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
-} from "./money.js?v=202610231300";
+} from "./money.js?v=202610231448";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -173,7 +173,9 @@ async function renderMonth(params) {
   const rows = [...cats.map((c) => ({ c, spent: s.byCat[c.id] ?? 0, before: p.byCat[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))]
     .filter((r) => r.spent || r.budget).sort((a, b) => b.spent - a.spent);
   const none = s.byCat.none ?? 0;
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.spent, r.budget ?? 0)));
+  // 막대 길이 기준: 분류 없음까지 포함한 가장 큰 금액(예산 포함)
+  const max = Math.max(1, none, ...rows.map((r) => Math.max(r.spent, r.budget ?? 0)));
+  const pct = (n) => Math.min(100, (n / max) * 100);
   const daysLeft = m === thisMonth() ? (() => { const [y, mo] = m.split("-").map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate() - Number(kstDay(new Date().toISOString()).slice(8)) + 1; })() : 0;
 
   fill(`${monthNav("/", m)}
@@ -199,11 +201,11 @@ async function renderMonth(params) {
         return `<li><a href="#/list?m=${m}&c=${r.c.id}">
           <span class="cat-name"><i class="dot" style="background:${r.c.color}"></i>${esc(r.c.name)}</span>
           <span class="cat-amt">${won(r.spent)}${r.budget ? `<span class="muted"> / ${won(r.budget)}</span>` : ""}</span>
-          <span class="cat-bar ${st.state}"><span style="width:${(r.spent / max) * 100}%;background:${st.state === "over" ? "var(--danger)" : st.state === "warn" ? "var(--warn)" : r.c.color}"></span>${r.budget ? `<i class="cap" style="left:${(r.budget / max) * 100}%"></i>` : ""}</span>
+          <span class="cat-bar ${st.state}"><span style="width:${pct(r.spent)}%;background:${st.state === "over" ? "var(--danger)" : st.state === "warn" ? "var(--warn)" : r.c.color}"></span>${r.budget ? `<i class="cap" style="left:${pct(r.budget)}%"></i>` : ""}</span>
           <span class="cat-ch muted small">${ch === null ? "" : ch === 0 ? "지난달과 같음" : `지난달보다 ${ch > 0 ? "+" : ""}${ch}%`}</span>
         </a></li>`;
       }).join("")}
-      ${none ? `<li><a href="#/list?m=${m}&c=none"><span class="cat-name"><i class="dot" style="background:var(--border)"></i>분류 없음</span><span class="cat-amt">${won(none)}</span><span class="cat-bar"><span style="width:${(none / max) * 100}%;background:var(--muted-fg)"></span></span><span class="cat-ch muted small">눌러서 분류하기</span></a></li>` : ""}
+      ${none ? `<li><a href="#/list?m=${m}&c=none"><span class="cat-name"><i class="dot" style="background:var(--border)"></i>분류 없음</span><span class="cat-amt">${won(none)}</span><span class="cat-bar"><span style="width:${pct(none)}%;background:var(--muted-fg)"></span></span><span class="cat-ch muted small">눌러서 분류하기</span></a></li>` : ""}
       </ul>` : '<p class="empty">이 달의 지출이 없어요. 오른쪽 아래 + 버튼으로 넣어 보세요.</p>'}
     </section>
 
