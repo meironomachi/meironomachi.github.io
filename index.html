@@ -18,7 +18,7 @@
   --g200:#c9d5f6; --g100:#e3e9fb; --g50:#f1f4fd;
   --ink:#1d2230; --muted:#5b6478; --line:#dde2ee; --bg:#fbfcff; --card:#ffffff;
   --bar:rgba(255,255,255,.94); --on-accent:#ffffff;
-  --hero-a:#00227a; --hero-b:#0031b0;
+  --hero-a:#00227a; --hero-b:#0031b0; --tile:#eef0f4;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -26,7 +26,7 @@
     --g200:#2b3560; --g100:#1f2745; --g50:#1a2039;
     --ink:#e6e9f2; --muted:#a2a9bb; --line:#2c3350; --bg:#12141c; --card:#181c28;
     --bar:rgba(18,20,28,.94); --on-accent:#ffffff;
-    --hero-a:#0a1a4d; --hero-b:#1b3aa0; color-scheme:dark;
+    --hero-a:#0a1a4d; --hero-b:#1b3aa0; --tile:#232838; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
@@ -34,7 +34,7 @@
   --g200:#2b3560; --g100:#1f2745; --g50:#1a2039;
   --ink:#e6e9f2; --muted:#a2a9bb; --line:#2c3350; --bg:#12141c; --card:#181c28;
   --bar:rgba(18,20,28,.94); --on-accent:#ffffff;
-  --hero-a:#0a1a4d; --hero-b:#1b3aa0; color-scheme:dark;
+  --hero-a:#0a1a4d; --hero-b:#1b3aa0; --tile:#232838; color-scheme:dark;
 }
 *{box-sizing:border-box}
 body{margin:0}
@@ -53,6 +53,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .sitebar nav{display:flex;gap:4px;overflow-x:auto;min-width:0}
 .sitebar nav a{color:var(--g700);text-decoration:none;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
 .sitebar nav a:hover{background:var(--g50)}
+.sitebar nav a.emo{font-size:19px;line-height:1.4;padding:2px 7px}
 .sitebar .right{display:flex;align-items:center;gap:6px;min-width:0}
 .theme{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:999px;
   border:1px solid var(--line);background:var(--card);color:var(--g700);cursor:pointer;padding:0}
@@ -106,6 +107,20 @@ a.repo:focus-visible{outline-offset:-3px;border-radius:10px}
 .repos .acts .solve{color:var(--on-accent);background:var(--g600)}
 .repos .acts .solve:hover{background:var(--g700)}
 @media (max-width:680px){.hero h1{font-size:27px}}
+/* 한국 표준시 시계: 날짜는 작게, 시·분·초는 숫자마다 연한 회색 칸, 바뀔 때 페이드 */
+.kst{margin-top:44px;text-align:center}
+.kst .date{margin:0;font-size:14px;font-weight:600;color:var(--muted);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.kst .digits{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:10px}
+.kst .dg{position:relative;width:clamp(40px,11vw,68px);height:clamp(56px,15vw,92px);border-radius:10px;background:var(--tile);overflow:hidden;
+  font-size:clamp(34px,10vw,60px);font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.kst .dg span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:opacity .45s ease}
+.kst .dg span.out{opacity:0}
+.kst .dg span.in{opacity:0}
+.kst .colon{font-size:clamp(28px,8vw,48px);font-weight:700;color:var(--muted);padding:0 2px;line-height:1}
+.kst .pair{display:flex;gap:6px}
+.kst .src{margin:10px 0 0;font-size:12px;color:var(--muted);letter-spacing:.04em}
+@media (max-width:400px){.kst .digits,.kst .pair{gap:4px}}
+@media (prefers-reduced-motion: reduce){.kst .dg span{transition:none}}
 </style>
 </head>
 <body>
@@ -133,6 +148,12 @@ a.repo:focus-visible{outline-offset:-3px;border-radius:10px}
 </header>
 
 <main class="wrap gut">
+  <section class="kst" aria-label="한국 표준시">
+    <p class="date" id="kst-date"></p>
+    <div class="digits" id="kst-digits" role="timer" aria-live="off"></div>
+    <p class="src">한국 표준시 (KST)</p>
+  </section>
+
   <section class="part" id="list">
     <div class="part-head"><h2>LISTS</h2></div>
     <p class="part-sub">카드를 누르면 사이트로 이동합니다.</p>
@@ -148,6 +169,7 @@ const EXCLUDE = ["deadlinekeeper"];
 const REPOS = [
   {
     name: "saytqtul",
+    emoji: "📝",
     title: "일기장",
     desc: "로그인해서 쓰는 달력형 일기장. 날짜를 눌러 글을 쓰고, 지난 글을 고치고 댓글도 달 수 있어요.",
     chips: ["달력에서 날짜 선택", "글 수정 · 댓글", "태그 관리"],
@@ -156,6 +178,7 @@ const REPOS = [
   },
   {
     name: "library",
+    emoji: "📚",
     title: "MEIROBOOK",
     desc: "다 읽은 책을 천천히 정리하고, 감상과 밑줄을 남겨 두는 서재.",
     chips: ["표지 검색", "밀리의 서재 밑줄", "감상 질문 3가지"],
@@ -164,6 +187,7 @@ const REPOS = [
   },
   {
     name: "money",
+    emoji: "💵",
     title: "$TDL",
     desc: "수입과 지출, 예산을 한눈에 보는 가계부. 은행 거래내역 파일도 한 번에 가져와요.",
     chips: ["이번 달 요약", "예산", "카카오뱅크 파일 가져오기"],
@@ -172,6 +196,7 @@ const REPOS = [
   },
   {
     name: "bioscience",
+    emoji: "🔬",
     title: "생명과학의 세계 교안 요약",
     desc: "2~8주차 교안을 정리한 사이트. 주차별 요약, 문제 풀기, A4 PDF를 한 곳에서 볼 수 있어요.",
     chips: ["주차별 요약 7개", "주차당 36~55문제", "A4 PDF"],
@@ -190,7 +215,7 @@ document.getElementById("theme").addEventListener("click", () => {
 });
 
 document.getElementById("nav").innerHTML =
-  REPOS.map(r => `<a href="#repo-${r.name}">${esc(r.title)}</a>`).join("");
+  REPOS.map(r => `<a class="emo" href="#repo-${r.name}" title="${esc(r.title)}" aria-label="${esc(r.title)}">${r.emoji}</a>`).join("");
 
 document.getElementById("meta").innerHTML = `<span>사이트 ${REPOS.length}개</span>`;
 
@@ -205,6 +230,33 @@ document.getElementById("repos").innerHTML = REPOS.map(r => `
     ${r.sub ? `<a class="read" href="${r.sub.href}">${esc(r.sub.label)}</a>` : ""}
   </div></li>`).join("");
 
+// 한국 표준시 시계 (기기 시계 기준). 숫자가 바뀌는 칸만 페이드로 바꿈
+(() => {
+  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const box = document.getElementById("kst-digits"), dateEl = document.getElementById("kst-date");
+  box.innerHTML = [0, 1, 2].map((i) => `${i ? '<span class="colon" aria-hidden="true">:</span>' : ""}<span class="pair">${'<span class="dg"><span></span></span>'.repeat(2)}</span>`).join("");
+  const cells = [...box.querySelectorAll(".dg")];
+  const p = (n) => String(n).padStart(2, "0");
+  const set = (cell, ch) => {
+    const cur = cell.lastElementChild;
+    if (cur.textContent === ch) return;
+    if (!cur.textContent) { cur.textContent = ch; return; }
+    const next = document.createElement("span");
+    next.className = "in"; next.textContent = ch;
+    cell.append(next);
+    requestAnimationFrame(() => requestAnimationFrame(() => { next.className = ""; cur.className = "out"; }));
+    setTimeout(() => cur.remove(), 500);
+  };
+  const tick = () => {
+    const t = new Date(Date.now() + 9 * 3600 * 1000);
+    dateEl.textContent = `${t.getUTCFullYear()}년 ${t.getUTCMonth() + 1}월 ${t.getUTCDate()}일 ${DOW[t.getUTCDay()]}요일`;
+    const hms = p(t.getUTCHours()) + p(t.getUTCMinutes()) + p(t.getUTCSeconds());
+    [...hms].forEach((ch, i) => set(cells[i], ch));
+    box.setAttribute("aria-label", `${hms.slice(0, 2)}시 ${hms.slice(2, 4)}분 ${hms.slice(4)}초`);
+    setTimeout(tick, 1000 - (Date.now() % 1000) + 5); // 초가 바뀌는 순간에 맞춤
+  };
+  tick();
+})();
 </script>
 
 </body>
