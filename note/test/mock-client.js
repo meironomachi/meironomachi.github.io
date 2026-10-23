@@ -3,7 +3,7 @@ const uid = "u1";
 const rid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const R = "<!--rich-->";
-const post = (o) => ({ id: rid(), user_id: uid, folder_id: null, title: "", content: "", weather: null, moods: [], photos: [], status: "published",
+const post = (o) => ({ id: rid(), user_id: uid, folder_id: null, title: "", purpose: "", content: "", photos: [], status: "published",
   published_at: "2026-10-05T03:00:00Z", created_at: now(), updated_at: "2026-10-05T03:00:00Z", ...o });
 const db = {
   profiles: [{ id: uid, nickname: "메이로", approved: true }],
@@ -16,10 +16,10 @@ const db = {
     { id: "f2", user_id: uid, name: "과제", color: "#2f9e44", sort: 1, created_at: "2" },
   ],
   writing_posts: [
-    post({ id: "p1", folder_id: "f1", written_on: "2026-10-03", title: "가을이 오는 소리", weather: "sunny", moods: [{ label_id: "m1", score: 70 }],
+    post({ id: "p1", folder_id: "f1", written_on: "2026-10-03", title: "가을이 오는 소리", purpose: "에세이 공모전 초안",
       content: `${R}<div>아침 공기가 달라졌다. <b>창문을 열자</b> 차가운 바람이 들어왔다.</div><div>오늘은 <span style="background-color:rgba(255, 212, 0, 0.45)">천천히 걷기로</span> 했다.</div>` }),
-    post({ id: "p2", folder_id: "f2", written_on: "2026-10-12", title: "생명과학 보고서 초안", content: "세포는 생명의 기본 단위이다. 세포막은 인지질 이중층으로 이루어져 있다.\n물질 수송에는 능동 수송과 수동 수송이 있다." }),
-    post({ id: "p3", folder_id: "f1", written_on: "2026-10-20", title: "작은 습관", moods: [{ label_id: "m2", score: 85 }], content: "매일 한 문단씩 쓰기로 했다. 쓰다 보면 생각이 정리된다.", updated_at: "2026-10-21T03:00:00Z" }),
+    post({ id: "p2", folder_id: "f2", written_on: "2026-10-12", title: "생명과학 보고서 초안", purpose: "생명과학의 세계 3주차 과제 제출용", content: "세포는 생명의 기본 단위이다. 세포막은 인지질 이중층으로 이루어져 있다.\n물질 수송에는 능동 수송과 수동 수송이 있다." }),
+    post({ id: "p3", folder_id: "f1", written_on: "2026-10-20", title: "작은 습관", content: "매일 한 문단씩 쓰기로 했다. 쓰다 보면 생각이 정리된다.", updated_at: "2026-10-21T03:00:00Z" }),
     post({ id: "p4", folder_id: null, written_on: "2026-09-28", title: "지난달 메모", content: "구월의 마지막 주." }),
     post({ id: "p5", folder_id: "f1", written_on: "2026-10-23", title: "쓰다 만 글", status: "draft", published_at: null, content: "아직 다 쓰지 못한 문장.", updated_at: "2026-10-23T05:00:00Z" }),
   ],

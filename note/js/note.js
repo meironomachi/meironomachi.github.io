@@ -1,18 +1,5 @@
 // MEIRONOTE 규칙: 글자·단어 수, 자동 저장과 임시저장, 검색, 월간 리포트
-export const MAX_MOODS = 5;
-export const WEATHER = [
-  { id: "sunny", name: "맑음" },
-  { id: "cloudy", name: "흐림" },
-  { id: "rainy", name: "비" },
-  { id: "snowy", name: "눈" },
-  { id: "windy", name: "바람" },
-];
 export const KIND_NAME = { auto: "자동 저장", manual: "임시저장", publish: "올림" };
-
-export function addMood(moods, labelId) {
-  if (moods.length >= MAX_MOODS || moods.some((m) => m.label_id === labelId)) return moods;
-  return [...moods, { label_id: labelId, score: 50 }];
-}
 
 export const safeColor = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#0031B0");
 
@@ -56,20 +43,19 @@ export const num = (n) => n.toLocaleString("ko-KR");
 
 /* ---------- 글 내용 ---------- */
 // 글에서 고칠 수 있는 칸. 버전과 이 기기 임시저장에도 이 모양 그대로 저장
-export const FIELD_KEYS = ["title", "content", "weather", "moods", "photos", "folder_id", "written_on"];
+export const FIELD_KEYS = ["title", "purpose", "content", "photos", "folder_id", "written_on"];
 export function postFields(p = {}) {
   return {
     title: typeof p.title === "string" ? p.title : "",
+    purpose: typeof p.purpose === "string" ? p.purpose : "",
     content: typeof p.content === "string" ? p.content : "",
-    weather: WEATHER.some((w) => w.id === p.weather) ? p.weather : null,
-    moods: Array.isArray(p.moods) ? p.moods.filter((m) => m && typeof m.label_id === "string" && Number.isFinite(m.score)) : [],
     photos: Array.isArray(p.photos) ? p.photos.filter((x) => typeof x === "string") : [],
     folder_id: typeof p.folder_id === "string" ? p.folder_id : null,
     written_on: isDay(p.written_on) ? p.written_on : kstDay(),
   };
 }
 export const sameFields = (a, b) => JSON.stringify(postFields(a)) === JSON.stringify(postFields(b));
-export const isBlank = (f) => !f.title.trim() && !plainText(f.content).trim() && !f.photos.length;
+export const isBlank = (f) => !f.title.trim() && !f.purpose.trim() && !plainText(f.content).trim() && !f.photos.length;
 
 /* ---------- 이 기기 임시저장 (자동 저장이 서버에 닿기 전 대비) ---------- */
 export const draftKey = (userId, postId) => `writing-draft:${userId}:${postId || "new"}`;
@@ -100,14 +86,13 @@ export function pickResume(post, versions, local) {
 }
 
 /* ---------- 목록, 검색 ---------- */
-export function filterPosts(posts, { folder = "", q = "", from = "", to = "", label = "", drafts = true } = {}) {
+export function filterPosts(posts, { folder = "", q = "", from = "", to = "", drafts = true } = {}) {
   const needle = q.trim().toLocaleLowerCase();
   return posts.filter((p) =>
     (folder === "" || (folder === "none" ? !p.folder_id : folder === "drafts" ? p.status === "draft" : p.folder_id === folder)) &&
     (drafts || folder === "drafts" || p.status === "published") &&
-    (!needle || `${p.title}\n${plainText(p.content)}`.toLocaleLowerCase().includes(needle)) &&
-    (!from || p.written_on >= from) && (!to || p.written_on <= to) &&
-    (!label || (p.moods ?? []).some((m) => m.label_id === label)),
+    (!needle || `${p.title}\n${p.purpose ?? ""}\n${plainText(p.content)}`.toLocaleLowerCase().includes(needle)) &&
+    (!from || p.written_on >= from) && (!to || p.written_on <= to),
   ).sort((a, b) => b.written_on.localeCompare(a.written_on) || String(b.updated_at).localeCompare(String(a.updated_at)));
 }
 

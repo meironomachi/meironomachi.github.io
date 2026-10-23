@@ -1,15 +1,15 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231527";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231531";
 import {
-  MAX_MOODS, WEATHER, KIND_NAME, addMood, safeColor, kstDay, isDay, isMonth, shiftMonth, plainText, textStats, num,
+  KIND_NAME, safeColor, kstDay, isDay, isMonth, shiftMonth, plainText, textStats, num,
   postFields, sameFields, isBlank, draftKey, readLocalDraft, pickResume, filterPosts, monthReport,
-} from "./note.js?v=202610231527";
-import { richEditor, toHtml } from "./richtext.js?v=202610231527";
+} from "./note.js?v=202610231531";
+import { richEditor, toHtml } from "./richtext.js?v=202610231531";
 
 const BUCKET = "diary-photos"; // 일기장과 같은 사진 저장소 (내 폴더 안 note/ 아래)
 const AUTO_MS = 4000; // 입력이 멈추고 4초 뒤 서버에 자동 저장
 const app = document.getElementById("app");
 let sb = null;
-const state = { user: null, profile: null, labels: [], folders: [] };
+const state = { user: null, profile: null, folders: [] };
 // 화면을 떠날 때 자동 저장을 마무리하는 함수
 let leaveHook = null;
 window.addEventListener("pagehide", () => leaveHook?.());
@@ -49,11 +49,6 @@ const ICON = {
   diary: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4Z"/><path d="M8 4v16"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
-  sunny: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  cloudy: '<path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/>',
-  rainy: '<path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M16 14v6M8 14v6M12 16v6"/>',
-  snowy: '<path d="M2 12h20M12 2v20M20 16l-4-4 4-4M4 8l4 4-4 4M16 4l-4 4-4-4M8 20l4-4 4 4"/>',
-  windy: '<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
 };
@@ -113,11 +108,6 @@ const waiting = () => `<div class="paper notice"><h2>승인을 기다리고 있�
 const loading = () => '<p class="muted">불러오는 중…</p>';
 
 /* ---------- 데이터 ---------- */
-async function loadLabels() {
-  const { data } = await sb.from("labels").select("id, kind, name, color").order("created_at");
-  state.labels = (data ?? []).map((l) => ({ ...l, color: safeColor(l.color) }));
-  return state.labels;
-}
 async function loadFolders() {
   const { data, error } = await sb.from("writing_folders").select("*").order("sort").order("created_at");
   if (error) throw error;
@@ -126,10 +116,10 @@ async function loadFolders() {
 }
 async function loadPosts() {
   const { data, error } = await sb.from("writing_posts")
-    .select("id, folder_id, written_on, title, content, weather, moods, photos, status, published_at, updated_at")
+    .select("id, folder_id, written_on, title, purpose, content, photos, status, published_at, updated_at")
     .eq("user_id", state.user.id).order("written_on", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((p) => ({ ...p, moods: p.moods ?? [], photos: p.photos ?? [] }));
+  return (data ?? []).map((p) => ({ ...p, purpose: p.purpose ?? "", photos: p.photos ?? [] }));
 }
 const folderOf = (id) => state.folders.find((f) => f.id === id) ?? null;
 const folderChip = (id) => {
@@ -180,7 +170,7 @@ async function renderList(params) {
   document.title = "MEIRONOTE";
   app.innerHTML = shell("/", loading());
   bindShell();
-  const [posts] = await Promise.all([loadPosts(), loadFolders(), loadLabels()]);
+  const [posts] = await Promise.all([loadPosts(), loadFolders()]);
   const folder = params.get("folder") ?? "";
   const count = (key) => filterPosts(posts, { folder: key }).length;
   const current = folder === "drafts" ? "임시저장 중인 글" : folder === "none" ? "폴더 없음" : folderOf(folder)?.name ?? "모든 글";
@@ -206,18 +196,16 @@ async function renderList(params) {
 
 function postList(posts) {
   if (!posts.length) return '<p class="empty">글이 없어요.</p>';
-  const byId = new Map(state.labels.map((l) => [l.id, l]));
   return `<ol class="list">${posts.map((p) => {
-    const w = WEATHER.find((x) => x.id === p.weather);
     const href = p.status === "draft" ? `#/edit/${p.id}` : `#/post/${p.id}`;
     const first = p.photos[0];
     return `<li class="${first ? "has-thumb" : ""}">
       ${first ? `<a class="thumb" href="${href}" data-p="${esc(first)}" aria-label="${esc(p.title || "제목 없음")} 열기"></a>` : ""}
-      <div class="row"><time>${p.written_on.replaceAll("-", ".")}</time>${p.status === "draft" ? '<span class="badge">임시저장</span>' : ""}${folderChip(p.folder_id)}${w ? `<span class="weather">${icon(w.id)}${w.name}</span>` : ""}</div>
+      <div class="row"><time>${p.written_on.replaceAll("-", ".")}</time>${p.status === "draft" ? '<span class="badge">임시저장</span>' : ""}${folderChip(p.folder_id)}</div>
       <a class="t" href="${href}">${esc(p.title || "제목 없음")}</a>
+      ${p.purpose ? `<p class="purpose"><span>목적</span>${esc(p.purpose)}</p>` : ""}
       <p class="excerpt">${esc(plainText(p.content))}</p>
-      <div class="tags">${p.moods.map((m) => { const l = byId.get(m.label_id); return l ? `<span><i class="dot" style="background:${l.color}"></i>${esc(l.name)} ${m.score}</span>` : ""; }).join("")}
-        <span class="muted">${statsText(textStats(p.content))}</span></div>
+      <div class="tags"><span class="muted">${statsText(textStats(p.content))}</span></div>
     </li>`;
   }).join("")}</ol>`;
 }
@@ -286,56 +274,7 @@ function folderManager(onDone) {
   dlg.showModal();
 }
 
-/* ---------- 기분 태그 관리 (일기장과 같은 태그) ---------- */
-function labelManager(onDone) {
-  const dlg = document.createElement("dialog");
-  dlg.innerHTML = `<h2>기분 태그 관리</h2>
-    <button class="btn ghost sm dialog-close" type="button" aria-label="닫기">닫기</button>
-    <p class="muted small" style="margin:-8px 0 12px">일기장의 기분 태그와 같이 쓰여요.</p>
-    <ul class="label-list"></ul>
-    <form class="label-add"><input type="color" value="#0031b0" aria-label="새 색상"><input class="input" placeholder="예: 행복" aria-label="새 태그 이름"><button class="btn primary" type="submit">추가</button></form>`;
-  document.body.append(dlg);
-  const list = $(".label-list", dlg);
-  const draw = () => {
-    const mine = state.labels.filter((l) => l.kind === "mood");
-    list.innerHTML = mine.length ? mine.map((l) => `<li data-id="${l.id}">
-        <input type="color" value="${l.color}" aria-label="${esc(l.name)} 색상">
-        <input class="input" value="${esc(l.name)}" aria-label="태그 이름">
-        <button class="btn ghost sm danger" type="button">삭제</button></li>`).join("")
-      : '<li class="empty-hint">아직 태그가 없어요.</li>';
-    $$("li[data-id]", list).forEach((li) => {
-      const id = li.dataset.id, l = state.labels.find((x) => x.id === id);
-      const [color, name] = $$("input", li);
-      color.onchange = () => update(id, { color: color.value });
-      name.onblur = () => { const v = name.value.trim(); if (v && v !== l.name) update(id, { name: v }); };
-      $("button", li).onclick = async () => { await sb.from("labels").delete().eq("id", id); await loadLabels(); draw(); };
-    });
-  };
-  const update = async (id, patch) => { await sb.from("labels").update(patch).eq("id", id); await loadLabels(); draw(); };
-  $(".label-add", dlg).onsubmit = async (e) => {
-    e.preventDefault();
-    const [color, name] = $$(".label-add input", dlg);
-    if (!name.value.trim()) return;
-    const { error } = await sb.from("labels").insert({ kind: "mood", name: name.value.trim(), color: color.value });
-    if (error) { toast("추가하지 못했어요.", "error"); return; }
-    name.value = "";
-    await loadLabels(); draw();
-  };
-  $(".dialog-close", dlg).onclick = () => dlg.close();
-  dlg.addEventListener("close", () => { dlg.remove(); onDone(); });
-  draw();
-  dlg.showModal();
-}
-
-/* ---------- 기분, 날씨, 사진 (일기장과 같은 모양) ---------- */
-function moodView(el, moods) {
-  const byId = new Map(state.labels.map((l) => [l.id, l]));
-  el.innerHTML = `<div class="section-head"><h3>기분</h3></div><ul class="moods">${moods.filter((m) => byId.has(m.label_id)).map((m) => {
-    const l = byId.get(m.label_id);
-    return `<li><span class="name" style="color:${l.color}">${esc(l.name)}</span><span class="bar"><span style="width:${m.score}%;background:${l.color}"></span></span><span class="score">${m.score}</span></li>`;
-  }).join("")}</ul>`;
-}
-
+/* ---------- 사진 (일기장과 같은 모양) ---------- */
 async function fillPhotos(el, photos) {
   if (!photos.length) return;
   const { data } = await sb.storage.from(BUCKET).createSignedUrls(photos, 3600);
@@ -352,14 +291,13 @@ async function renderPost(id) {
   const [{ data: post, error }, { data: versions }] = await Promise.all([
     sb.from("writing_posts").select("*").eq("id", id).maybeSingle(),
     sb.from("writing_versions").select("id, kind, updated_at").eq("post_id", id),
-    loadFolders(), loadLabels(),
+    loadFolders(),
   ]);
   if (error) throw error;
   if (!post) { $("main").lastElementChild.outerHTML = '<div class="paper notice"><h2>글을 찾을 수 없어요</h2><p><a href="#/">목록으로</a></p></div>'; return; }
   if (post.status === "draft") return go(`#/edit/${id}`, true);
   document.title = `${post.title || "제목 없음"} — MEIRONOTE`;
   const f = postFields(post);
-  const w = WEATHER.find((x) => x.id === f.weather);
   const s = textStats(f.content);
   // 올린 뒤에 고친 내용(자동 저장·임시저장)이 남아 있으면 알려 줌
   const pending = (versions ?? []).filter((v) => v.kind !== "publish" && Date.parse(v.updated_at) > Date.parse(post.updated_at))
@@ -367,7 +305,6 @@ async function renderPost(id) {
   $("main").lastElementChild.outerHTML = `<section class="paper entry">
       ${pending ? `<p class="pending">올리지 않은 고친 내용이 있어요 (${kstStamp(pending.updated_at)} ${KIND_NAME[pending.kind]}) <a class="btn outline sm" href="#/edit/${id}">이어 쓰기</a></p>` : ""}
       <div class="meta-row"><p class="date">${longDate(f.written_on)}</p>${folderChip(f.folder_id)}</div>
-      ${w ? `<p style="margin:12px 0 0"><span class="weather">${icon(w.id)}${w.name}</span></p>` : ""}
       <div class="read-head">
         <h2>${esc(f.title || "제목 없음")}</h2>
         <div class="read-acts">
@@ -376,13 +313,12 @@ async function renderPost(id) {
           <button class="btn ghost sm danger" type="button" id="del">삭제</button>
         </div>
       </div>
-      ${f.moods.length ? '<div id="moods" style="margin-top:24px"></div>' : ""}
+      ${f.purpose ? `<p class="purpose read"><span>목적</span>${esc(f.purpose)}</p>` : ""}
       ${f.photos.length ? `<div class="photos" style="margin-top:24px">${f.photos.map((p) => `<div class="photo" data-p="${esc(p)}"></div>`).join("")}</div>` : ""}
       <div class="content lined">${toHtml(f.content)}</div>
       <p class="count-line">${statsText(s)} · ${kstStamp(post.published_at)} 올림${post.updated_at !== post.published_at ? ` · ${kstStamp(post.updated_at)} 고침` : ""}</p>
       <div class="comments" id="comments"></div>
     </section>`;
-  if (f.moods.length) moodView($("#moods"), f.moods);
   fillPhotos($("main"), f.photos);
   $("#history").onclick = () => versionsDialog(id, (v) => go(`#/edit/${id}?v=${v.id}`));
   $("#del").onclick = () => removePost(post);
@@ -442,7 +378,7 @@ async function versionsDialog(postId, onLoad) {
     const f = postFields(v.fields);
     $$("[data-v]", dlg).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === id)));
     $("#v-preview", dlg).innerHTML = `<div class="v-head"><div><p class="muted small" style="margin:0">${KIND_NAME[v.kind]} · ${kstStamp(v.updated_at)} · ${longDate(f.written_on)}${folderOf(f.folder_id) ? ` · ${esc(folderOf(f.folder_id).name)}` : ""}</p>
-        <h3>${esc(f.title || "제목 없음")}</h3></div><button class="btn primary sm" type="button" id="v-load">이 버전 불러오기</button></div>
+        <h3>${esc(f.title || "제목 없음")}</h3>${f.purpose ? `<p class="purpose"><span>목적</span>${esc(f.purpose)}</p>` : ""}</div><button class="btn primary sm" type="button" id="v-load">이 버전 불러오기</button></div>
       <div class="content lined">${toHtml(f.content)}</div><p class="count-line">${statsText(textStats(f.content))}${f.photos.length ? ` · 사진 ${f.photos.length}장` : ""}</p>`;
     $("#v-load", dlg).onclick = () => { dlg.close(); onLoad(v); };
   };
@@ -469,7 +405,7 @@ async function renderEdit(id, params) {
     if (!post) { $("main").lastElementChild.outerHTML = '<div class="paper notice"><h2>글을 찾을 수 없어요</h2><p><a href="#/">목록으로</a></p></div>'; return; }
     versions = v.data ?? [];
   }
-  await Promise.all([loadFolders(), loadLabels()]);
+  await loadFolders();
   document.title = `${post ? "고치기" : "새 글"} — MEIRONOTE`;
 
   // 이어 쓸 내용: 버전 기록에서 고른 것 > 가장 최근 자동 저장·임시저장·이 기기 임시저장 > 글
@@ -597,8 +533,7 @@ async function renderEdit(id, params) {
           <label class="field">폴더<select class="input" id="folder"><option value="">폴더 없음</option>${state.folders.map((x) => `<option value="${x.id}" ${x.id === f.folder_id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}<option value="+">+ 새 폴더…</option></select></label>
         </div>
         <input class="input title-input" id="title" placeholder="제목" value="${esc(f.title)}" aria-label="제목">
-        <div id="weather"></div>
-        <div id="moods"></div>
+        <label class="field purpose-field">목적<input class="input" id="purpose" placeholder="이 글을 쓰는 목적 (예: 수업 과제 제출용, 공모전 초안)" value="${esc(f.purpose)}"></label>
         <div id="photos"></div>
         <div id="content"></div>
         <div class="actions">
@@ -626,9 +561,8 @@ async function renderEdit(id, params) {
     };
     $("#folder").onchange = onFolder;
     $("#title").oninput = (e) => { f.title = e.target.value; changed(); };
+    $("#purpose").oninput = (e) => { f.purpose = e.target.value; changed(); };
     richEditor($("#content"), f.content, (v) => { f.content = v; changed(); });
-    weatherEditor($("#weather"));
-    moodEditor($("#moods"));
     photosEditor($("#photos"));
     $("#history-btn").onclick = async () => {
       await autoSave();
@@ -643,39 +577,6 @@ async function renderEdit(id, params) {
     $("#del")?.addEventListener("click", async () => { clearTimeout(autoTimer); serverDirty = false; await queue; if (await removePost(post)) leaveHook = null; });
   };
 
-  function weatherEditor(el) {
-    el.innerHTML = `<div class="section-head"><h3>날씨</h3></div><div class="chips">${WEATHER.map((w) =>
-      `<button class="btn outline sm" type="button" data-w="${w.id}" aria-pressed="${f.weather === w.id}">${icon(w.id)}${w.name}</button>`).join("")}</div>`;
-    $$("[data-w]", el).forEach((b) => b.onclick = () => { f.weather = f.weather === b.dataset.w ? null : b.dataset.w; changed(); weatherEditor(el); });
-  }
-  function moodEditor(el) {
-    const moodLabels = state.labels.filter((l) => l.kind === "mood");
-    const byId = new Map(state.labels.map((l) => [l.id, l]));
-    el.innerHTML = `<div class="section-head"><h3>기분 <span class="muted small" style="font-weight:400">(${f.moods.length}/${MAX_MOODS})</span></h3>
-        <button class="btn ghost sm" type="button" id="mood-manage">기분 태그 관리</button></div>
-      <div class="chips">${moodLabels.length ? moodLabels.map((l) => {
-        const on = f.moods.some((m) => m.label_id === l.id);
-        return `<button class="chip" type="button" data-l="${l.id}" aria-pressed="${on}" ${!on && f.moods.length >= MAX_MOODS ? "disabled" : ""}
-          style="border-color:${l.color};${on ? `background:${l.color};color:#fff` : ""}">${esc(l.name)}</button>`;
-      }).join("") : `<p class="empty-hint">'기분 태그 관리'에서 기분 태그를 만들어 보세요.</p>`}</div>
-      <ul class="moods">${f.moods.filter((m) => byId.has(m.label_id)).map((m) => {
-        const l = byId.get(m.label_id);
-        return `<li><span class="name" style="color:${l.color}">${esc(l.name)}</span>
-          <input type="range" min="0" max="100" step="1" value="${m.score}" data-score="${l.id}" aria-label="${esc(l.name)} 점수" style="accent-color:${l.color}">
-          <span class="score">${m.score}</span></li>`;
-      }).join("")}</ul>`;
-    $$("[data-l]", el).forEach((b) => b.onclick = () => {
-      const lid = b.dataset.l;
-      f.moods = f.moods.some((m) => m.label_id === lid) ? f.moods.filter((m) => m.label_id !== lid) : addMood(f.moods, lid);
-      changed(); moodEditor(el);
-    });
-    $$("[data-score]", el).forEach((r) => r.oninput = () => {
-      f.moods = f.moods.map((m) => (m.label_id === r.dataset.score ? { ...m, score: Number(r.value) } : m));
-      r.nextElementSibling.textContent = r.value;
-      changed();
-    });
-    $("#mood-manage", el).onclick = () => labelManager(() => moodEditor(el));
-  }
   // 사진을 빼도 파일은 남겨 둠 (예전 버전을 불러올 때 필요). 글을 지우면 함께 지워짐
   function photosEditor(el) {
     el.innerHTML = `<div class="section-head"><h3>사진</h3><input type="file" accept="image/*" multiple hidden id="file"><button class="btn outline sm" type="button" id="add-photo">사진 추가</button></div>
@@ -763,24 +664,23 @@ async function renderSearch() {
   document.title = "검색 — MEIRONOTE";
   app.innerHTML = shell("/search", loading());
   bindShell();
-  const [posts] = await Promise.all([loadPosts(), loadFolders(), loadLabels()]);
+  const [posts] = await Promise.all([loadPosts(), loadFolders()]);
   $("main").lastElementChild.outerHTML = `
-    <input class="input" id="q" type="search" placeholder="제목 또는 내용 검색" aria-label="글 검색">
+    <input class="input" id="q" type="search" placeholder="제목, 목적, 내용 검색" aria-label="글 검색">
     <div class="filters">
       <label class="field">시작일<input class="input" type="date" id="from"></label>
       <label class="field">종료일<input class="input" type="date" id="to"></label>
       <label class="field">폴더<select class="input" id="folder"><option value="">모든 폴더</option>${state.folders.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}<option value="none">폴더 없음</option></select></label>
-      <label class="field">기분<select class="input" id="label"><option value="">모든 기분</option>${state.labels.filter((l) => l.kind === "mood").map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></label>
     </div>
     <label class="check"><input type="checkbox" id="drafts" checked> 임시저장 중인 글도 찾기</label>
     <p class="muted small" id="count" style="margin-top:20px"></p><div id="results"></div>`;
   const draw = () => {
-    const found = filterPosts(posts, { q: $("#q").value, from: $("#from").value, to: $("#to").value, folder: $("#folder").value, label: $("#label").value, drafts: $("#drafts").checked });
+    const found = filterPosts(posts, { q: $("#q").value, from: $("#from").value, to: $("#to").value, folder: $("#folder").value, drafts: $("#drafts").checked });
     $("#count").textContent = `검색 결과 ${found.length}개`;
     $("#results").innerHTML = postList(found);
     loadThumbs();
   };
-  ["q", "from", "to", "folder", "label", "drafts"].forEach((id) => $(`#${id}`).addEventListener("input", draw));
+  ["q", "from", "to", "folder", "drafts"].forEach((id) => $(`#${id}`).addEventListener("input", draw));
   draw();
 }
 

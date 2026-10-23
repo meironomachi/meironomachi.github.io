@@ -19,15 +19,16 @@ CREATE TABLE IF NOT EXISTS public.writing_posts (
   folder_id uuid REFERENCES public.writing_folders(id) ON DELETE SET NULL,
   written_on date NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Seoul')::date),
   title text NOT NULL DEFAULT '',
+  purpose text NOT NULL DEFAULT '',
   content text NOT NULL DEFAULT '',
-  weather text,
-  moods jsonb NOT NULL DEFAULT '[]',
   photos text[] NOT NULL DEFAULT '{}',
   status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
   published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- 처음 만들 때 있던 날씨·기분 칸은 쓰지 않음. 목적 칸 추가
+ALTER TABLE public.writing_posts ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS writing_posts_user ON public.writing_posts (user_id, written_on DESC);
 
 -- 버전: 자동 저장(auto), 임시저장(manual), 올림(publish) 때의 글 전체

@@ -321,5 +321,12 @@ dialog.versions { width: min(920px, calc(100vw - 32px)); max-height: calc(100dvh
 .post-table tfoot td { font-weight: 700; border-bottom: 0; }
 
 /* 검색 */
-@media (min-width: 640px) { .filters { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 640px) { .filters { grid-template-columns: repeat(3, 1fr); } }
 .check { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--muted-fg); cursor: pointer; }
+
+/* 목적 */
+.purpose { display: flex; gap: 8px; align-items: baseline; margin: 6px 0 0; font-size: 14px; color: var(--fg); overflow-wrap: anywhere; }
+.purpose span { flex: none; font-size: 12px; font-weight: 700; color: var(--accent-fg); background: var(--accent); border-radius: 6px; padding: 1px 7px; }
+.purpose.read { margin-top: 14px; font-size: 15px; }
+.list .purpose + .excerpt { margin-top: 6px; }
+label.field .input { color: var(--fg); }
