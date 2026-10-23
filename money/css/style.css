@@ -340,3 +340,18 @@ details.cat-section[open] > summary::after { transform: rotate(-135deg); margin-
 .cat-sum { margin-left: auto; display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
 .cat-sum b.in { color: var(--income); }
 details.cat-section .cat-rows { margin-bottom: 12px; }
+
+/* 지출·수입 원그래프 (항상 보임) */
+.donuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 640px) { .donuts { grid-template-columns: minmax(0, 1fr); } }
+.donut { margin: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
+.donut figcaption { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.donut-body { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; gap: 16px; }
+.donut svg { width: 132px; height: 132px; display: block; }
+.donut .d-label { font-size: 10px; fill: var(--muted-fg); font-family: var(--font); }
+.donut .d-total { font-size: 15px; font-weight: 800; fill: var(--fg); font-family: var(--font); }
+.d-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; min-width: 0; }
+.d-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.d-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.d-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-legend b { font-variant-numeric: tabular-nums; }

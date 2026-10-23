@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231504";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231510";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610231504";
+} from "./money.js?v=202610231510";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -191,6 +191,9 @@ async function renderMonth(params) {
   // 수입·저축 목표와 이 달의 고정 항목
   const inflow = inflowByCat(txs), prevInflow = inflowByCat(prev);
   const incomeNone = txs.filter((t) => t.kind === "income" && !t.category_id).reduce((sum, t) => sum + t.amount, 0);
+  const incomeRows = base.categories.filter((c) => c.kind === "income")
+    .map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))
+    .filter((r) => r.amt || r.budget).sort((a, b) => b.amt - a.amt);
   const goals = base.categories.filter((c) => c.kind === "income" || c.kind === "saving")
     .map((c) => ({ c, got: inflow[c.id] ?? 0, goal: base.budgets.find((b) => b.category_id === c.id)?.amount })).filter((g) => g.goal);
   const fixed = base.recurring.filter((r) => recurringActive(r, m)).map((r) => ({ r, tx: txs.find((t) => t.recurring_id === r.id) }))
@@ -228,13 +231,43 @@ async function renderMonth(params) {
         <span class="fx-amt ${r.kind}">${signedWon(r.kind === "income" ? r.amount : -r.amount)}</span></li>`).join("")}</ul>
       <p class="muted small">이 달 고정 수입 ${won(ft.income)} · 고정 지출 ${won(ft.expense)}${ft.saving ? ` · 고정 저축 ${won(ft.saving)}` : ""}</p></section>` : ""}
 
+    <section class="donuts" aria-label="지출·수입 비율">
+      ${donut("지출", s.expense, [...rows.map((r) => ({ name: r.c.name, color: r.c.color, value: r.spent })), { name: "분류 없음", color: "var(--border)", value: none }])}
+      ${donut("수입", s.income, [...incomeRows.map((r) => ({ name: r.c.name, color: r.c.color, value: r.amt })), { name: "분류 없음", color: "var(--border)", value: incomeNone }])}
+    </section>
     ${catDetails({ key: "expense", title: "분류별 지출", m, total: s.expense, rows: rows.map((r) => ({ c: r.c, amt: r.spent, before: r.before, budget: r.budget })), none })}
-    ${catDetails({ key: "income", title: "분류별 수입", m, total: s.income, none: incomeNone,
-      rows: base.categories.filter((c) => c.kind === "income").map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))
-        .filter((r) => r.amt || r.budget).sort((a, b) => b.amt - a.amt) })}
+    ${catDetails({ key: "income", title: "분류별 수입", m, total: s.income, none: incomeNone, rows: incomeRows })}
 
     ${txs.length ? `<section class="recent"><div class="section-head"><h3>최근 내역</h3><a class="btn ghost sm" href="#/list?m=${m}">전체 보기</a></div>${txList(txs.slice(0, 6))}</section>` : ""}`);
   bindTxRows();
+}
+
+/** 원그래프 (도넛): 큰 분류 5개 + 나머지는 '그 밖' */
+function donut(title, total, slices) {
+  let list = slices.filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+  if (list.length > 6) {
+    const rest = list.slice(5).reduce((sum, x) => sum + x.value, 0);
+    list = [...list.slice(0, 5), { name: "그 밖", color: "var(--muted-fg)", value: rest }];
+  }
+  const R = 46, C = 2 * Math.PI * R, sum = list.reduce((a, x) => a + x.value, 0);
+  let acc = 0;
+  const arcs = list.map((x) => {
+    const len = (x.value / sum) * C, gap = list.length > 1 ? Math.min(1.5, len / 3) : 0;
+    const arc = `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${x.color}" stroke-width="18" stroke-dasharray="${Math.max(0, len - gap)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 60 60)"><title>${esc(x.name)} ${won(x.value)}</title></circle>`;
+    acc += len;
+    return arc;
+  }).join("");
+  return `<figure class="donut">
+    <figcaption>${title}</figcaption>
+    <div class="donut-body">
+      <svg viewBox="0 0 120 120" role="img" aria-label="${title} ${won(total)}${list.map((x) => `, ${x.name} ${Math.round((x.value / sum) * 100)}%`).join("")}">
+        <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--muted)" stroke-width="18"/>${sum ? arcs : ""}
+        <text x="60" y="66" text-anchor="middle" class="d-total">${total >= 10000 ? `${Math.round(total / 1000) / 10}만` : total.toLocaleString("ko-KR")}</text>
+      </svg>
+      ${sum ? `<ul class="d-legend">${list.map((x) => `<li><i style="background:${x.color}"></i><span>${esc(x.name)}</span><b>${Math.round((x.value / sum) * 100)}%</b></li>`).join("")}</ul>`
+        : `<p class="muted small">이 달의 ${title}이 없어요</p>`}
+    </div>
+  </figure>`;
 }
 
 /** 분류별 지출·수입: 눌러서 펼치고 접음 (펼친 상태는 이 기기에 기억) */
