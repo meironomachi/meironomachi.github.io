@@ -1,0 +1,664 @@
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231223";
+import {
+  KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
+  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
+  monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
+} from "./money.js?v=202610231223";
+
+const app = document.getElementById("app");
+let sb = null;
+const state = { user: null, profile: null };
+// 계좌·분류·규칙·예산 (화면마다 새로 읽음)
+const base = { accounts: [], categories: [], rules: [], budgets: [] };
+
+/* ---------- 도우미 ---------- */
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+const thisMonth = () => kstMonth(new Date().toISOString());
+const monthLabel = (m) => `${Number(m.slice(0, 4))}년 ${Number(m.slice(5))}월`;
+const dayLabel = (d) => { const t = new Date(`${d}T00:00:00Z`); return `${t.getUTCMonth() + 1}월 ${t.getUTCDate()}일 (${DOW[t.getUTCDay()]})`; };
+const kstTime = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600 * 1000); return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+const toLocalInput = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600 * 1000); return d.toISOString().slice(0, 16); };
+const fromLocalInput = (v) => new Date(Date.parse(`${v}:00Z`) - 9 * 3600 * 1000).toISOString();
+const catOf = (id) => base.categories.find((c) => c.id === id);
+const accOf = (id) => base.accounts.find((a) => a.id === id);
+const safeColor = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#868e96");
+const remember = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return null; };
+
+function toast(msg, kind = "") {
+  const el = document.createElement("div");
+  el.className = `toast ${kind}`;
+  el.textContent = msg;
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+const ICON = {
+  month: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  bank: '<path d="m3 10 9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/>',
+  budget: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+};
+const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
+
+/* ---------- 주소(#/경로?값) ---------- */
+function parseHash() {
+  const raw = location.hash.replace(/^#/, "") || "/";
+  const [path, query = ""] = raw.split("?");
+  return { path, params: new URLSearchParams(query) };
+}
+const go = (hash, replace = false) => {
+  if (replace) history.replaceState(null, "", hash); else history.pushState(null, "", hash);
+  route();
+};
+const rerender = () => route();
+
+/* ---------- 테마 ---------- */
+const themeButton = (extra = "") => `<button class="btn ghost sm theme-btn ${extra}" type="button" data-act="theme" aria-label="라이트/다크 모드 바꾸기" title="라이트/다크 모드 바꾸기"><span class="moon">${icon("moon")}</span><span class="sun">${icon("sun")}</span></button>`;
+document.addEventListener("click", (e) => {
+  if (!e.target.closest('[data-act="theme"]')) return;
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  remember("meiro-theme", root.dataset.theme);
+});
+
+/* ---------- 공통 틀 ---------- */
+const TABS = [
+  { path: "/", label: "이번 달", icon: "month" },
+  { path: "/list", label: "내역", icon: "list" },
+  { path: "/accounts", label: "계좌", icon: "bank" },
+  { path: "/budget", label: "예산·분류", icon: "budget" },
+  { path: "/import", label: "가져오기", icon: "upload" },
+];
+function shell(current, inner) {
+  const name = state.profile?.nickname || state.user.email;
+  return `<main class="wrap">
+    <header class="top">
+      <h1 class="money-mark"><a href="#/"><span>$</span>TDL</a></h1>
+      <div class="who">
+        <a class="btn ghost sm meiro-btn" href="/" title="meiro.kr 처음으로">MEIRO</a>
+        <span>${esc(name)}</span>
+        ${themeButton()}
+        <button class="btn ghost sm" type="button" data-act="logout">로그아웃</button>
+      </div>
+    </header>
+    <nav class="tabs" aria-label="가계부 메뉴">${TABS.map((t) => `<a href="#${t.path}" ${t.path === current ? 'aria-current="page"' : ""}>${icon(t.icon)}${t.label}</a>`).join("")}</nav>
+    ${inner}
+  </main>
+  <button class="fab" type="button" id="fab" aria-label="빠른 입력">${icon("plus")}</button>`;
+}
+function bindShell() {
+  $('[data-act="logout"]')?.addEventListener("click", async () => { await sb.auth.signOut(); go("#/login", true); });
+  $("#fab")?.addEventListener("click", () => txDialog(null));
+}
+const loading = () => '<p class="muted">불러오는 중…</p>';
+const fill = (html) => { const main = $("main"); main.lastElementChild.remove(); main.insertAdjacentHTML("beforeend", html); };
+const monthNav = (path, m) => `<div class="month-nav">
+    <a class="btn ghost sm" href="#${path}?m=${shiftMonth(m, -1)}" aria-label="이전 달">${icon("left")}</a>
+    <h2>${monthLabel(m)}</h2>
+    <a class="btn ghost sm" href="#${path}?m=${shiftMonth(m, 1)}" aria-label="다음 달">${icon("right")}</a>
+    ${m !== thisMonth() ? `<a class="btn outline sm" href="#${path}">이번 달</a>` : ""}
+  </div>`;
+
+/* ---------- 데이터 ---------- */
+async function loadBase() {
+  const [a, c, r, b] = await Promise.all([
+    sb.from("money_accounts").select("*").order("sort"),
+    sb.from("money_categories").select("*").order("sort"),
+    sb.from("money_rules").select("*"),
+    sb.from("money_budgets").select("*"),
+  ]);
+  if (a.error) throw a.error;
+  base.accounts = a.data ?? []; base.categories = (c.data ?? []).map((x) => ({ ...x, color: safeColor(x.color) }));
+  base.rules = r.data ?? []; base.budgets = b.data ?? [];
+  // 처음 쓰는 날: 기본 분류와 카카오뱅크·현금 계좌를 만들어 둠
+  if (!base.categories.length) {
+    await sb.from("money_categories").insert(DEFAULT_CATEGORIES);
+    base.categories = ((await sb.from("money_categories").select("*").order("sort")).data ?? []);
+  }
+  if (!base.accounts.length) {
+    await sb.from("money_accounts").insert([{ name: "카카오뱅크", bank: "kakao", sort: 0 }, { name: "현금", bank: "cash", sort: 1 }]);
+    base.accounts = ((await sb.from("money_accounts").select("*").order("sort")).data ?? []);
+  }
+}
+async function loadMonth(m) {
+  const [from, to] = monthRange(m);
+  const { data, error } = await sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to).order("occurred_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/* ---------- 로그인 ---------- */
+function renderLogin() {
+  document.title = "로그인 — $TDL";
+  app.innerHTML = `<a class="home-link" href="/" title="meiro.kr 처음으로">← MEIRO</a>${themeButton("corner")}<main class="auth"><div class="paper">
+    <h1 class="money-mark" style="text-align:center"><a href="#/"><span>$</span>TDL</a></h1>
+    <p class="muted small" style="text-align:center;margin:8px 0 0">일기장과 같은 계정으로 들어가요</p>
+    <form id="auth-form">
+      <label class="field">이메일<input class="input" id="email" type="email" required autocomplete="email"></label>
+      <label class="field">비밀번호<input class="input" id="pw" type="password" minlength="6" required autocomplete="current-password"></label>
+      <button class="btn primary" type="submit">로그인</button>
+    </form>
+    <p class="muted small" style="text-align:center;margin-top:16px">계정이 없으면 <a href="/saytqtul/#/auth">일기장에서 가입</a>해 주세요.</p>
+  </div></main>`;
+  $("#auth-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const { error } = await sb.auth.signInWithPassword({ email: $("#email").value.trim(), password: $("#pw").value });
+    if (error) toast("로그인에 실패했어요. 이메일과 비밀번호를 확인해 주세요.", "error");
+  };
+}
+
+/* ---------- 이번 달 ---------- */
+async function renderMonth(params) {
+  const m = params.get("m") || thisMonth();
+  document.title = `${monthLabel(m)} — $TDL`;
+  app.innerHTML = shell("/", loading());
+  bindShell();
+  const [txs, prev] = await Promise.all([loadMonth(m), loadMonth(shiftMonth(m, -1))]);
+  shown = txs;
+  const s = monthSummary(txs), p = monthSummary(prev);
+  const total = base.budgets.find((b) => !b.category_id);
+  const tb = budgetStatus(s.expense, total?.amount);
+  const cats = base.categories.filter((c) => c.kind === "expense");
+  const rows = [...cats.map((c) => ({ c, spent: s.byCat[c.id] ?? 0, before: p.byCat[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))]
+    .filter((r) => r.spent || r.budget).sort((a, b) => b.spent - a.spent);
+  const none = s.byCat.none ?? 0;
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.spent, r.budget ?? 0)));
+  const daysLeft = m === thisMonth() ? (() => { const [y, mo] = m.split("-").map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate() - Number(kstDay(new Date().toISOString()).slice(8)) + 1; })() : 0;
+
+  fill(`${monthNav("/", m)}
+    <section class="stats3">
+      <div><span>수입</span><b class="in">${won(s.income)}</b></div>
+      <div><span>지출</span><b>${won(s.expense)}</b>${changeRate(s.expense, p.expense) !== null ? `<small class="${s.expense > p.expense ? "up" : "down"}">지난달보다 ${Math.abs(changeRate(s.expense, p.expense))}% ${s.expense > p.expense ? "더" : "덜"} 씀</small>` : ""}</div>
+      <div><span>남은 돈</span><b class="${s.net < 0 ? "neg" : ""}">${signedWon(s.net)}</b>${s.saving ? `<small>저축 ${won(s.saving)}</small>` : ""}</div>
+    </section>
+
+    <section class="paper budget-card">
+      <div class="section-head"><h3>예산</h3><a class="btn ghost sm" href="#/budget">예산 정하기</a></div>
+      ${total ? `<div class="budget-total">
+          <div class="bt-line"><b>${won(s.expense)}</b><span class="muted"> / ${won(total.amount)}</span><span class="bt-left ${tb.state}">${tb.state === "over" ? `${won(s.expense - total.amount)} 넘음` : `${won(total.amount - s.expense)} 남음`}</span></div>
+          <div class="meter ${tb.state}"><span style="width:${Math.min(100, tb.ratio * 100)}%"></span></div>
+          ${daysLeft > 0 && tb.state !== "over" ? `<p class="muted small">남은 ${daysLeft}일 동안 하루 ${won(Math.floor((total.amount - s.expense) / daysLeft))}씩 쓸 수 있어요</p>` : ""}
+        </div>` : '<p class="empty-hint">한 달 예산을 정하면 얼마나 남았는지 보여 드려요.</p>'}
+    </section>
+
+    <section class="cat-section">
+      <div class="section-head"><h3>분류별 지출</h3></div>
+      ${rows.length || none ? `<ul class="cat-rows">${rows.map((r) => {
+        const st = budgetStatus(r.spent, r.budget), ch = changeRate(r.spent, r.before);
+        return `<li><a href="#/list?m=${m}&c=${r.c.id}">
+          <span class="cat-name"><i class="dot" style="background:${r.c.color}"></i>${esc(r.c.name)}</span>
+          <span class="cat-amt">${won(r.spent)}${r.budget ? `<span class="muted"> / ${won(r.budget)}</span>` : ""}</span>
+          <span class="cat-bar ${st.state}"><span style="width:${(r.spent / max) * 100}%;background:${st.state === "over" ? "var(--danger)" : st.state === "warn" ? "var(--warn)" : r.c.color}"></span>${r.budget ? `<i class="cap" style="left:${(r.budget / max) * 100}%"></i>` : ""}</span>
+          <span class="cat-ch muted small">${ch === null ? "" : ch === 0 ? "지난달과 같음" : `지난달보다 ${ch > 0 ? "+" : ""}${ch}%`}</span>
+        </a></li>`;
+      }).join("")}
+      ${none ? `<li><a href="#/list?m=${m}&c=none"><span class="cat-name"><i class="dot" style="background:var(--border)"></i>분류 없음</span><span class="cat-amt">${won(none)}</span><span class="cat-bar"><span style="width:${(none / max) * 100}%;background:var(--muted-fg)"></span></span><span class="cat-ch muted small">눌러서 분류하기</span></a></li>` : ""}
+      </ul>` : '<p class="empty">이 달의 지출이 없어요. 오른쪽 아래 + 버튼으로 넣어 보세요.</p>'}
+    </section>
+
+    ${txs.length ? `<section class="recent"><div class="section-head"><h3>최근 내역</h3><a class="btn ghost sm" href="#/list?m=${m}">전체 보기</a></div>${txList(txs.slice(0, 6))}</section>` : ""}`);
+  bindTxRows();
+}
+
+/* ---------- 내역 ---------- */
+function txRow(t) {
+  const c = catOf(t.category_id), a = accOf(t.account_id);
+  const title = t.place || c?.name || t.tx_type || kindName(t.kind);
+  const tag = t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`;
+  return `<li><button type="button" class="tx" data-tx="${t.id}">
+    <span class="tx-cat" style="--c:${c?.color ?? "var(--border)"}">${esc(c?.name ?? "분류 없음")}</span>
+    <span class="tx-main"><b>${esc(title)}</b><span class="muted small">${kstTime(t.occurred_at)} · ${esc(a?.name ?? "")}${t.memo ? ` · ${esc(t.memo)}` : ""}${t.source === "manual" ? " · 직접 입력" : ""}</span></span>
+    <span class="tx-amt ${t.kind}">${tag}${signedWon(t.amount)}</span>
+  </button></li>`;
+}
+function txList(txs) {
+  const days = [...new Set(txs.map((t) => kstDay(t.occurred_at)))];
+  return days.map((d) => {
+    const list = txs.filter((t) => kstDay(t.occurred_at) === d);
+    const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0);
+    return `<div class="day"><h4>${dayLabel(d)}${out ? `<span>지출 ${won(out)}</span>` : ""}</h4><ul class="tx-list">${list.map(txRow).join("")}</ul></div>`;
+  }).join("");
+}
+let shown = [];
+function bindTxRows() {
+  $$("[data-tx]").forEach((b) => b.onclick = () => txDialog(shown.find((t) => t.id === b.dataset.tx)));
+}
+
+async function renderList(params) {
+  const m = params.get("m") || thisMonth();
+  document.title = `내역 ${monthLabel(m)} — $TDL`;
+  app.innerHTML = shell("/list", loading());
+  bindShell();
+  const txs = await loadMonth(m);
+  shown = txs;
+  fill(`${monthNav("/list", m)}
+    <div class="filters">
+      <input class="input" id="q" type="search" placeholder="어디서, 메모 검색" aria-label="내역 검색" value="${esc(params.get("q") ?? "")}">
+      <select class="input" id="f-acc" aria-label="계좌"><option value="">모든 계좌</option>${base.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select>
+      <select class="input" id="f-cat" aria-label="분류"><option value="">모든 분류</option><option value="none">분류 없음</option>${base.categories.map((c) => `<option value="${c.id}" ${params.get("c") === c.id ? "selected" : ""}>${kindName(c.kind)} · ${esc(c.name)}</option>`).join("")}</select>
+      <select class="input" id="f-kind" aria-label="종류"><option value="">모든 종류</option>${KINDS.map((k) => `<option value="${k.id}">${k.name}</option>`).join("")}</select>
+    </div>
+    <p class="muted small" id="count"></p>
+    <div id="rows"></div>`);
+  if (params.get("c") === "none") $("#f-cat").value = "none";
+  const draw = () => {
+    const q = $("#q").value.trim().toLowerCase(), acc = $("#f-acc").value, cat = $("#f-cat").value, kind = $("#f-kind").value;
+    const list = txs.filter((t) => (!q || `${t.place} ${t.memo} ${t.tx_type}`.toLowerCase().includes(q)) && (!acc || t.account_id === acc)
+      && (!cat || (cat === "none" ? !t.category_id && t.kind === "expense" : t.category_id === cat)) && (!kind || t.kind === kind));
+    const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0), inc = list.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
+    $("#count").textContent = `${list.length}건 · 지출 ${won(out)} · 수입 ${won(inc)}`;
+    $("#rows").innerHTML = list.length ? txList(list) : '<p class="empty">내역이 없어요.</p>';
+    bindTxRows();
+  };
+  ["q", "f-acc", "f-cat", "f-kind"].forEach((id) => $(`#${id}`).addEventListener("input", draw));
+  draw();
+}
+
+/* ---------- 빠른 입력 / 고치기 ---------- */
+async function txDialog(tx) {
+  const editing = !!tx;
+  let kind = tx?.kind ?? "expense";
+  const lastAcc = remember("money-last-account");
+  const acc0 = tx?.account_id ?? (accOf(lastAcc) ? lastAcc : base.accounts[0]?.id);
+  let freq = [];
+  if (!editing) {
+    const { data } = await sb.from("money_transactions").select("place, category_id, amount, kind").eq("source", "manual").order("created_at", { ascending: false }).limit(200);
+    freq = frequentEntries(data ?? []);
+  }
+  const dlg = document.createElement("dialog");
+  dlg.className = "tx-dialog";
+  const kinds = KINDS.filter((k) => k.id !== "cancel" || kind === "cancel");
+  dlg.innerHTML = `<form method="dialog" id="tx-form">
+    <h2>${editing ? "내역 고치기" : "빠른 입력"}</h2>
+    <button class="btn ghost sm dialog-close" type="button" value="cancel" aria-label="닫기">닫기</button>
+    <div class="seg" role="tablist">${kinds.map((k) => `<button type="button" role="tab" data-kind="${k.id}" aria-selected="${k.id === kind}" ${editing && tx.pair_id && k.id !== kind ? "disabled" : ""}>${k.name}</button>`).join("")}</div>
+    <label class="amount-field"><span class="sr">금액</span><input class="input" id="t-amount" inputmode="numeric" autocomplete="off" placeholder="0" value="${tx ? Math.abs(tx.amount).toLocaleString("ko-KR") : ""}" required><span>원</span></label>
+    ${freq.length ? `<div class="chips freq" id="freq">${freq.map((f, i) => `<button type="button" class="chip-btn" data-f="${i}">${esc(f.place)}</button>`).join("")}</div>` : ""}
+    <div class="chips" id="t-cats"></div>
+    <div class="grid2">
+      <label class="field" id="acc-field"><span id="acc-label">계좌</span><select class="input" id="t-acc">${base.accounts.map((a) => `<option value="${a.id}" ${a.id === acc0 ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
+      <label class="field" id="to-field" hidden>받는 계좌<select class="input" id="t-to">${base.accounts.map((a, i) => `<option value="${a.id}" ${i === 1 ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
+      <label class="field">언제<input class="input" type="datetime-local" id="t-at" value="${toLocalInput(tx?.occurred_at ?? new Date().toISOString())}" required></label>
+      <label class="field">어디서 · 누구<input class="input" id="t-place" value="${esc(tx?.place ?? "")}" placeholder="예: 스타벅스, 엄마"></label>
+      <label class="field">메모<input class="input" id="t-memo" value="${esc(tx?.memo ?? "")}"></label>
+    </div>
+    <label class="check" id="rule-wrap" hidden><input type="checkbox" id="t-rule" checked> <span id="rule-text"></span></label>
+    ${tx?.source === "import" ? `<p class="muted small">은행 파일에서 가져온 내역이에요${tx.tx_type ? ` (${esc(tx.tx_type)})` : ""}. 금액·계좌·시각은 파일 기준이라 고칠 수 없어요.</p>` : ""}
+    <div class="actions">${editing ? '<button class="btn ghost danger" type="button" id="t-del">삭제</button><span style="flex:1"></span>' : ""}<button class="btn primary" type="submit" id="t-save">저장</button></div>
+  </form>`;
+  document.body.append(dlg);
+  let cat = tx?.category_id ?? null;
+  const imported = tx?.source === "import";
+  if (imported) { $("#t-amount", dlg).readOnly = true; $("#t-acc", dlg).disabled = true; $("#t-at", dlg).readOnly = true; }
+
+  const drawCats = () => {
+    const list = base.categories.filter((c) => c.kind === (kind === "cancel" ? "expense" : kind));
+    if (cat && !list.some((c) => c.id === cat)) cat = null;
+    if (!cat && (kind === "transfer" || kind === "saving")) cat = list[0]?.id ?? null;
+    $("#t-cats", dlg).innerHTML = list.map((c) => `<button type="button" class="chip-btn cat" data-c="${c.id}" aria-pressed="${c.id === cat}" style="--c:${c.color}">${esc(c.name)}</button>`).join("");
+    $$("[data-c]", dlg).forEach((b) => b.onclick = () => { cat = cat === b.dataset.c ? null : b.dataset.c; drawCats(); drawRule(); });
+    const transferNew = kind === "transfer" && !editing;
+    $("#to-field", dlg).hidden = !transferNew;
+    $("#acc-label", dlg).textContent = transferNew ? "보내는 계좌" : "계좌";
+  };
+  const drawRule = () => {
+    const place = $("#t-place", dlg).value.trim();
+    const show = !!place && !!cat && (!editing || cat !== tx.category_id || kind !== tx.kind);
+    $("#rule-wrap", dlg).hidden = !show;
+    if (show) $("#rule-text", dlg).textContent = `다음부터 '${place}'은(는) ${catOf(cat)?.name ?? ""}(으)로 분류`;
+  };
+  $$("[data-kind]", dlg).forEach((b) => b.onclick = () => {
+    kind = b.dataset.kind;
+    $$("[data-kind]", dlg).forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    drawCats(); drawRule();
+  });
+  $$("[data-f]", dlg).forEach((b) => b.onclick = () => {
+    const f = freq[Number(b.dataset.f)];
+    $("#t-place", dlg).value = f.place; cat = f.category_id;
+    if (!$("#t-amount", dlg).value) $("#t-amount", dlg).value = f.amount.toLocaleString("ko-KR");
+    drawCats(); drawRule();
+  });
+  // 금액은 입력하는 대로 쉼표를 붙임
+  $("#t-amount", dlg).addEventListener("input", (e) => {
+    const n = parseAmount(e.target.value.replace(/[^\d]/g, ""));
+    e.target.value = n ? n.toLocaleString("ko-KR") : "";
+  });
+  $("#t-place", dlg).addEventListener("input", drawRule);
+  drawCats(); drawRule();
+
+  $(".dialog-close", dlg).onclick = () => dlg.close();
+  dlg.addEventListener("close", () => dlg.remove());
+  $("#t-del", dlg)?.addEventListener("click", async () => {
+    if (!confirm(tx.pair_id ? "이 이체의 양쪽 내역을 모두 지울까요?" : "이 내역을 지울까요?")) return;
+    const q = sb.from("money_transactions").delete();
+    const { error } = await (tx.pair_id ? q.eq("pair_id", tx.pair_id) : q.eq("id", tx.id));
+    if (error) { toast("지우지 못했어요.", "error"); return; }
+    dlg.close(); toast("지웠어요"); rerender();
+  });
+  $("#tx-form", dlg).onsubmit = async (e) => {
+    e.preventDefault();
+    const n = parseAmount($("#t-amount", dlg).value);
+    if (!n || n <= 0) { toast("금액을 넣어 주세요.", "error"); return; }
+    const sign = kind === "income" ? 1 : kind === "cancel" ? Math.sign(tx.amount) : -1;
+    const place = $("#t-place", dlg).value.trim(), memo = $("#t-memo", dlg).value.trim();
+    const at = fromLocalInput($("#t-at", dlg).value), acc = $("#t-acc", dlg).value;
+    $("#t-save", dlg).disabled = true;
+    let error;
+    if (editing) {
+      const patch = { kind, category_id: cat, place, memo };
+      if (!imported) Object.assign(patch, { amount: sign * n, account_id: acc, occurred_at: at });
+      ({ error } = await sb.from("money_transactions").update(patch).eq("id", tx.id));
+    } else if (kind === "transfer") {
+      const to = $("#t-to", dlg).value;
+      if (to === acc) { $("#t-save", dlg).disabled = false; toast("보내는 계좌와 받는 계좌가 같아요.", "error"); return; }
+      const pair_id = crypto.randomUUID();
+      ({ error } = await sb.from("money_transactions").insert([
+        { account_id: acc, occurred_at: at, amount: -n, kind, category_id: cat, place: place || accOf(to)?.name || "", memo, pair_id },
+        { account_id: to, occurred_at: at, amount: n, kind, category_id: cat, place: place || accOf(acc)?.name || "", memo, pair_id },
+      ]));
+    } else {
+      ({ error } = await sb.from("money_transactions").insert({ account_id: acc, occurred_at: at, amount: sign * n, kind, category_id: cat, place, memo }));
+    }
+    if (error) { $("#t-save", dlg).disabled = false; toast("저장하지 못했어요.", "error"); return; }
+    if (!$("#rule-wrap", dlg).hidden && $("#t-rule", dlg).checked) {
+      const key = normalizePlace(place);
+      const old = base.rules.find((r) => r.place === key);
+      if (old) await sb.from("money_rules").update({ kind: kind === "cancel" ? "expense" : kind, category_id: cat }).eq("id", old.id);
+      else await sb.from("money_rules").insert({ place: key, kind: kind === "cancel" ? "expense" : kind, category_id: cat });
+    }
+    remember("money-last-account", acc);
+    dlg.close();
+    toast(editing ? "고쳤어요" : `${kindName(kind)} ${won(n)} 넣었어요`);
+    rerender();
+  };
+  dlg.showModal();
+  if (!editing) $("#t-amount", dlg).focus();
+}
+
+/* ---------- 계좌 ---------- */
+async function renderAccounts() {
+  document.title = "계좌 — $TDL";
+  app.innerHTML = shell("/accounts", loading());
+  bindShell();
+  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source");
+  const all = data ?? [];
+  const lastImport = (id) => all.filter((t) => t.account_id === id && t.source === "import").map((t) => t.occurred_at).sort().at(-1);
+  const sum = base.accounts.reduce((s, a) => s + accountBalance(a, all), 0);
+  fill(`<p class="total-balance"><span class="muted">모든 계좌</span><b>${won(sum)}</b></p>
+    <ul class="accounts">${base.accounts.map((a) => {
+      const li = lastImport(a.id);
+      return `<li class="paper" data-id="${a.id}">
+        <div class="acc-head"><span class="bank b-${a.bank}">${esc(BANKS.find((b) => b.id === a.bank)?.name ?? "")}</span><b>${esc(a.name)}</b></div>
+        <p class="acc-bal">${won(accountBalance(a, all))}</p>
+        <p class="muted small">${li ? `파일로 ${kstDay(li).replaceAll("-", ".")}까지 가져옴` : a.bank === "cash" ? "직접 입력으로 관리" : "아직 가져온 파일이 없어요"}</p>
+        <details><summary class="small">고치기</summary>
+          <form class="acc-edit grid2">
+            <label class="field">이름<input class="input" name="name" value="${esc(a.name)}" required></label>
+            <label class="field">시작 잔액 <span class="muted">(파일 잔액이 없을 때)</span><input class="input" name="opening" inputmode="numeric" value="${a.opening_balance ?? 0}"></label>
+            <div class="add-as"><button class="btn primary sm" type="submit">저장</button><button class="btn ghost sm danger" type="button" data-del>계좌 삭제</button></div>
+          </form></details>
+      </li>`;
+    }).join("")}</ul>
+    <form class="paper acc-add" id="acc-add">
+      <h3>계좌 추가</h3>
+      <div class="grid2">
+        <label class="field">은행<select class="input" name="bank">${BANKS.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select></label>
+        <label class="field">이름<input class="input" name="name" placeholder="예: 하나 월급통장" required></label>
+        <label class="field">시작 잔액<input class="input" name="opening" inputmode="numeric" value="0"></label>
+      </div>
+      <div><button class="btn outline" type="submit">추가</button></div>
+    </form>`);
+  $$(".accounts li").forEach((li) => {
+    const a = accOf(li.dataset.id);
+    $(".acc-edit", li).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      await sb.from("money_accounts").update({ name: f.name.value.trim(), opening_balance: parseAmount(f.opening.value) ?? 0 }).eq("id", a.id);
+      toast("저장했어요"); rerender();
+    };
+    $("[data-del]", li).onclick = async () => {
+      if (!confirm(`'${a.name}' 계좌를 지울까요? 이 계좌의 내역도 모두 지워져요.`)) return;
+      await sb.from("money_accounts").delete().eq("id", a.id);
+      toast("지웠어요"); rerender();
+    };
+  });
+  $("#acc-add").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const { error } = await sb.from("money_accounts").insert({ bank: f.bank.value, name: f.name.value.trim(), opening_balance: parseAmount(f.opening.value) ?? 0, sort: base.accounts.length });
+    if (error) { toast("추가하지 못했어요.", "error"); return; }
+    toast("계좌를 추가했어요"); rerender();
+  };
+}
+
+/* ---------- 예산·분류 ---------- */
+async function renderBudget() {
+  document.title = "예산·분류 — $TDL";
+  app.innerHTML = shell("/budget", loading());
+  bindShell();
+  const budgetOf = (id) => base.budgets.find((b) => (b.category_id ?? null) === id)?.amount ?? "";
+  const fmt = (v) => (v ? Number(v).toLocaleString("ko-KR") : "");
+  fill(`<form class="paper budget-form" id="budget-form">
+      <div class="section-head"><h3>한 달 예산</h3><span class="muted small">매달 같은 금액이 적용돼요. 비워 두면 예산 없음</span></div>
+      <label class="budget-row total"><span>전체 지출</span><span class="money-input"><input class="input" inputmode="numeric" data-b="" value="${fmt(budgetOf(null))}" placeholder="예: 800,000"><span>원</span></span></label>
+      ${base.categories.filter((c) => c.kind === "expense").map((c) => `<label class="budget-row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>
+        <span class="money-input"><input class="input" inputmode="numeric" data-b="${c.id}" value="${fmt(budgetOf(c.id))}"><span>원</span></span></label>`).join("")}
+      <p class="muted small" id="b-sum"></p>
+      <div class="actions"><button class="btn primary" type="submit">예산 저장</button></div>
+    </form>
+
+    <section class="paper cats-manage">
+      <div class="section-head"><h3>분류</h3><span class="muted small">이름과 색을 바꾸면 바로 저장돼요</span></div>
+      ${KINDS.filter((k) => k.id !== "cancel").map((k) => `<h4>${k.name}</h4><ul class="label-list">${base.categories.filter((c) => c.kind === k.id).map((c) => `<li data-id="${c.id}">
+        <input type="color" value="${c.color}" aria-label="${esc(c.name)} 색"><input class="input" value="${esc(c.name)}" aria-label="분류 이름"><button class="btn ghost sm danger" type="button">삭제</button></li>`).join("")}</ul>`).join("")}
+      <form class="label-add" id="cat-add"><input type="color" value="#5c7cfa" aria-label="새 분류 색"><select class="input" style="width:auto;min-width:96px" aria-label="새 분류 종류">${KINDS.filter((k) => k.id !== "cancel").map((k) => `<option value="${k.id}">${k.name}</option>`).join("")}</select><input class="input" placeholder="새 분류 이름" aria-label="새 분류 이름" required><button class="btn primary" type="submit">추가</button></form>
+    </section>`);
+  const sumDraw = () => {
+    const parts = $$("[data-b]").filter((i) => i.dataset.b).reduce((s, i) => s + (parseAmount(i.value) ?? 0), 0);
+    const total = parseAmount($('[data-b=""]').value) ?? 0;
+    $("#b-sum").textContent = parts ? `분류별 예산 합계 ${won(parts)}${total ? (parts > total ? ` · 전체 예산보다 ${won(parts - total)} 많아요` : ` · 전체 예산 중 ${won(total - parts)}는 분류를 정하지 않은 돈`) : ""}` : "";
+  };
+  $$("[data-b]").forEach((i) => i.addEventListener("input", () => { const n = parseAmount(i.value.replace(/[^\d]/g, "")); i.value = n ? n.toLocaleString("ko-KR") : ""; sumDraw(); }));
+  sumDraw();
+  $("#budget-form").onsubmit = async (e) => {
+    e.preventDefault();
+    for (const i of $$("[data-b]")) {
+      const id = i.dataset.b || null, n = parseAmount(i.value) ?? 0;
+      const old = base.budgets.find((b) => (b.category_id ?? null) === id);
+      if (old && !n) await sb.from("money_budgets").delete().eq("id", old.id);
+      else if (old && n !== Number(old.amount)) await sb.from("money_budgets").update({ amount: n }).eq("id", old.id);
+      else if (!old && n) await sb.from("money_budgets").insert({ category_id: id, amount: n });
+    }
+    toast("예산을 저장했어요"); go("#/", true);
+  };
+  $$(".cats-manage li[data-id]").forEach((li) => {
+    const id = li.dataset.id, c = catOf(id);
+    const [color, name] = $$("input", li);
+    color.onchange = async () => { await sb.from("money_categories").update({ color: color.value }).eq("id", id); };
+    name.onblur = async () => { const v = name.value.trim(); if (v && v !== c.name) { await sb.from("money_categories").update({ name: v }).eq("id", id); c.name = v; toast("이름을 바꿨어요"); } };
+    $("button", li).onclick = async () => {
+      if (!confirm(`'${c.name}' 분류를 지울까요? 이 분류였던 내역은 '분류 없음'이 돼요.`)) return;
+      await sb.from("money_categories").delete().eq("id", id);
+      rerender();
+    };
+  });
+  $("#cat-add").onsubmit = async (e) => {
+    e.preventDefault();
+    const [color, kind, name] = [$("#cat-add input[type=color]"), $("#cat-add select"), $("#cat-add .input:not(select)")];
+    await sb.from("money_categories").insert({ name: name.value.trim(), kind: kind.value, color: color.value, sort: base.categories.length });
+    toast("분류를 추가했어요"); rerender();
+  };
+}
+
+/* ---------- 가져오기 ---------- */
+// 엑셀 파일은 이 화면에서만 필요하므로 그때 불러옴 (SheetJS)
+async function loadXlsx() {
+  if (window.XLSX) return window.XLSX;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = window.__XLSX_URL__ ?? "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.onload = res; s.onerror = () => rej(new Error("엑셀 읽기 도구를 불러오지 못했어요."));
+    document.head.append(s);
+  });
+  return window.XLSX;
+}
+
+async function renderImport() {
+  document.title = "가져오기 — $TDL";
+  app.innerHTML = shell("/import", loading());
+  bindShell();
+  const def = base.accounts.find((a) => a.bank === "kakao") ?? base.accounts[0];
+  fill(`<section class="paper import-card">
+      <h3>은행 거래내역 파일 올리기</h3>
+      <p class="muted small">은행 앱이나 인터넷뱅킹에서 거래내역을 엑셀(xlsx)이나 CSV로 받아 올려 주세요. 파일은 이 브라우저 안에서만 읽고, 날짜·금액·잔액·거래구분·내용만 저장해요. 계좌번호는 저장하지 않아요.</p>
+      <div class="grid2">
+        <label class="field">어느 계좌의 파일인가요?<select class="input" id="i-acc">${base.accounts.filter((a) => a.bank !== "cash").map((a) => `<option value="${a.id}" ${a.id === def?.id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
+        <label class="field">파일<input class="input" type="file" id="i-file" accept=".xlsx,.xls,.csv"></label>
+      </div>
+      <p class="muted small">같은 파일이나 기간이 겹치는 파일을 다시 올려도, 이미 있는 내역은 건너뛰어요.</p>
+    </section>
+    <div id="preview"></div>`);
+  $("#i-file").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const box = $("#preview");
+    box.innerHTML = loading();
+    try {
+      const XLSX = await loadXlsx();
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });
+      const { error, items } = parseBankRows(rows);
+      if (error) { box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(error)}</p></div>`; return; }
+      await previewImport(box, $("#i-acc").value, items);
+    } catch (err) {
+      box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(err.message)}</p></div>`;
+    }
+  };
+}
+
+async function previewImport(box, accountId, items) {
+  const times = items.map((t) => Date.parse(t.occurred_at));
+  const from = new Date(Math.min(...times) - 2 * 86400000).toISOString(), to = new Date(Math.max(...times) + 2 * 86400000).toISOString();
+  const { data } = await sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to);
+  const existing = data ?? [];
+  const keys = new Set(existing.map((t) => t.import_key).filter(Boolean));
+  const manuals = existing.filter((t) => t.source === "manual" && !t.pair_id);
+  const taken = new Set();
+  const fresh = [], merges = [];
+  let dup = 0;
+  for (const it of items) {
+    const key = importKey(accountId, it);
+    if (keys.has(key)) { dup++; continue; }
+    keys.add(key);
+    const t = { ...it, account_id: accountId, import_key: key, source: "import" };
+    const m = findManualMatch(t, manuals, taken);
+    if (m) { taken.add(m.id); merges.push({ manual: m, t }); continue; }
+    fresh.push({ ...t, ...classify(t, base.rules, base.categories), _new: true, id: `new-${fresh.length}` });
+  }
+  // 취소 짝: 이 계좌의 새 내역과 기존 내역 사이에서
+  const pool = [...fresh, ...existing.filter((t) => t.account_id === accountId && t.kind !== "cancel")];
+  const cancels = findCancelPairs(pool);
+  for (const pair of cancels) for (const t of pair) t.kind = "cancel";
+  // 이체 짝: 새 내역과 다른 내 계좌의 내역 사이에서
+  const transferPool = [...fresh.filter((t) => t.kind !== "cancel"), ...existing.filter((t) => t.account_id !== accountId && !t.pair_id && t.kind !== "cancel")];
+  const transferCat = base.categories.find((c) => c.kind === "transfer")?.id ?? null;
+  const transfers = findTransferPairs(transferPool).filter((p) => p.some((t) => t._new));
+  for (const pair of transfers) { const pid = crypto.randomUUID(); for (const t of pair) { t.kind = "transfer"; t.category_id = transferCat; t.pair_id = pid; } }
+
+  const show = fresh.slice().sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+  const tag = (t) => (t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`);
+  box.innerHTML = `<section class="paper import-card">
+    <h3>미리보기</h3>
+    <ul class="import-stats">
+      <li><b>${fresh.length}</b>새 내역</li>
+      <li><b>${merges.length}</b>직접 넣은 것과 합침</li>
+      <li><b>${dup}</b>이미 있음 (건너뜀)</li>
+      <li><b>${cancels.length}</b>결제 취소 짝</li>
+      <li><b>${transfers.length}</b>내 계좌 이체</li>
+    </ul>
+    ${show.length ? `<div class="table-scroll"><table class="import-table"><thead><tr><th>날짜</th><th>어디서</th><th>거래구분</th><th>분류</th><th class="r">금액</th></tr></thead><tbody>
+      ${show.slice(0, 80).map((t) => `<tr><td>${kstDay(t.occurred_at).slice(5).replace("-", ".")} ${kstTime(t.occurred_at)}</td><td>${esc(t.place)}</td><td class="muted">${esc(t.tx_type)}</td>
+        <td>${tag(t)}${t.kind === "expense" || t.kind === "income" ? esc(catOf(t.category_id)?.name ?? "분류 없음") : ""}</td><td class="r ${t.kind}">${signedWon(t.amount)}</td></tr>`).join("")}
+    </tbody></table></div>${show.length > 80 ? `<p class="muted small">외 ${show.length - 80}건</p>` : ""}` : ""}
+    <p class="muted small">분류 없는 내역은 저장한 뒤 내역 화면에서 한 번 분류해 두면, 다음부터 같은 곳은 자동으로 분류돼요.</p>
+    <div class="actions"><button class="btn primary" type="button" id="i-save" ${fresh.length + merges.length ? "" : "disabled"}>${fresh.length + merges.length ? `${fresh.length + merges.length}건 저장` : "새로 저장할 내역이 없어요"}</button></div>
+  </section>`;
+  $("#i-save").onclick = async () => {
+    $("#i-save").disabled = true; $("#i-save").textContent = "저장 중…";
+    const rows = fresh.map(({ _new, id, ...t }) => t);
+    for (let i = 0; i < rows.length; i += 200) {
+      const { error } = await sb.from("money_transactions").insert(rows.slice(i, i + 200));
+      if (error) { toast("저장하지 못했어요. 다시 시도해 주세요.", "error"); $("#i-save").disabled = false; $("#i-save").textContent = "다시 저장"; return; }
+    }
+    for (const { manual, t } of merges) {
+      await sb.from("money_transactions").update({ occurred_at: t.occurred_at, balance_after: t.balance_after, tx_type: t.tx_type, import_key: t.import_key, source: "import", place: manual.place || t.place }).eq("id", manual.id);
+    }
+    // 기존 내역 중 짝이 된 것도 표시를 바꿈
+    for (const t of [...cancels.flat(), ...transfers.flat()].filter((x) => !x._new)) {
+      await sb.from("money_transactions").update({ kind: t.kind, category_id: t.category_id ?? null, pair_id: t.pair_id ?? null }).eq("id", t.id);
+    }
+    toast(`${rows.length + merges.length}건을 저장했어요`);
+    const latest = items.map((t) => t.occurred_at).sort().at(-1);
+    go(`#/list?m=${kstMonth(latest)}`);
+  };
+}
+
+/* ---------- 라우터 ---------- */
+async function route() {
+  document.querySelectorAll("dialog").forEach((d) => d.remove());
+  const { path, params } = parseHash();
+  if (path === "/login") return state.user ? go("#/", true) : renderLogin();
+  if (!state.user) return go("#/login", true);
+  if (!state.profile) {
+    const { data } = await sb.from("profiles").select("nickname, approved").eq("id", state.user.id).maybeSingle();
+    state.profile = data ?? { nickname: "", approved: false };
+  }
+  if (!state.profile.approved) {
+    app.innerHTML = shell("/", '<div class="paper notice"><h2>승인을 기다리고 있어요</h2><p>관리자가 가입을 승인하면 가계부를 쓸 수 있어요.</p></div>');
+    bindShell(); $("#fab")?.remove(); return;
+  }
+  try {
+    await loadBase();
+    if (path === "/list") return await renderList(params);
+    if (path === "/accounts") return await renderAccounts();
+    if (path === "/budget") return await renderBudget();
+    if (path === "/import") return await renderImport();
+    return await renderMonth(params);
+  } catch {
+    app.innerHTML = shell("/", '<div class="paper notice"><h2>불러오지 못했어요</h2><p>잠시 뒤 새로고침해 주세요. 계속되면 데이터베이스 설정(money.sql)을 확인해 주세요.</p></div>');
+    bindShell();
+  }
+}
+
+async function start() {
+  if ((!SUPABASE_URL || !SUPABASE_ANON_KEY) && !window.__MONEY_TEST_CLIENT__) {
+    app.innerHTML = '<main class="auth"><div class="paper notice"><h2>연결 준비 중</h2><p>js/config.js에 Supabase 주소와 키를 넣어 주세요.</p></div></main>';
+    return;
+  }
+  sb = window.__MONEY_TEST_CLIENT__ ?? (await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"))
+    .createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true } });
+  const { data } = await sb.auth.getSession();
+  state.user = data.session?.user ?? null;
+  sb.auth.onAuthStateChange((event, session) => {
+    const before = state.user?.id;
+    state.user = session?.user ?? null;
+    if (state.user?.id === before) return;
+    state.profile = null;
+    if (event === "SIGNED_IN" && parseHash().path === "/login") go("#/", true);
+    else if (!state.user) go("#/login", true);
+  });
+  window.addEventListener("hashchange", route);
+  route();
+}
+
+start();
