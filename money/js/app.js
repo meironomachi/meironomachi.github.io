@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231453";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231504";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610231453";
+} from "./money.js?v=202610231504";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -188,11 +188,9 @@ async function renderMonth(params) {
   const rows = [...cats.map((c) => ({ c, spent: s.byCat[c.id] ?? 0, before: p.byCat[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))]
     .filter((r) => r.spent || r.budget).sort((a, b) => b.spent - a.spent);
   const none = s.byCat.none ?? 0;
-  // 막대 길이 기준: 분류 없음까지 포함한 가장 큰 금액(예산 포함)
-  const max = Math.max(1, none, ...rows.map((r) => Math.max(r.spent, r.budget ?? 0)));
-  const pct = (n) => Math.min(100, (n / max) * 100);
   // 수입·저축 목표와 이 달의 고정 항목
-  const inflow = inflowByCat(txs);
+  const inflow = inflowByCat(txs), prevInflow = inflowByCat(prev);
+  const incomeNone = txs.filter((t) => t.kind === "income" && !t.category_id).reduce((sum, t) => sum + t.amount, 0);
   const goals = base.categories.filter((c) => c.kind === "income" || c.kind === "saving")
     .map((c) => ({ c, got: inflow[c.id] ?? 0, goal: base.budgets.find((b) => b.category_id === c.id)?.amount })).filter((g) => g.goal);
   const fixed = base.recurring.filter((r) => recurringActive(r, m)).map((r) => ({ r, tx: txs.find((t) => t.recurring_id === r.id) }))
@@ -230,24 +228,43 @@ async function renderMonth(params) {
         <span class="fx-amt ${r.kind}">${signedWon(r.kind === "income" ? r.amount : -r.amount)}</span></li>`).join("")}</ul>
       <p class="muted small">이 달 고정 수입 ${won(ft.income)} · 고정 지출 ${won(ft.expense)}${ft.saving ? ` · 고정 저축 ${won(ft.saving)}` : ""}</p></section>` : ""}
 
-    <section class="cat-section">
-      <div class="section-head"><h3>분류별 지출</h3></div>
-      ${rows.length || none ? `<ul class="cat-rows">${rows.map((r) => {
-        const st = budgetStatus(r.spent, r.budget), ch = changeRate(r.spent, r.before);
-        return `<li><a href="#/list?m=${m}&c=${r.c.id}">
-          <span class="cat-name"><i class="dot" style="background:${r.c.color}"></i>${esc(r.c.name)}</span>
-          <span class="cat-amt">${won(r.spent)}${r.budget ? `<span class="muted"> / ${won(r.budget)}</span>` : ""}</span>
-          <span class="cat-bar ${st.state}"><span style="width:${pct(r.spent)}%;background:${st.state === "over" ? "var(--danger)" : st.state === "warn" ? "var(--warn)" : r.c.color}"></span>${r.budget ? `<i class="cap" style="left:${pct(r.budget)}%"></i>` : ""}</span>
-          <span class="cat-ch muted small">${ch === null ? "" : ch === 0 ? "지난달과 같음" : `지난달보다 ${ch > 0 ? "+" : ""}${ch}%`}</span>
-        </a></li>`;
-      }).join("")}
-      ${none ? `<li><a href="#/list?m=${m}&c=none"><span class="cat-name"><i class="dot" style="background:var(--border)"></i>분류 없음</span><span class="cat-amt">${won(none)}</span><span class="cat-bar"><span style="width:${pct(none)}%;background:var(--muted-fg)"></span></span><span class="cat-ch muted small">눌러서 분류하기</span></a></li>` : ""}
-      </ul>` : '<p class="empty">이 달의 지출이 없어요. 오른쪽 아래 + 버튼으로 넣어 보세요.</p>'}
-    </section>
+    ${catDetails({ key: "expense", title: "분류별 지출", m, total: s.expense, rows: rows.map((r) => ({ c: r.c, amt: r.spent, before: r.before, budget: r.budget })), none })}
+    ${catDetails({ key: "income", title: "분류별 수입", m, total: s.income, none: incomeNone,
+      rows: base.categories.filter((c) => c.kind === "income").map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))
+        .filter((r) => r.amt || r.budget).sort((a, b) => b.amt - a.amt) })}
 
     ${txs.length ? `<section class="recent"><div class="section-head"><h3>최근 내역</h3><a class="btn ghost sm" href="#/list?m=${m}">전체 보기</a></div>${txList(txs.slice(0, 6))}</section>` : ""}`);
   bindTxRows();
 }
+
+/** 분류별 지출·수입: 눌러서 펼치고 접음 (펼친 상태는 이 기기에 기억) */
+function catDetails({ key, title, m, total, rows, none }) {
+  const income = key === "income";
+  const max = Math.max(1, none, ...rows.map((r) => Math.max(r.amt, r.budget ?? 0)));
+  const pct = (n) => Math.min(100, (n / max) * 100);
+  const open = remember(`money-open-${key}`) === "1";
+  const count = rows.filter((r) => r.amt).length + (none ? 1 : 0);
+  const body = rows.length || none ? `<ul class="cat-rows">${rows.map((r) => {
+      const st = income ? goalStatus(r.amt, r.budget) : budgetStatus(r.amt, r.budget), ch = changeRate(r.amt, r.before);
+      const color = income ? r.c.color : st.state === "over" ? "var(--danger)" : st.state === "warn" ? "var(--warn)" : r.c.color;
+      return `<li><a href="#/list?m=${m}&c=${r.c.id}">
+        <span class="cat-name"><i class="dot" style="background:${r.c.color}"></i>${esc(r.c.name)}</span>
+        <span class="cat-amt">${won(r.amt)}${r.budget ? `<span class="muted"> / ${won(r.budget)}${income ? " 목표" : ""}</span>` : ""}</span>
+        <span class="cat-bar ${st.state}"><span style="width:${pct(r.amt)}%;background:${color}"></span>${r.budget ? `<i class="cap" style="left:${pct(r.budget)}%"></i>` : ""}</span>
+        <span class="cat-ch muted small">${ch === null ? "" : ch === 0 ? "지난달과 같음" : `지난달보다 ${ch > 0 ? "+" : ""}${ch}%`}</span>
+      </a></li>`;
+    }).join("")}
+    ${none ? `<li><a href="#/list?m=${m}&c=none&k=${key}"><span class="cat-name"><i class="dot" style="background:var(--border)"></i>분류 없음</span><span class="cat-amt">${won(none)}</span><span class="cat-bar"><span style="width:${pct(none)}%;background:var(--muted-fg)"></span></span><span class="cat-ch muted small">눌러서 분류하기</span></a></li>` : ""}
+    </ul>` : `<p class="empty">이 달의 ${income ? "수입" : "지출"}이 없어요.</p>`;
+  return `<details class="cat-section" data-open-key="${key}" ${open ? "open" : ""}>
+    <summary><h3>${title}</h3><span class="cat-sum"><b class="${income ? "in" : ""}">${won(total)}</b><span class="muted small">${count ? `${count}개 분류` : ""}</span></span></summary>
+    ${body}
+  </details>`;
+}
+document.addEventListener("toggle", (e) => {
+  const key = e.target.dataset?.openKey;
+  if (key) remember(`money-open-${key}`, e.target.open ? "1" : "0");
+}, true);
 
 /* ---------- 내역 ---------- */
 function txRow(t) {
@@ -290,10 +307,11 @@ async function renderList(params) {
     <p class="muted small" id="count"></p>
     <div id="rows"></div>`);
   if (params.get("c") === "none") $("#f-cat").value = "none";
+  if (params.get("k")) $("#f-kind").value = params.get("k");
   const draw = () => {
     const q = $("#q").value.trim().toLowerCase(), acc = $("#f-acc").value, cat = $("#f-cat").value, kind = $("#f-kind").value;
     const list = txs.filter((t) => (!q || `${t.place} ${t.memo} ${t.tx_type}`.toLowerCase().includes(q)) && (!acc || t.account_id === acc)
-      && (!cat || (cat === "none" ? !t.category_id && t.kind === "expense" : t.category_id === cat)) && (!kind || t.kind === kind));
+      && (!cat || (cat === "none" ? !t.category_id && t.kind === (kind || "expense") : t.category_id === cat)) && (!kind || t.kind === kind));
     const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0), inc = list.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
     $("#count").textContent = `${list.length}건 · 지출 ${won(out)} · 수입 ${won(inc)}`;
     $("#rows").innerHTML = list.length ? txList(list) : '<p class="empty">내역이 없어요.</p>';

@@ -327,3 +327,16 @@ dialog.tx-dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100dv
 .fixed-add { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .fixed-add p { margin: 0; }
 @media (max-width: 480px) { .fixed-list li { grid-template-columns: auto minmax(0, 1fr) auto; } .fixed-list li .btn { grid-column: 1 / -1; justify-self: end; } }
+
+/* 분류별 지출·수입 접기 */
+details.cat-section { border-top: 1px solid var(--border); padding-top: 4px; margin-bottom: 8px; }
+details.cat-section + details.cat-section { margin-bottom: 32px; }
+details.cat-section > summary { display: flex; align-items: center; gap: 12px; padding: 12px 4px; cursor: pointer; list-style: none; border-radius: 8px; }
+details.cat-section > summary::-webkit-details-marker { display: none; }
+details.cat-section > summary:hover { background: var(--muted); }
+details.cat-section > summary h3 { font-size: 15px; margin: 0; }
+details.cat-section > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted-fg); border-bottom: 2px solid var(--muted-fg); transform: rotate(45deg); margin: -4px 6px 0 4px; transition: transform .15s; }
+details.cat-section[open] > summary::after { transform: rotate(-135deg); margin-top: 4px; }
+.cat-sum { margin-left: auto; display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+.cat-sum b.in { color: var(--income); }
+details.cat-section .cat-rows { margin-bottom: 12px; }
