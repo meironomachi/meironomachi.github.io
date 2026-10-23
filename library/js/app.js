@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231209";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231300";
 import {
   STATUSES, statusName, COLORS, colorOf, GENRES, QUESTIONS, parseHighlights, shelve, doneInYear,
   progressText, progressRatio, bigCover, spineHue, plainText, ymd,
   sessionMs, isPaused, minutesByDay, streak, readingLevel, clockOf, durationOf, dayKey, dayStartMs,
-} from "./library.js?v=202610231209";
-import { richEditor, toHtml } from "./richtext.js?v=202610231209";
+} from "./library.js?v=202610231300";
+import { richEditor, toHtml } from "./richtext.js?v=202610231300";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -156,6 +156,7 @@ function renderLogin() {
         <button class="btn primary" type="submit">${mode === "in" ? "로그인" : "가입하기"}</button>
       </form>
       <button class="switch" type="button" id="switch">${mode === "in" ? "계정이 없나요? 가입하기" : "이미 계정이 있나요? 로그인"}</button>
+      ${mode === "in" ? '<p class="find-links"><a href="/saytqtul/#/find-id">아이디(이메일) 찾기</a><span aria-hidden="true">·</span><a href="/saytqtul/#/forgot">비밀번호 찾기</a></p>' : ""}
     </div></main>`;
     $("#switch").onclick = () => { mode = mode === "in" ? "up" : "in"; draw(); };
     $("#auth-form").onsubmit = async (e) => {
@@ -169,7 +170,7 @@ function renderLogin() {
       } else {
         const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname, data: { nickname: $("#nick").value.trim() } } });
         if (error) toast(error.message, "error");
-        else if (!data.session) toast("확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 완료돼요.");
+        else if (!data.session) $(".auth-result")?.remove(), $("#auth-form").insertAdjacentHTML("afterend", '<p class="auth-result">확인 메일을 보냈어요. 메일의 링크를 누르면 가입이 완료돼요. 메일이 안 보이면 <b>스팸함</b>도 확인해 주세요.</p>');
       }
       btn.disabled = false;
     };

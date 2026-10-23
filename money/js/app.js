@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231223";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231300";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
-} from "./money.js?v=202610231223";
+} from "./money.js?v=202610231300";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -149,6 +149,7 @@ function renderLogin() {
       <button class="btn primary" type="submit">로그인</button>
     </form>
     <p class="muted small" style="text-align:center;margin-top:16px">계정이 없으면 <a href="/saytqtul/#/auth">일기장에서 가입</a>해 주세요.</p>
+    <p class="find-links"><a href="/saytqtul/#/find-id">아이디(이메일) 찾기</a><span aria-hidden="true">·</span><a href="/saytqtul/#/forgot">비밀번호 찾기</a></p>
   </div></main>`;
   $("#auth-form").onsubmit = async (e) => {
     e.preventDefault();

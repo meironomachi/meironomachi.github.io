@@ -292,3 +292,8 @@ dialog.tx-dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100dv
 .money-input { display: flex; align-items: center; gap: 6px; }
 .money-input .input { width: 150px; text-align: right; font-variant-numeric: tabular-nums; }
 .cats-manage h4 { margin: 8px 0 0; font-size: 13px; color: var(--muted-fg); }
+
+/* 아이디·비밀번호 찾기 링크 */
+.find-links { display: flex; justify-content: center; gap: 8px; margin: 14px 0 0; font-size: 13px; color: var(--muted-fg); }
+.find-links a { color: var(--muted-fg); text-decoration: none; }
+.find-links a:hover { color: var(--fg); text-decoration: underline; }
