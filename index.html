@@ -14,27 +14,27 @@
 <style>
 /* Layout: bioscience 메인과 같은 틀. 상단 바로가기 바 + 초록 히어로 + 저장소 카드 목록(왼쪽 내용 | 오른쪽 버튼) + 최근 커밋 */
 :root{
-  --g900:#123d26; --g800:#14532d; --g700:#166534; --g600:#15803d; --g500:#22a05a;
-  --g200:#bbe5c8; --g100:#dcf3e3; --g50:#f2faf4;
-  --ink:#1c2420; --muted:#56635b; --line:#d6e2da; --bg:#fbfdfb; --card:#ffffff;
+  --g900:#0b1f5c; --g800:#002a95; --g700:#0031b0; --g600:#0031b0; --g500:#3d63d6;
+  --g200:#c9d5f6; --g100:#e3e9fb; --g50:#f1f4fd;
+  --ink:#1d2230; --muted:#5b6478; --line:#dde2ee; --bg:#fbfcff; --card:#ffffff;
   --bar:rgba(255,255,255,.94); --on-accent:#ffffff;
-  --hero-a:#14532d; --hero-b:#15803d;
+  --hero-a:#00227a; --hero-b:#0031b0;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --g900:#d3f0dc; --g800:#b7e6c6; --g700:#8fd6a8; --g600:#2f9e5c; --g500:#4cc07b;
-    --g200:#2c4a37; --g100:#1d3326; --g50:#17271e;
-    --ink:#e3ebe5; --muted:#9aa89f; --line:#2a3a30; --bg:#101713; --card:#151f19;
-    --bar:rgba(16,23,19,.94); --on-accent:#ffffff;
-    --hero-a:#0f3d22; --hero-b:#16663a; color-scheme:dark;
+    --g900:#dbe4ff; --g800:#c3d0ff; --g700:#a9bbff; --g600:#3d5fd9; --g500:#8ea6ff;
+    --g200:#2b3560; --g100:#1f2745; --g50:#1a2039;
+    --ink:#e6e9f2; --muted:#a2a9bb; --line:#2c3350; --bg:#12141c; --card:#181c28;
+    --bar:rgba(18,20,28,.94); --on-accent:#ffffff;
+    --hero-a:#0a1a4d; --hero-b:#1b3aa0; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --g900:#d3f0dc; --g800:#b7e6c6; --g700:#8fd6a8; --g600:#2f9e5c; --g500:#4cc07b;
-  --g200:#2c4a37; --g100:#1d3326; --g50:#17271e;
-  --ink:#e3ebe5; --muted:#9aa89f; --line:#2a3a30; --bg:#101713; --card:#151f19;
-  --bar:rgba(16,23,19,.94); --on-accent:#ffffff;
-  --hero-a:#0f3d22; --hero-b:#16663a; color-scheme:dark;
+  --g900:#dbe4ff; --g800:#c3d0ff; --g700:#a9bbff; --g600:#3d5fd9; --g500:#8ea6ff;
+  --g200:#2b3560; --g100:#1f2745; --g50:#1a2039;
+  --ink:#e6e9f2; --muted:#a2a9bb; --line:#2c3350; --bg:#12141c; --card:#181c28;
+  --bar:rgba(18,20,28,.94); --on-accent:#ffffff;
+  --hero-a:#0a1a4d; --hero-b:#1b3aa0; color-scheme:dark;
 }
 *{box-sizing:border-box}
 body{margin:0}
@@ -73,8 +73,8 @@ header.hero{background:linear-gradient(135deg,var(--hero-a),var(--hero-b));color
 .hero .meta span{background:rgba(0,0,0,.18);padding:4px 10px;border-radius:6px;font-variant-numeric:tabular-nums}
 .hero .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
 .hero .cta a{text-decoration:none;font-weight:700;border-radius:8px;padding:10px 20px;font-size:15px}
-.hero .cta .solve{background:#fff;color:#14532d}
-.hero .cta .solve:hover{background:#f2faf4}
+.hero .cta .solve{background:#fff;color:#0031b0}
+.hero .cta .solve:hover{background:#f1f4fd}
 .hero .cta .list{color:#fff;border:1px solid rgba(255,255,255,.5)}
 .hero .cta .list:hover{background:rgba(255,255,255,.12)}
 
@@ -90,7 +90,7 @@ main.wrap{padding-bottom:80px}
 .repos>li{aspect-ratio:1/1;display:flex;flex-direction:column;background:var(--card);
   border:1px solid var(--line);border-top:5px solid var(--g600);border-radius:12px;transition:border-color .15s,box-shadow .15s;
   scroll-margin-top:64px;min-width:0}
-.repos>li:hover{border-color:var(--g500);box-shadow:0 4px 14px rgba(21,128,61,.12)}
+.repos>li:hover{border-color:var(--g500);box-shadow:0 4px 14px rgba(0,49,176,.14)}
 a.repo{flex:1;display:flex;flex-direction:column;gap:8px;padding:22px 22px 12px;color:var(--ink);text-decoration:none;min-width:0}
 a:focus-visible{outline:3px solid var(--g500);outline-offset:2px}
 a.repo:focus-visible{outline-offset:-3px;border-radius:10px}
