@@ -17,11 +17,18 @@ const db = {
     { id: "a-hana", user_id: uid, name: "하나 월급통장", bank: "hana", opening_balance: 120000, sort: 2 },
   ],
   money_categories: cats,
+  // 고정: 용돈(매월 1일, 끝 없음), 월세(2026.10~2027.02, 매월 25일)
+  money_recurring: [
+    { id: "rec1", user_id: uid, name: "용돈", kind: "income", amount: 300000, account_id: "a-kakao", category_id: cid("용돈"), day: 1, start_month: "2026-10", end_month: null },
+    { id: "rec2", user_id: uid, name: "월세", kind: "expense", amount: 400000, account_id: "a-kakao", category_id: cid("기타"), day: 25, start_month: "2026-10", end_month: "2027-02" },
+  ],
   money_rules: [{ id: "r1", user_id: uid, place: "넷플릭스", kind: "expense", category_id: cid("구독") }],
   money_budgets: [
     { id: "b0", user_id: uid, category_id: null, amount: 600000 },
     { id: "b1", user_id: uid, category_id: cid("식비"), amount: 200000 },
     { id: "b2", user_id: uid, category_id: cid("카페"), amount: 40000 },
+    { id: "b3", user_id: uid, category_id: cid("용돈"), amount: 300000 },
+    { id: "b4", user_id: uid, category_id: cid("저축"), amount: 100000 },
   ],
   money_transactions: [
     // 직접 넣어 둔 것: 파일의 스타벅스와 합쳐져야 함
@@ -36,6 +43,8 @@ const db = {
     tx({ account_id: "a-kakao", occurred_at: at("2026-10-21T20:00"), amount: -45000, category_id: cid("문화"), place: "공연 예매" }),
     tx({ account_id: "a-kakao", occurred_at: at("2026-10-22T13:00"), amount: -15000, place: "온라인 결제" }),
     tx({ account_id: "a-kakao", occurred_at: at("2026-10-23T08:40"), amount: -1500, category_id: cid("교통"), place: "버스" }),
+    tx({ account_id: "a-kakao", occurred_at: at("2026-10-19T11:00"), amount: -6000, place: "이디야" }),
+    tx({ account_id: "a-kakao", occurred_at: at("2026-10-09T11:00"), amount: -5500, place: "이디야 " }),
     // 지난달
     tx({ account_id: "a-kakao", occurred_at: at("2026-09-10T12:00"), amount: -60000, category_id: cid("식비"), place: "식당" }),
     tx({ account_id: "a-kakao", occurred_at: at("2026-09-11T12:00"), amount: -20000, category_id: cid("카페"), place: "카페" }),
@@ -49,6 +58,8 @@ class Query {
   eq(k, v) { this.filters.push([k, v, "eq"]); return this; }
   gte(k, v) { this.filters.push([k, v, "gte"]); return this; }
   lt(k, v) { this.filters.push([k, v, "lt"]); return this; }
+  not(k, op, v) { this.filters.push([k, v, "notnull"]); return this; }
+  in(k, list) { this.filters.push([k, list, "in"]); return this; }
   order(k, o = {}) { this.sort = [k, o.ascending !== false]; return this; }
   limit(n) { this.max = n; return this; }
   insert(row) { this.op = "insert"; this.rows = Array.isArray(row) ? row : [row]; return this; }
@@ -58,7 +69,8 @@ class Query {
   single() { this.one = "single"; return this; }
   run() {
     const rows = db[this.table] ?? (db[this.table] = []);
-    const match = (r) => this.filters.every(([k, v, op]) => op === "gte" ? String(r[k]) >= String(v) : op === "lt" ? String(r[k]) < String(v) : String(r[k]) === String(v));
+    const match = (r) => this.filters.every(([k, v, op]) => op === "gte" ? String(r[k]) >= String(v) : op === "lt" ? String(r[k]) < String(v)
+      : op === "notnull" ? r[k] != null : op === "in" ? v.includes(r[k]) : String(r[k]) === String(v));
     let out;
     if (this.op === "insert") {
       for (const r of this.rows) {

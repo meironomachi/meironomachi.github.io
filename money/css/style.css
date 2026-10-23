@@ -297,3 +297,33 @@ dialog.tx-dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100dv
 .find-links { display: flex; justify-content: center; gap: 8px; margin: 14px 0 0; font-size: 13px; color: var(--muted-fg); }
 .find-links a { color: var(--muted-fg); text-decoration: none; }
 .find-links a:hover { color: var(--fg); text-decoration: underline; }
+
+/* 수입·저축 목표 */
+.goal-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.goal-rows .cat-name { margin-right: 8px; }
+.meter.goal span { background: var(--income); }
+.meter.goal.done span { background: #2f9e44; }
+.bt-left.goal-done { color: #2f9e44; }
+.bt-left.goal-ok, .bt-left.goal-near { color: var(--muted-fg); font-weight: 600; }
+.goal-head { margin-top: 18px; }
+
+/* 고정 수입·지출 */
+.fixed-section { margin-bottom: 32px; }
+.fixed-rows, .fixed-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.fixed-rows li, .fixed-list li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.fixed-list li { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.fx-day { font-size: 13px; font-weight: 700; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.fx-name { display: grid; min-width: 0; }
+.fx-name b, .fx-name { overflow-wrap: anywhere; }
+.fx-state { padding: 2px 8px; border-radius: 999px; background: var(--muted); color: var(--muted-fg); white-space: nowrap; }
+.fixed-rows li.done .fx-state { background: var(--accent); color: var(--accent-fg); }
+.fx-amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-amt.income { color: var(--income); }
+.fixed-rows li:not(.done) .fx-amt { opacity: .55; }
+.tag.fixed { background: var(--accent); color: var(--accent-fg); }
+.tag.income { background: color-mix(in srgb, var(--income) 15%, transparent); color: var(--income); }
+.tag.expense { background: var(--muted); color: var(--fg); }
+.fixed-manage { padding: 20px; display: grid; gap: 14px; margin-bottom: 20px; }
+.fixed-add { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.fixed-add p { margin: 0; }
+@media (max-width: 480px) { .fixed-list li { grid-template-columns: auto minmax(0, 1fr) auto; } .fixed-list li .btn { grid-column: 1 / -1; justify-self: end; } }

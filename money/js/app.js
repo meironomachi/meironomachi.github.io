@@ -1,15 +1,16 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231448";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231453";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
-} from "./money.js?v=202610231448";
+  recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
+} from "./money.js?v=202610231453";
 
 const app = document.getElementById("app");
 let sb = null;
 const state = { user: null, profile: null };
 // 계좌·분류·규칙·예산 (화면마다 새로 읽음)
-const base = { accounts: [], categories: [], rules: [], budgets: [] };
+const base = { accounts: [], categories: [], rules: [], budgets: [], recurring: [] };
 
 /* ---------- 도우미 ---------- */
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -129,6 +130,20 @@ async function loadBase() {
     await sb.from("money_accounts").insert([{ name: "카카오뱅크", bank: "kakao", sort: 0 }, { name: "현금", bank: "cash", sort: 1 }]);
     base.accounts = ((await sb.from("money_accounts").select("*").order("sort")).data ?? []);
   }
+  // 고정 수입·지출 (표가 아직 없으면 건너뜀)
+  const rec = await sb.from("money_recurring").select("*").order("created_at");
+  base.recurring = rec.error ? [] : rec.data ?? [];
+  await materializeRecurring();
+}
+
+/** 날짜가 지난 고정 항목을 내역으로 만듦. 같은 달에 두 번 만들지 않음 (이미 있으면 건너뜀) */
+async function materializeRecurring() {
+  if (!base.recurring.length) return;
+  const today = kstDay(new Date().toISOString());
+  const { data } = await sb.from("money_transactions").select("recurring_id, recurring_month").not("recurring_id", "is", null);
+  const made = new Set((data ?? []).map((t) => `${t.recurring_id}|${t.recurring_month}`));
+  const rows = base.recurring.flatMap((r) => recurringDueMonths(r, today).filter((m) => !made.has(`${r.id}|${m}`)).map((m) => recurringTx(r, m)));
+  if (rows.length) await sb.from("money_transactions").insert(rows);
 }
 async function loadMonth(m) {
   const [from, to] = monthRange(m);
@@ -176,6 +191,13 @@ async function renderMonth(params) {
   // 막대 길이 기준: 분류 없음까지 포함한 가장 큰 금액(예산 포함)
   const max = Math.max(1, none, ...rows.map((r) => Math.max(r.spent, r.budget ?? 0)));
   const pct = (n) => Math.min(100, (n / max) * 100);
+  // 수입·저축 목표와 이 달의 고정 항목
+  const inflow = inflowByCat(txs);
+  const goals = base.categories.filter((c) => c.kind === "income" || c.kind === "saving")
+    .map((c) => ({ c, got: inflow[c.id] ?? 0, goal: base.budgets.find((b) => b.category_id === c.id)?.amount })).filter((g) => g.goal);
+  const fixed = base.recurring.filter((r) => recurringActive(r, m)).map((r) => ({ r, tx: txs.find((t) => t.recurring_id === r.id) }))
+    .sort((a, b) => recurringDay(a.r, m).localeCompare(recurringDay(b.r, m)));
+  const ft = recurringTotals(base.recurring, m);
   const daysLeft = m === thisMonth() ? (() => { const [y, mo] = m.split("-").map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate() - Number(kstDay(new Date().toISOString()).slice(8)) + 1; })() : 0;
 
   fill(`${monthNav("/", m)}
@@ -193,6 +215,20 @@ async function renderMonth(params) {
           ${daysLeft > 0 && tb.state !== "over" ? `<p class="muted small">남은 ${daysLeft}일 동안 하루 ${won(Math.floor((total.amount - s.expense) / daysLeft))}씩 쓸 수 있어요</p>` : ""}
         </div>` : '<p class="empty-hint">한 달 예산을 정하면 얼마나 남았는지 보여 드려요.</p>'}
     </section>
+
+    ${goals.length ? `<section class="paper budget-card"><div class="section-head"><h3>수입·저축 목표</h3><a class="btn ghost sm" href="#/budget">목표 정하기</a></div>
+      <ul class="goal-rows">${goals.map((g) => { const st = goalStatus(g.got, g.goal); return `<li>
+        <div class="bt-line"><span class="cat-name"><i class="dot" style="background:${g.c.color}"></i>${esc(g.c.name)}</span><b>${won(g.got)}</b><span class="muted"> / ${won(g.goal)}</span>
+          <span class="bt-left goal-${st.state}">${st.state === "done" ? "목표 달성" : `${won(g.goal - g.got)} 남음`}</span></div>
+        <div class="meter goal ${st.state}"><span style="width:${Math.min(100, st.ratio * 100)}%"></span></div></li>`; }).join("")}</ul></section>` : ""}
+
+    ${fixed.length ? `<section class="fixed-section"><div class="section-head"><h3>고정 수입·지출</h3><a class="btn ghost sm" href="#/budget?to=fixed">관리</a></div>
+      <ul class="fixed-rows">${fixed.map(({ r, tx }) => `<li class="${tx ? "done" : ""}">
+        <span class="fx-day">${Number(recurringDay(r, m).slice(8))}일</span>
+        <span class="fx-name">${esc(r.name)}<span class="muted small">${esc(accOf(r.account_id)?.name ?? "")}</span></span>
+        <span class="fx-state small">${tx ? (r.kind === "income" ? "들어옴" : "나감") : "예정"}</span>
+        <span class="fx-amt ${r.kind}">${signedWon(r.kind === "income" ? r.amount : -r.amount)}</span></li>`).join("")}</ul>
+      <p class="muted small">이 달 고정 수입 ${won(ft.income)} · 고정 지출 ${won(ft.expense)}${ft.saving ? ` · 고정 저축 ${won(ft.saving)}` : ""}</p></section>` : ""}
 
     <section class="cat-section">
       <div class="section-head"><h3>분류별 지출</h3></div>
@@ -217,7 +253,7 @@ async function renderMonth(params) {
 function txRow(t) {
   const c = catOf(t.category_id), a = accOf(t.account_id);
   const title = t.place || c?.name || t.tx_type || kindName(t.kind);
-  const tag = t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`;
+  const tag = (t.recurring_id ? '<span class="tag fixed">고정</span>' : "") + (t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`);
   return `<li><button type="button" class="tx" data-tx="${t.id}">
     <span class="tx-cat" style="--c:${c?.color ?? "var(--border)"}">${esc(c?.name ?? "분류 없음")}</span>
     <span class="tx-main"><b>${esc(title)}</b><span class="muted small">${kstTime(t.occurred_at)} · ${esc(a?.name ?? "")}${t.memo ? ` · ${esc(t.memo)}` : ""}${t.source === "manual" ? " · 직접 입력" : ""}</span></span>
@@ -314,11 +350,20 @@ async function txDialog(tx) {
     $("#to-field", dlg).hidden = !transferNew;
     $("#acc-label", dlg).textContent = transferNew ? "보내는 계좌" : "계좌";
   };
+  // 같은 곳의 지난 내역 (분류 규칙을 정하면 함께 바꿈)
+  let samePlace = [];
+  const { data: all } = await sb.from("money_transactions").select("id, place, kind, category_id, pair_id");
+  const sameAs = (place) => (all ?? []).filter((t) => t.id !== tx?.id && !t.pair_id && t.kind !== "cancel" && normalizePlace(t.place) === normalizePlace(place));
   const drawRule = () => {
     const place = $("#t-place", dlg).value.trim();
     const show = !!place && !!cat && (!editing || cat !== tx.category_id || kind !== tx.kind);
     $("#rule-wrap", dlg).hidden = !show;
-    if (show) $("#rule-text", dlg).textContent = `다음부터 '${place}'은(는) ${catOf(cat)?.name ?? ""}(으)로 분류`;
+    if (!show) return;
+    samePlace = sameAs(place).filter((t) => t.category_id !== cat || t.kind !== kind);
+    const name = catOf(cat)?.name ?? "";
+    $("#rule-text", dlg).textContent = samePlace.length
+      ? `'${place}' 지난 내역 ${samePlace.length}건도 ${name}(으)로 바꾸고, 다음부터도 ${name}(으)로 분류`
+      : `다음부터 '${place}'은(는) ${name}(으)로 분류`;
   };
   $$("[data-kind]", dlg).forEach((b) => b.onclick = () => {
     kind = b.dataset.kind;
@@ -378,6 +423,11 @@ async function txDialog(tx) {
       const old = base.rules.find((r) => r.place === key);
       if (old) await sb.from("money_rules").update({ kind: kind === "cancel" ? "expense" : kind, category_id: cat }).eq("id", old.id);
       else await sb.from("money_rules").insert({ place: key, kind: kind === "cancel" ? "expense" : kind, category_id: cat });
+      const ruleKind = kind === "cancel" ? "expense" : kind;
+      for (let i = 0; i < samePlace.length; i += 100) {
+        await sb.from("money_transactions").update({ kind: ruleKind, category_id: cat }).in("id", samePlace.slice(i, i + 100).map((t) => t.id));
+      }
+      if (samePlace.length) toast(`같은 곳 내역 ${samePlace.length}건도 바꿨어요`);
     }
     remember("money-last-account", acc);
     dlg.close();
@@ -445,7 +495,7 @@ async function renderAccounts() {
 }
 
 /* ---------- 예산·분류 ---------- */
-async function renderBudget() {
+async function renderBudget(params = new URLSearchParams()) {
   document.title = "예산·분류 — $TDL";
   app.innerHTML = shell("/budget", loading());
   bindShell();
@@ -457,8 +507,34 @@ async function renderBudget() {
       ${base.categories.filter((c) => c.kind === "expense").map((c) => `<label class="budget-row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>
         <span class="money-input"><input class="input" inputmode="numeric" data-b="${c.id}" value="${fmt(budgetOf(c.id))}"><span>원</span></span></label>`).join("")}
       <p class="muted small" id="b-sum"></p>
-      <div class="actions"><button class="btn primary" type="submit">예산 저장</button></div>
+      ${["income", "saving"].map((k) => `<div class="section-head goal-head"><h3>${k === "income" ? "한 달 수입 목표" : "한 달 저축 목표"}</h3><span class="muted small">채울수록 막대가 차요</span></div>
+        ${base.categories.filter((c) => c.kind === k).map((c) => `<label class="budget-row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>
+          <span class="money-input"><input class="input" inputmode="numeric" data-g="${c.id}" value="${fmt(budgetOf(c.id))}"><span>원</span></span></label>`).join("") || '<p class="empty-hint">아래 분류에서 먼저 분류를 만들어 주세요.</p>'}`).join("")}
+      <div class="actions"><button class="btn primary" type="submit">예산·목표 저장</button></div>
     </form>
+
+    <section class="paper fixed-manage" id="fixed">
+      <div class="section-head"><h3>고정 수입·지출</h3><span class="muted small">매월 정한 날이 되면 내역이 자동으로 들어가요</span></div>
+      ${base.recurring.length ? `<ul class="fixed-list">${base.recurring.map((r) => `<li data-r="${r.id}">
+        <span class="tag ${r.kind}">${kindName(r.kind)}</span>
+        <span class="fx-name"><b>${esc(r.name)}</b><span class="muted small">매월 ${r.day}일 · ${esc(accOf(r.account_id)?.name ?? "")} · ${esc(catOf(r.category_id)?.name ?? "분류 없음")} · ${r.start_month.replace("-", ".")}~${r.end_month ? r.end_month.replace("-", ".") : "계속"}</span></span>
+        <span class="fx-amt ${r.kind}">${won(r.amount)}</span>
+        <button class="btn ghost sm danger" type="button">그만두기</button></li>`).join("")}</ul>` : '<p class="empty-hint">아직 고정 항목이 없어요. 용돈, 월세, 구독료처럼 매달 같은 돈을 넣어 보세요.</p>'}
+      <form class="fixed-add" id="fixed-add">
+        <div class="grid2">
+          <label class="field">이름<input class="input" name="name" placeholder="예: 용돈, 월세" required></label>
+          <label class="field">종류<select class="input" name="kind"><option value="income">수입</option><option value="expense" selected>지출</option><option value="saving">저축</option></select></label>
+          <label class="field">금액<input class="input" name="amount" inputmode="numeric" placeholder="예: 300,000" required></label>
+          <label class="field">분류<select class="input" name="category"></select></label>
+          <label class="field">계좌<select class="input" name="account">${base.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></label>
+          <label class="field">매월 며칠<input class="input" name="day" type="number" min="1" max="31" value="1" required></label>
+          <label class="field">시작 월<input class="input" name="start" type="month" value="${thisMonth()}" required></label>
+          <label class="field">끝 월 <span class="muted">(비우면 계속)</span><input class="input" name="end" type="month"></label>
+        </div>
+        <p class="muted small">31일처럼 그 달에 없는 날은 그 달 마지막 날에 들어가요. 은행 파일을 가져올 때 같은 금액이 이틀 안에 있으면 하나로 합쳐져요.</p>
+        <div><button class="btn outline" type="submit">고정 항목 추가</button></div>
+      </form>
+    </section>
 
     <section class="paper cats-manage">
       <div class="section-head"><h3>분류</h3><span class="muted small">이름과 색을 바꾸면 바로 저장돼요</span></div>
@@ -473,16 +549,39 @@ async function renderBudget() {
   };
   $$("[data-b]").forEach((i) => i.addEventListener("input", () => { const n = parseAmount(i.value.replace(/[^\d]/g, "")); i.value = n ? n.toLocaleString("ko-KR") : ""; sumDraw(); }));
   sumDraw();
+  if (params.get("to") === "fixed") $("#fixed").scrollIntoView();
+  $$("[data-g]").forEach((i) => i.addEventListener("input", () => { const n = parseAmount(i.value.replace(/[^\d]/g, "")); i.value = n ? n.toLocaleString("ko-KR") : ""; }));
+  // 고정 항목: 종류에 맞는 분류만
+  const fa = $("#fixed-add");
+  const drawFixedCats = () => { fa.category.innerHTML = '<option value="">분류 없음</option>' + base.categories.filter((c) => c.kind === fa.kind.value).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(""); };
+  fa.kind.onchange = drawFixedCats; drawFixedCats();
+  fa.amount.addEventListener("input", () => { const n = parseAmount(fa.amount.value.replace(/[^\d]/g, "")); fa.amount.value = n ? n.toLocaleString("ko-KR") : ""; });
+  fa.onsubmit = async (e) => {
+    e.preventDefault();
+    const amount = parseAmount(fa.amount.value);
+    if (!amount || amount <= 0) { toast("금액을 넣어 주세요.", "error"); return; }
+    if (fa.end.value && fa.end.value < fa.start.value) { toast("끝 월이 시작 월보다 빨라요.", "error"); return; }
+    const { error } = await sb.from("money_recurring").insert({ name: fa.name.value.trim(), kind: fa.kind.value, amount, category_id: fa.category.value || null,
+      account_id: fa.account.value, day: Number(fa.day.value), start_month: fa.start.value, end_month: fa.end.value || null });
+    if (error) { toast("추가하지 못했어요. 데이터베이스 설정(money.sql)을 확인해 주세요.", "error"); return; }
+    toast("고정 항목을 추가했어요"); rerender();
+  };
+  $$(".fixed-list li[data-r]").forEach((li) => $("button", li).onclick = async () => {
+    const r = base.recurring.find((x) => x.id === li.dataset.r);
+    if (!confirm(`'${r.name}' 고정 항목을 그만둘까요? 이미 들어간 내역은 그대로 남아요.`)) return;
+    await sb.from("money_recurring").delete().eq("id", r.id);
+    toast("그만뒀어요"); rerender();
+  });
   $("#budget-form").onsubmit = async (e) => {
     e.preventDefault();
-    for (const i of $$("[data-b]")) {
-      const id = i.dataset.b || null, n = parseAmount(i.value) ?? 0;
+    for (const i of [...$$("[data-b]"), ...$$("[data-g]")]) {
+      const id = (i.dataset.b ?? i.dataset.g) || null, n = parseAmount(i.value) ?? 0;
       const old = base.budgets.find((b) => (b.category_id ?? null) === id);
       if (old && !n) await sb.from("money_budgets").delete().eq("id", old.id);
       else if (old && n !== Number(old.amount)) await sb.from("money_budgets").update({ amount: n }).eq("id", old.id);
       else if (!old && n) await sb.from("money_budgets").insert({ category_id: id, amount: n });
     }
-    toast("예산을 저장했어요"); go("#/", true);
+    toast("예산·목표를 저장했어요"); go("#/", true);
   };
   $$(".cats-manage li[data-id]").forEach((li) => {
     const id = li.dataset.id, c = catOf(id);
@@ -634,7 +733,7 @@ async function route() {
     await loadBase();
     if (path === "/list") return await renderList(params);
     if (path === "/accounts") return await renderAccounts();
-    if (path === "/budget") return await renderBudget();
+    if (path === "/budget") return await renderBudget(params);
     if (path === "/import") return await renderImport();
     return await renderMonth(params);
   } catch {

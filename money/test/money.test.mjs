@@ -112,3 +112,31 @@ test("예산 상태, 지난달 대비, 계좌 잔액, 자주 쓰는 내역", () 
   assert.deepEqual(fq.map((f) => [f.place, f.n]), [["편의점", 2], ["버스", 1]]);
   assert.equal(importKey("k", { occurred_at: "x", amount: -1, balance_after: 5 }), "k|x|-1|5");
 });
+
+test("고정 수입·지출: 시작~끝 달, 날짜가 지난 달만 내역으로", async () => {
+  const { recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals } = await import("../js/money.js");
+  const allowance = { id: "r1", kind: "income", amount: 300000, day: 1, start_month: "2026-11", end_month: null, account_id: "k", category_id: "c", name: "용돈" };
+  const rent = { id: "r2", kind: "expense", amount: 400000, day: 31, start_month: "2026-11", end_month: "2027-02", account_id: "k", category_id: "h", name: "월세" };
+  assert.equal(recurringDay(rent, "2026-11"), "2026-11-30"); // 31일 → 30일까지인 달
+  assert.equal(recurringDay(rent, "2027-02"), "2027-02-28");
+  assert.equal(recurringActive(rent, "2027-02"), true);
+  assert.equal(recurringActive(rent, "2027-03"), false);
+  assert.equal(recurringActive(allowance, "2030-01"), true); // 끝 없음
+  assert.deepEqual(recurringDueMonths(allowance, "2026-10-23"), []); // 아직 시작 전
+  assert.deepEqual(recurringDueMonths(allowance, "2027-01-01"), ["2026-11", "2026-12", "2027-01"]);
+  assert.deepEqual(recurringDueMonths(rent, "2026-12-15"), ["2026-11"]); // 12월 31일은 아직
+  assert.deepEqual(recurringDueMonths(rent, "2027-05-01"), ["2026-11", "2026-12", "2027-01", "2027-02"]); // 2월에서 끝
+  const t = recurringTx(rent, "2026-11");
+  assert.deepEqual([t.amount, t.kind, t.occurred_at, t.recurring_month], [-400000, "expense", "2026-11-30T00:00:00.000Z", "2026-11"]);
+  assert.equal(recurringTx(allowance, "2026-11").amount, 300000);
+  assert.deepEqual(recurringTotals([allowance, rent], "2026-12"), { income: 300000, expense: 400000, saving: 0 });
+  assert.deepEqual(recurringTotals([allowance, rent], "2027-03"), { income: 300000, expense: 0, saving: 0 });
+});
+
+test("수입·저축 목표", async () => {
+  const { goalStatus, inflowByCat } = await import("../js/money.js");
+  assert.equal(goalStatus(300000, 300000).state, "done");
+  assert.equal(goalStatus(85000, 100000).state, "near");
+  assert.equal(goalStatus(10, 100).state, "ok");
+  assert.deepEqual(inflowByCat([{ kind: "income", amount: 300000, category_id: "pocket" }, { kind: "saving", amount: -50000, category_id: "save" }, { kind: "expense", amount: -1, category_id: "x" }]), { pocket: 300000, save: 50000 });
+});

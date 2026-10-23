@@ -205,3 +205,51 @@ export function frequentEntries(txs, limit = 6) {
   }
   return [...count.values()].sort((a, b) => b.n - a.n).slice(0, limit);
 }
+
+/* ---------- 고정 수입·지출 (매월 반복) ---------- */
+// rec: { kind, amount(양수), day(1~31), start_month "YYYY-MM", end_month "YYYY-MM" 또는 null }
+const lastDay = (month) => { const [y, m] = month.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+/** 그 달에 들어가는 날 (31일로 정해도 30일까지인 달은 30일) */
+export const recurringDay = (rec, month) => `${month}-${String(Math.min(rec.day, lastDay(month))).padStart(2, "0")}`;
+/** 그 달에 해당하는 고정 항목인지 */
+export const recurringActive = (rec, month) => month >= rec.start_month && (!rec.end_month || month <= rec.end_month);
+/** 오늘(한국 날짜)까지 날짜가 지나 내역으로 만들어야 하는 달들 */
+export function recurringDueMonths(rec, today) {
+  const out = [];
+  for (let m = rec.start_month; m <= today.slice(0, 7) && (!rec.end_month || m <= rec.end_month); m = shiftMonth(m, 1)) {
+    if (recurringDay(rec, m) <= today) out.push(m);
+  }
+  return out;
+}
+/** 반복 항목 하나 → 그 달의 내역 (한국 시각 오전 9시) */
+export function recurringTx(rec, month) {
+  const sign = rec.kind === "income" ? 1 : -1;
+  return {
+    account_id: rec.account_id, occurred_at: new Date(Date.parse(`${recurringDay(rec, month)}T09:00:00+09:00`)).toISOString(),
+    amount: sign * Math.abs(rec.amount), kind: rec.kind, category_id: rec.category_id, place: rec.name, memo: "고정",
+    recurring_id: rec.id, recurring_month: month,
+  };
+}
+/** 그 달의 고정 항목 합계 (예정 포함) */
+export function recurringTotals(recs, month) {
+  const t = { income: 0, expense: 0, saving: 0 };
+  for (const r of recs) if (recurringActive(r, month)) t[r.kind] += Math.abs(r.amount);
+  return t;
+}
+
+/* ---------- 수입·저축 목표 ---------- */
+/** 목표는 많이 할수록 좋음: done(다 채움) / near(80% 이상) / ok */
+export function goalStatus(got, goal) {
+  if (!goal) return { ratio: 0, state: "none" };
+  const ratio = got / goal;
+  return { ratio, state: ratio >= 1 ? "done" : ratio >= 0.8 ? "near" : "ok" };
+}
+/** 한 달 분류별 수입·저축 합계 */
+export function inflowByCat(txs) {
+  const out = {};
+  for (const t of txs) {
+    if (t.kind === "income") out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) + t.amount;
+    else if (t.kind === "saving") out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) - t.amount;
+  }
+  return out;
+}

@@ -86,3 +86,30 @@ DROP POLICY IF EXISTS "own account only" ON public.money_transactions;
 CREATE POLICY "own account only" ON public.money_transactions AS RESTRICTIVE FOR ALL TO authenticated
   USING (true)
   WITH CHECK (EXISTS (SELECT 1 FROM public.money_accounts a WHERE a.id = account_id AND a.user_id = auth.uid()));
+
+-- 고정 수입·지출: 매월 day일에 내역을 자동으로 만듦. end_month가 비어 있으면 계속
+CREATE TABLE IF NOT EXISTS public.money_recurring (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid(),
+  name text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('income', 'expense', 'saving')),
+  amount bigint NOT NULL CHECK (amount > 0),
+  account_id uuid NOT NULL REFERENCES public.money_accounts(id) ON DELETE CASCADE,
+  category_id uuid REFERENCES public.money_categories(id) ON DELETE SET NULL,
+  day smallint NOT NULL CHECK (day BETWEEN 1 AND 31),
+  start_month text NOT NULL CHECK (start_month ~ '^\d{4}-\d{2}$'),
+  end_month text CHECK (end_month IS NULL OR (end_month ~ '^\d{4}-\d{2}$' AND end_month >= start_month)),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.money_recurring ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.money_recurring TO authenticated;
+GRANT ALL ON public.money_recurring TO service_role;
+DROP POLICY IF EXISTS "own rows" ON public.money_recurring;
+CREATE POLICY "own rows" ON public.money_recurring FOR ALL TO authenticated
+  USING (auth.uid() = user_id AND public.is_approved(auth.uid()))
+  WITH CHECK (auth.uid() = user_id AND public.is_approved(auth.uid())
+    AND EXISTS (SELECT 1 FROM public.money_accounts a WHERE a.id = account_id AND a.user_id = auth.uid()));
+-- 고정 항목에서 만든 내역 표시 (같은 달에 두 번 만들지 않게)
+ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS recurring_id uuid REFERENCES public.money_recurring(id) ON DELETE SET NULL;
+ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS recurring_month text;
+CREATE UNIQUE INDEX IF NOT EXISTS money_tx_recurring ON public.money_transactions (recurring_id, recurring_month) WHERE recurring_id IS NOT NULL;
