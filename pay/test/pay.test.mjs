@@ -26,6 +26,9 @@ test("하루 돈: 연장·야간 0.5배를 따로 켜고 끔", () => {
   assert.deepEqual([b2.overtime, b2.nightPay, b2.total], [18000, 0, 150000]);
   const b3 = shiftPay({ start_time: "14:00", end_time: "02:00", break_min: 60 }, { ...pub, extra: false });
   assert.deepEqual([b3.overtime, b3.nightPay, b3.total], [0, 24000, 156000]);
+  // 야간 칸이 비어 있으면(처음 만든 곳) 연장수당 설정을 따라감
+  const { night: _n, ...old } = pub;
+  assert.equal(shiftPay({ start_time: "14:00", end_time: "02:00", break_min: 60 }, old).nightPay, 24000);
   // 그 날만 다른 시급
   assert.equal(shiftPay({ start_time: "09:00", end_time: "10:00", wage: 15000 }, cafe).total, 15000);
 });

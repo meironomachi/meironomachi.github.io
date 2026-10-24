@@ -1,8 +1,8 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610241634";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610241642";
 import {
   MIN_WAGE_2026, RATES, TAX_TYPES, taxName, won, hoursText, hoursShort, isDay, isMonth, shiftMonth, monthCells, dow,
   shiftPay, monthSummary, compare, dayTotals,
-} from "./pay.js?v=202610241634";
+} from "./pay.js?v=202610241642";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -329,7 +329,7 @@ function renderPlaces(params) {
     ${state.places.length ? `<ul class="places">${state.places.map((p) => `<li class="paper" style="--c:${p.color}">
       <div class="pl-main"><h3><i></i>${esc(p.name)}</h3>
         <p class="muted small">시급 ${won(p.wage)} · ${esc(TAX_TYPES.find((t) => t.id === p.tax_type)?.long ?? "")}</p>
-        <p class="muted small">${p.weekly ? "주휴수당 계산" : "주휴수당 없음"} · ${p.extra ? "연장수당" : "연장수당 없음"} · ${p.night ? "야간수당" : "야간수당 없음"} · 근무 ${count(p.id)}번</p></div>
+        <p class="muted small">${p.weekly ? "주휴수당 계산" : "주휴수당 없음"} · ${p.extra ? "연장수당" : "연장수당 없음"} · ${(p.night ?? p.extra) ? "야간수당" : "야간수당 없음"} · 근무 ${count(p.id)}번</p></div>
       <span class="pl-acts"><button class="btn outline sm" type="button" data-edit="${p.id}">고치기</button></span>
     </li>`).join("")}</ul>` : '<p class="empty">아직 일하는 곳이 없어요.</p>'}`);
   bindShell();
@@ -352,9 +352,9 @@ function placeDialog(p) {
     <fieldset class="tax-pick"><legend>세금 방식 <span class="muted">(급여명세서·계약서에 적힌 대로)</span></legend>
       ${TAX_TYPES.map((t) => `<label><input type="radio" name="tax" value="${t.id}" ${(p?.tax_type ?? "biz33") === t.id ? "checked" : ""}><span><b>${t.name}</b><small>${t.long}</small></span></label>`).join("")}
     </fieldset>
-    <label class="check"><input type="checkbox" name="weekly" ${p?.weekly ?? true ? "checked" : ""}><span><b>주휴수당</b> 계산 <small>한 주에 15시간 이상 일하면 하루치를 더 받아요</small></span></label>
-    <label class="check"><input type="checkbox" name="extra" ${p?.extra ? "checked" : ""}><span><b>연장수당</b> 계산 <small>하루 8시간을 넘게 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
-    <label class="check"><input type="checkbox" name="night" ${p?.night ? "checked" : ""}><span><b>야간수당</b> 계산 <small>밤 10시~아침 6시에 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
+    <label class="check"><input type="checkbox" name="weekly" ${p?.weekly ?? true ? "checked" : ""}><span><span><b>주휴수당</b> 계산</span><small>한 주에 15시간 이상 일하면 하루치를 더 받아요</small></span></label>
+    <label class="check"><input type="checkbox" name="extra" ${p?.extra ? "checked" : ""}><span><span><b>연장수당</b> 계산</span><small>하루 8시간을 넘게 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
+    <label class="check"><input type="checkbox" name="night" ${(p?.night ?? p?.extra) ? "checked" : ""}><span><span><b>야간수당</b> 계산</span><small>밤 10시~아침 6시에 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
     <p class="muted small" style="margin:-6px 0 0">연장·야간수당은 법으로는 상시 5명 이상 일하는 곳에서 줘요. 실제로 받는 대로 켜 주세요.</p>
     <div class="actions">${p ? '<button class="btn ghost danger" type="button" id="del-place">삭제</button><span class="spacer"></span>' : ""}<button class="btn ghost" type="button" value="cancel">취소</button><button class="btn primary" type="submit">저장</button></div>
   </form>`;

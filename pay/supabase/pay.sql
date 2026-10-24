@@ -49,12 +49,8 @@ BEGIN
 END $$;
 
 -- 야간수당을 연장수당과 따로 켜고 끔 (처음엔 둘이 한 칸이었음)
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pay_places' AND column_name = 'night') THEN
-    ALTER TABLE public.pay_places ADD COLUMN night boolean NOT NULL DEFAULT false;
-    UPDATE public.pay_places SET night = extra;
-  END IF;
-END $$;
+ALTER TABLE public.pay_places ADD COLUMN IF NOT EXISTS night boolean;
+COMMENT ON COLUMN public.pay_places.night IS '야간수당. 비어 있으면 extra(연장수당)와 같게 계산';
 
 -- 계정을 지우면 MEIROPAY 기록도 함께 지워짐
 DO $$ BEGIN

@@ -76,14 +76,14 @@ export function shiftMinutes(s) {
 }
 
 /**
- * 근무 한 번의 돈. place.extra면 연장(하루 8시간 넘는 부분), place.night면 야간(22~06시)에 시급의 0.5배를 더 줌.
+ * 근무 한 번의 돈. place.extra면 연장(하루 8시간 넘는 부분), place.night면 야간(22~06시)에(비어 있으면 extra와 같게) 시급의 0.5배를 더 줌.
  */
 export function shiftPay(s, place) {
   const wage = Number(s.wage) || Number(place?.wage) || 0;
   const { work, night } = shiftMinutes(s);
   const base = Math.round(work / 60 * wage);
   const overtime = place?.extra ? Math.round(Math.max(0, work - 480) / 60 * wage * 0.5) : 0;
-  const nightPay = place?.night ? Math.round(night / 60 * wage * 0.5) : 0;
+  const nightPay = (place?.night ?? place?.extra) ? Math.round(night / 60 * wage * 0.5) : 0;
   return { wage, work, night, base, overtime, nightPay, total: base + overtime + nightPay };
 }
 
