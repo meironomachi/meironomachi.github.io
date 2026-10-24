@@ -1,12 +1,13 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610241614";
 
-// meiro.kr의 로그인하는 사이트(일기장, MEIROBOOK, $TDL, MEIRONOTE)가 함께 쓰는 회원 관리
+// meiro.kr의 로그인하는 사이트(일기장, MEIROBOOK, $TDL, MEIRONOTE, MEIROPAY)가 함께 쓰는 회원 관리
 const PHOTO_BUCKET = "diary-photos";
 const SITES = {
   saytqtul: { name: "일기장", href: "/saytqtul/#/calendar" },
   library: { name: "MEIROBOOK", href: "/library/" },
   money: { name: "$TDL", href: "/money/" },
   note: { name: "MEIRONOTE", href: "/note/" },
+  pay: { name: "MEIROPAY", href: "/pay/" },
 };
 const app = document.getElementById("app");
 let sb = null;
@@ -265,7 +266,7 @@ const stamp = (iso) => {
   const p = (n) => String(n).padStart(2, "0");
   return `${t.getUTCFullYear()}.${p(t.getUTCMonth() + 1)}.${p(t.getUTCDate())} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
 };
-const PAGE_NAME = { "/": "메인", "/saytqtul/": "일기장", "/library/": "MEIROBOOK", "/money/": "$TDL", "/note/": "MEIRONOTE" };
+const PAGE_NAME = { "/": "메인", "/saytqtul/": "일기장", "/library/": "MEIROBOOK", "/money/": "$TDL", "/note/": "MEIRONOTE", "/pay/": "MEIROPAY" };
 
 async function renderFeedback() {
   document.title = "피드백 — 회원 관리";
@@ -355,7 +356,7 @@ function removeAccount(p) {
   const dlg = document.createElement("dialog");
   dlg.innerHTML = `<form method="dialog" class="edit-form">
     <h2>계정 삭제</h2>
-    <p><b>${esc(name)}</b> (${esc(p.email)}) 계정을 지워요. 이 사람의 일기, 사진, 댓글, 서재, 가계부, 노트 기록도 모두 지워지고 <b>되돌릴 수 없어요.</b></p>
+    <p><b>${esc(name)}</b> (${esc(p.email)}) 계정을 지워요. 이 사람의 일기, 사진, 댓글, 서재, 가계부, 노트, 근무 기록도 모두 지워지고 <b>되돌릴 수 없어요.</b></p>
     <label class="field"><span>확인을 위해 <b>${esc(name)}</b>을(를) 그대로 입력해 주세요</span><input class="input" id="confirm-name" autocomplete="off"></label>
     <div class="actions"><button class="btn ghost" type="button" value="cancel">취소</button><button class="btn danger-fill" type="submit" id="do-remove" disabled>삭제</button></div>
   </form>`;
