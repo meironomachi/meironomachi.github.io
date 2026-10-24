@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { shiftMinutes, shiftPay, weeklyAllowances, deductions, incomeTaxMonthly, monthSummary, compare, monthCells, weekStart, dayTotals, hoursText } from "../js/pay.js";
 
 const cafe = { id: "c", wage: 10320, tax_type: "biz33", weekly: true, extra: false };
-const pub = { id: "p", wage: 12000, tax_type: "insured", weekly: false, extra: true };
+const pub = { id: "p", wage: 12000, tax_type: "insured", weekly: false, extra: true, night: true };
 
 test("근무 시간: 휴게 빼기, 자정 넘김, 야간(22~06시)", () => {
   assert.deepEqual(shiftMinutes({ start_time: "09:00", end_time: "18:00", break_min: 60 }), { work: 480, night: 0 });
@@ -15,12 +15,17 @@ test("근무 시간: 휴게 빼기, 자정 넘김, 야간(22~06시)", () => {
   assert.equal(hoursText(270), "4시간 30분");
 });
 
-test("하루 돈: 5인 이상이면 연장·야간 0.5배 더", () => {
+test("하루 돈: 연장·야간 0.5배를 따로 켜고 끔", () => {
   const a = shiftPay({ start_time: "09:00", end_time: "13:30", break_min: 0 }, cafe);
   assert.deepEqual([a.base, a.overtime, a.nightPay, a.total], [46440, 0, 0, 46440]);
   // 14:00~02:00, 휴게 60분 → 11시간, 야간 4시간, 연장 3시간
   const b = shiftPay({ start_time: "14:00", end_time: "02:00", break_min: 60 }, pub);
   assert.deepEqual([b.work, b.night, b.base, b.overtime, b.nightPay], [660, 240, 132000, 18000, 24000]);
+  // 야간수당만 끄기, 연장수당만 끄기
+  const b2 = shiftPay({ start_time: "14:00", end_time: "02:00", break_min: 60 }, { ...pub, night: false });
+  assert.deepEqual([b2.overtime, b2.nightPay, b2.total], [18000, 0, 150000]);
+  const b3 = shiftPay({ start_time: "14:00", end_time: "02:00", break_min: 60 }, { ...pub, extra: false });
+  assert.deepEqual([b3.overtime, b3.nightPay, b3.total], [0, 24000, 156000]);
   // 그 날만 다른 시급
   assert.equal(shiftPay({ start_time: "09:00", end_time: "10:00", wage: 15000 }, cafe).total, 15000);
 });

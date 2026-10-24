@@ -7,7 +7,7 @@ const db = {
   profiles: [{ id: uid, nickname: "메이로", approved: true }],
   pay_places: empty ? [] : [
     { id: "cafe", user_id: uid, name: "동네 카페", color: "#0031b0", wage: 10320, tax_type: "biz33", weekly: true, extra: false, sort: 0, created_at: "1" },
-    { id: "pub", user_id: uid, name: "주말 호프", color: "#e8590c", wage: 12000, tax_type: "insured", weekly: false, extra: true, sort: 1, created_at: "2" },
+    { id: "pub", user_id: uid, name: "주말 호프", color: "#e8590c", wage: 12000, tax_type: "insured", weekly: false, extra: true, night: true, sort: 1, created_at: "2" },
     { id: "tutor", user_id: uid, name: "과외", color: "#2f9e44", wage: 30000, tax_type: "none", weekly: false, extra: false, sort: 2, created_at: "3" },
   ],
   pay_shifts: empty ? [] : [

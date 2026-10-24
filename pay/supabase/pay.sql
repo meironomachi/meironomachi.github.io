@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.pay_places (
   wage integer NOT NULL CHECK (wage > 0),
   tax_type text NOT NULL DEFAULT 'biz33' CHECK (tax_type IN ('biz33', 'insured', 'none')),
   weekly boolean NOT NULL DEFAULT true,
-  extra boolean NOT NULL DEFAULT false,
+  extra boolean NOT NULL DEFAULT false, -- 연장수당
   sort integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -45,6 +45,14 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'pay_shifts' AND policyname = 'own place only') THEN
     CREATE POLICY "own place only" ON public.pay_shifts AS RESTRICTIVE FOR ALL TO authenticated USING (true)
       WITH CHECK (EXISTS (SELECT 1 FROM public.pay_places p WHERE p.id = place_id AND p.user_id = auth.uid()));
+  END IF;
+END $$;
+
+-- 야간수당을 연장수당과 따로 켜고 끔 (처음엔 둘이 한 칸이었음)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pay_places' AND column_name = 'night') THEN
+    ALTER TABLE public.pay_places ADD COLUMN night boolean NOT NULL DEFAULT false;
+    UPDATE public.pay_places SET night = extra;
   END IF;
 END $$;
 
