@@ -138,6 +138,9 @@ section+section{margin-top:56px}
 .pledges li::before{content:counter(p);position:absolute;left:0;top:1px;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--ca);color:#fff}
 .pledges b{font-size:15px}
 .pledges span{font-size:14px;line-height:1.6;color:var(--muted)}
+.video-link{display:inline-block;margin-left:4px;font-weight:700;color:var(--ink);text-decoration:none;border-bottom:2px solid #f26b1d}
+.video-link:hover{color:#f26b1d}
+.debate-note a{color:inherit}
 .debate-note{margin:12px 2px 0;font-size:12.5px;color:var(--muted)}
 .tool[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 
@@ -197,7 +200,7 @@ footer.site a{color:inherit}
 
   <section aria-labelledby="debate-title">
     <div class="sec-head">
-      <div><h2 id="debate-title">정책 토론회 발언</h2><p>후보 소견 발표와 기자단 공통 질의응답을 주제별로 나란히 봐요.</p></div>
+      <div><h2 id="debate-title">정책 토론회 발언</h2><p>후보 소견 발표와 기자단 공통 질의응답을 주제별로 나란히 봐요. <a class="video-link" href="https://www.youtube.com/live/LfiKQqpTt-M" target="_blank" rel="noopener">▶ 토론회 영상 보기</a></p></div>
       <div class="tools" role="tablist" aria-label="주제">
         <button class="tool" type="button" role="tab" data-topic="diag" aria-selected="true" aria-pressed="true">현장 진단</button>
         <button class="tool" type="button" role="tab" data-topic="pledges" aria-selected="false" aria-pressed="false">주요 공약</button>
@@ -205,7 +208,7 @@ footer.site a{color:inherit}
       </div>
     </div>
     <div class="debate" id="debate" role="tabpanel" aria-labelledby="debate-title"></div>
-    <p class="debate-note">토론회 영상의 발언을 요약한 내용이라 원래 표현과 다를 수 있어요. 정확한 발언은 토론회 영상과 각 선본 자료로 확인해 주세요.</p>
+    <p class="debate-note">토론회 영상의 발언을 요약한 내용이라 원래 표현과 다를 수 있어요. 정확한 발언은 <a href="https://www.youtube.com/live/LfiKQqpTt-M" target="_blank" rel="noopener">토론회 영상</a>과 각 선본 자료로 확인해 주세요.</p>
   </section>
 
   <section aria-labelledby="compare-title">
