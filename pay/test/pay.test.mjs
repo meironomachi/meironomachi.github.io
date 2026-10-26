@@ -98,3 +98,41 @@ test("달력 칸과 날짜별 합", () => {
   const t = dayTotals([s("2026-10-05", "09:00", "12:00"), s("2026-10-05", "13:00", "14:00")], [cafe]);
   assert.deepEqual([t["2026-10-05"].minutes, t["2026-10-05"].pay, t["2026-10-05"].items.length], [240, 41280, 2]);
 });
+
+const daily = { id: "d", pay_kind: "daily", wage: 150000, tax_type: "insured" };
+
+test("일당: 적은 금액 그대로, 시각은 선택", async () => {
+  const { NO_TIME } = await import("../js/pay.js");
+  const a = shiftPay({ start_time: NO_TIME, end_time: NO_TIME, break_min: 0 }, daily);
+  assert.deepEqual([a.total, a.work, a.overtime, a.nightPay], [150000, 0, 0, 0]);
+  const b = shiftPay({ start_time: "08:00", end_time: "17:00", break_min: 60, wage: 200000 }, daily);
+  assert.deepEqual([b.total, b.work], [200000, 480]);
+  assert.equal(weeklyAllowances([{ ...s("2026-10-05", "08:00", "20:00", "d") }], { ...daily, weekly: true }).length, 0);
+});
+
+test("일용직 세금: 15만 원 넘는 부분 2.7%, 1,000원 미만은 안 뗌, 고용보험 0.9%", async () => {
+  const { dailyDeductions } = await import("../js/pay.js");
+  // 20만 원: (5만 × 6% × 45%) = 1,350 → 소득세 1,350, 지방 130
+  // 18만 원: 3만 × 2.7% = 810 → 1,000원 미만이라 0
+  const r = dailyDeductions([200000, 180000, 150000], "insured");
+  const by = Object.fromEntries(r.items.map((x) => [x.name.split(" ")[0], x.amount]));
+  assert.equal(by["일용근로소득세"], 1350);
+  assert.equal(by["지방소득세"], 130);
+  assert.equal(by["고용보험"], 4770); // 53만 원 × 0.9%
+});
+
+test("직접 적은 달 급여: 계산 대신 쓰고, 세후를 비우면 세금 방식대로", () => {
+  const shifts = [s("2026-08-03", "09:00", "13:00", "c")];
+  const manual = [
+    { place_id: "c", month: "2026-08", gross: 500000, net: 483500, memo: "명세서" },
+    { place_id: "p", month: "2026-08", gross: 1000000, net: null },
+  ];
+  const aug = monthSummary(shifts, [cafe, pub], "2026-08", manual);
+  const c = aug.byPlace.find((x) => x.place.id === "c"), p = aug.byPlace.find((x) => x.place.id === "p");
+  assert.deepEqual([c.gross, c.net, c.deducted, !!c.manual, c.shifts], [500000, 483500, 16500, true, 1]);
+  assert.equal(p.gross, 1000000);
+  assert.ok(p.deducted > 0 && p.deductions.length === 6); // 4대보험 방식으로 계산
+  assert.equal(aug.gross, 1500000);
+  // 기록도 직접 적은 것도 없는 달은 비어 있음
+  assert.equal(monthSummary(shifts, [cafe, pub], "2026-07", manual).byPlace.length, 0);
+});

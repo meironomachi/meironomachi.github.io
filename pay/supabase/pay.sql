@@ -61,3 +61,30 @@ DO $$ BEGIN
     ALTER TABLE public.pay_shifts ADD CONSTRAINT pay_shifts_user_fk FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
   END IF;
 END $$;
+
+-- 일당으로 받는 곳 (일용직): wage 칸이 하루 일당이 됨
+ALTER TABLE public.pay_places ADD COLUMN IF NOT EXISTS pay_kind text NOT NULL DEFAULT 'hourly' CHECK (pay_kind IN ('hourly', 'daily'));
+
+-- 근무 기록 없이 직접 적는 그달 급여 (명세서 금액 등). 있으면 그 곳의 계산 대신 씀
+CREATE TABLE IF NOT EXISTS public.pay_months (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  place_id uuid NOT NULL REFERENCES public.pay_places(id) ON DELETE CASCADE,
+  month text NOT NULL CHECK (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  gross integer NOT NULL CHECK (gross >= 0),
+  net integer CHECK (net IS NULL OR (net >= 0 AND net <= gross)),
+  memo text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, place_id, month)
+);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pay_months TO authenticated;
+GRANT ALL ON public.pay_months TO service_role;
+ALTER TABLE public.pay_months ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'pay_months' AND policyname = 'own rows') THEN
+    CREATE POLICY "own rows" ON public.pay_months FOR ALL TO authenticated
+      USING (auth.uid() = user_id AND public.is_approved(auth.uid()))
+      WITH CHECK (auth.uid() = user_id AND public.is_approved(auth.uid())
+        AND EXISTS (SELECT 1 FROM public.pay_places p WHERE p.id = place_id AND p.user_id = auth.uid()));
+  END IF;
+END $$;

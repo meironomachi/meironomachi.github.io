@@ -357,3 +357,21 @@ dialog.day-dlg { width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh 
 .tax-pick span, .place-form .check span { display: grid; gap: 2px; font-size: 14px; }
 .tax-pick small, .place-form .check small { color: var(--muted-fg); font-size: 12px; }
 .tax-pick input, .place-form .check input { margin-top: 4px; }
+
+/* 일당 */
+.shift-form .daily-only { display: none; }
+.shift-form.is-daily .daily-only { display: inline; }
+.shift-form.is-daily p.daily-only { display: block; }
+.kind-pick { border: 0; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.kind-pick legend { font-size: 13px; color: var(--muted-fg); margin-bottom: 6px; padding: 0; width: 100%; }
+.kind-pick label { cursor: pointer; }
+.kind-pick input { position: absolute; opacity: 0; pointer-events: none; }
+.kind-pick span { display: inline-block; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+.kind-pick input:checked + span { border-color: var(--primary); background: var(--accent); color: var(--accent-fg); }
+.kind-pick input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tax-opts { display: grid; gap: 6px; }
+.hourly-only { display: grid; gap: 14px; }
+
+/* 직접 적은 달 */
+.manual-btn { width: 100%; margin-top: 14px; }
+.manual-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 0 10px; font-size: 13px; color: var(--accent-fg); }

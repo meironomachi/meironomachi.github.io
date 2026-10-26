@@ -9,13 +9,16 @@ const db = {
     { id: "cafe", user_id: uid, name: "동네 카페", color: "#0031b0", wage: 10320, tax_type: "biz33", weekly: true, extra: false, sort: 0, created_at: "1" },
     { id: "pub", user_id: uid, name: "주말 호프", color: "#e8590c", wage: 12000, tax_type: "insured", weekly: false, extra: true, night: true, sort: 1, created_at: "2" },
     { id: "tutor", user_id: uid, name: "과외", color: "#2f9e44", wage: 30000, tax_type: "none", weekly: false, extra: false, sort: 2, created_at: "3" },
+    { id: "event", user_id: uid, name: "행사 스태프", color: "#9c36b5", pay_kind: "daily", wage: 150000, tax_type: "insured", weekly: false, extra: false, sort: 3, created_at: "4" },
   ],
+  pay_months: empty ? [] : [{ id: "m1", user_id: uid, place_id: "cafe", month: "2026-08", gross: 480000, net: 464160, memo: "8월 명세서" }],
   pay_shifts: empty ? [] : [
     ...["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22"].map((d) => sh(d, "cafe", "10:00", "15:30", 30)),
     sh("2026-10-10", "pub", "18:00", "02:00", 60), sh("2026-10-17", "pub", "18:00", "02:00", 60), sh("2026-10-24", "pub", "17:00", "03:00", 60, { memo: "축제" }),
     sh("2026-10-08", "tutor", "19:00", "21:00"), sh("2026-10-15", "tutor", "19:00", "21:00"), sh("2026-10-22", "tutor", "19:00", "21:00"),
     ...["2026-09-07", "2026-09-08", "2026-09-14", "2026-09-15", "2026-09-21", "2026-09-22"].map((d) => sh(d, "cafe", "10:00", "15:30", 30)),
     sh("2026-09-12", "pub", "18:00", "01:00", 60),
+    sh("2026-10-03", "event", "00:00", "00:00", 0, { wage: 200000, memo: "축제" }), sh("2026-10-04", "event", "00:00", "00:00", 0),
   ],
 };
 class Query {

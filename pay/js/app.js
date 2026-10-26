@@ -1,12 +1,12 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610241642";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610261655";
 import {
-  MIN_WAGE_2026, RATES, TAX_TYPES, taxName, won, hoursText, hoursShort, isDay, isMonth, shiftMonth, monthCells, dow,
+  MIN_WAGE_2026, RATES, TAX_TYPES, DAILY_TAX_TYPES, taxName, taxTypesOf, isDaily, NO_TIME, hasTime, won, hoursText, hoursShort, isDay, isMonth, shiftMonth, monthCells, dow,
   shiftPay, monthSummary, compare, dayTotals,
-} from "./pay.js?v=202610241642";
+} from "./pay.js?v=202610261655";
 
 const app = document.getElementById("app");
 let sb = null;
-const state = { user: null, profile: null, places: [], shifts: [] };
+const state = { user: null, profile: null, places: [], shifts: [], months: [] };
 const COLORS = ["#0031b0", "#2f9e44", "#e8590c", "#9c36b5", "#c2255c", "#1098ad", "#5f3dc4", "#868e96"];
 
 /* ---------- 도우미 ---------- */
@@ -87,13 +87,15 @@ const waiting = () => `<div class="paper notice"><h2>승인을 기다리고 있�
 
 /* ---------- 데이터 ---------- */
 async function loadAll() {
-  const [p, s] = await Promise.all([
+  const [p, s, m] = await Promise.all([
     sb.from("pay_places").select("*").order("sort").order("created_at"),
     sb.from("pay_shifts").select("*").order("work_date").order("start_time"),
+    sb.from("pay_months").select("*"),
   ]);
   if (p.error || s.error) throw p.error ?? s.error;
   state.places = (p.data ?? []).map((x) => ({ ...x, color: safeColor(x.color) }));
   state.shifts = s.data ?? [];
+  state.months = m.error ? [] : m.data ?? [];
 }
 
 /* ---------- 로그인 (일기장과 같은 계정) ---------- */
@@ -139,7 +141,7 @@ function renderCalendar(params) {
   document.title = `${monthName(month)} — MEIROPAY`;
   if (!state.places.length) {
     app.innerHTML = shell("/", `<div class="paper notice"><h2>먼저 일하는 곳을 만들어 주세요</h2>
-      <p>시급과 세금 방식(3.3% · 4대보험 · 세금 없음)을 정해 두면, 달력에서 날짜를 눌러 근무를 적을 수 있어요.</p>
+      <p>시급이나 일당, 세금 방식(3.3% · 4대보험 · 세금 없음)을 정해 두면, 달력에서 날짜를 눌러 근무를 적을 수 있어요.</p>
       <p style="margin-top:20px"><a class="btn primary" href="#/places?new=1">일하는 곳 만들기</a></p></div>`);
     bindShell();
     return;
@@ -160,7 +162,7 @@ function renderCalendar(params) {
           const t = totals[d];
           return `<button type="button" class="day ${d === today ? "today" : ""} ${t ? "has" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}" data-day="${d}" aria-label="${dayName(d)}${t ? `, ${hoursText(t.minutes)}, ${won(t.pay)}` : ""}">
             <span class="dnum">${Number(d.slice(8))}</span>
-            ${t ? `<span class="chips">${t.items.map((x) => `<span class="chip" style="--c:${x.place.color}"><i></i>${esc(x.place.name)} ${hoursShort(x.work)}</span>`).join("")}</span>
+            ${t ? `<span class="chips">${t.items.map((x) => `<span class="chip" style="--c:${x.place.color}"><i></i>${esc(x.place.name)} ${x.daily && !x.work ? "일당" : hoursShort(x.work)}</span>`).join("")}</span>
               <span class="dpay">${t.pay.toLocaleString("ko-KR")}</span>` : ""}
           </button>`;
         }).join("")}
@@ -181,8 +183,8 @@ const delta = (v, unit = "%") => {
 };
 
 function drawSummary(month) {
-  const cur = monthSummary(state.shifts, state.places, month);
-  const prev = monthSummary(state.shifts, state.places, shiftMonth(month, -1));
+  const cur = monthSummary(state.shifts, state.places, month, state.months);
+  const prev = monthSummary(state.shifts, state.places, shiftMonth(month, -1), state.months);
   const cmp = compare(cur, prev);
   const max = Math.max(cur.gross, prev.gross, 1);
   const bar = (label, g, n) => `<div class="cmp-row"><span class="cmp-label">${label}</span>
@@ -209,22 +211,73 @@ function drawSummary(month) {
         ${bar(`${Number(shiftMonth(month, -1).slice(5))}월`, prev.gross, prev.net)}
         <p class="legend"><span class="sw gross"></span>세전 <span class="sw net"></span>세후</p>
       </div>
+      <button class="btn outline sm manual-btn" type="button" data-manual="">${cur.byPlace.length ? "이 달 급여 직접 적기" : "근무 기록이 없는 달이에요 · 급여 직접 적기"}</button>
     </section>
     ${cur.byPlace.map((x) => `<section class="paper place-card" style="--c:${x.place.color}">
-      <div class="pc-head"><h3><i></i>${esc(x.place.name)}</h3><span class="tax-badge">${taxName(x.place.tax_type)}</span></div>
-      <p class="muted small" style="margin:2px 0 10px">${x.days}일 · ${hoursText(x.minutes)}${x.night ? ` · 야간 ${hoursText(x.night)}` : ""}</p>
+      <div class="pc-head"><h3><i></i>${esc(x.place.name)}</h3><span class="tax-badge">${taxName(x.place.tax_type, x.place)}</span></div>
+      ${x.manual ? `<p class="manual-note">직접 적은 금액${x.manual.memo ? ` · ${esc(x.manual.memo)}` : ""}${x.shifts ? ` <span class="muted">(근무 ${x.shifts}번 기록은 계산에 안 씀)</span>` : ""}
+        <button class="btn ghost sm" type="button" data-manual="${x.place.id}">고치기</button></p>`
+        : `<p class="muted small" style="margin:2px 0 10px">${x.days}일${x.minutes ? ` · ${hoursText(x.minutes)}` : ""}${x.night ? ` · 야간 ${hoursText(x.night)}` : ""}</p>`}
       <dl class="lines">
-        <div><dt>기본급</dt><dd>${won(x.base)}</dd></div>
-        ${x.weekly ? `<div><dt>주휴수당 <small>(${x.weeks.length}주)</small></dt><dd>${won(x.weekly)}</dd></div>` : ""}
-        ${x.overtime ? `<div><dt>연장수당 (0.5배)</dt><dd>${won(x.overtime)}</dd></div>` : ""}
-        ${x.nightPay ? `<div><dt>야간수당 (0.5배)</dt><dd>${won(x.nightPay)}</dd></div>` : ""}
+        ${x.manual ? "" : `<div><dt>${isDaily(x.place) ? `일당 <small>(${x.shifts}일)</small>` : "기본급"}</dt><dd>${won(x.base)}</dd></div>`}
+        ${x.weekly && !x.manual ? `<div><dt>주휴수당 <small>(${x.weeks.length}주)</small></dt><dd>${won(x.weekly)}</dd></div>` : ""}
+        ${x.overtime && !x.manual ? `<div><dt>연장수당 (0.5배)</dt><dd>${won(x.overtime)}</dd></div>` : ""}
+        ${x.nightPay && !x.manual ? `<div><dt>야간수당 (0.5배)</dt><dd>${won(x.nightPay)}</dd></div>` : ""}
         <div class="strong"><dt>세전</dt><dd>${won(x.gross)}</dd></div>
         ${x.deductions.map((d) => `<div class="minus"><dt>${esc(d.name)}</dt><dd>− ${won(d.amount)}</dd></div>`).join("")}
         <div class="strong net"><dt>세후</dt><dd>${won(x.net)}</dd></div>
       </dl>
     </section>`).join("")}
-    ${cur.byPlace.some((x) => x.place.tax_type === "insured") ? `<p class="fine">4대보험은 ${RATES.year}년 근로자 부담 요율로, 근로소득세는 간이세액표 공식(본인 1명)으로 계산한 근사치예요. 실제 급여명세서와 몇백 원~몇천 원 다를 수 있어요.</p>` : ""}
+    ${cur.byPlace.some((x) => x.place.tax_type === "insured" && isDaily(x.place) && !x.manual) ? '<p class="fine">일용직 세금은 하루마다 (일당 − 15만 원) × 2.7%를 떼고, 1,000원이 안 되면 떼지 않아요. 고용보험은 0.9%예요.</p>' : ""}
+    ${cur.byPlace.some((x) => x.place.tax_type === "insured" && !isDaily(x.place)) ? `<p class="fine">4대보험은 ${RATES.year}년 근로자 부담 요율로, 근로소득세는 간이세액표 공식(본인 1명)으로 계산한 근사치예요. 실제 급여명세서와 몇백 원~몇천 원 다를 수 있어요.</p>` : ""}
     <p class="fine">주휴수당은 월~일 한 주에 15시간 이상 일했을 때, 그 주의 일요일이 있는 달에 넣어요.</p>`;
+  $$("[data-manual]").forEach((b) => b.onclick = () => monthDialog(month, b.dataset.manual || null));
+}
+
+/* ---------- 그달 급여 직접 적기 (근무 기록이 없는 달 등) ---------- */
+function monthDialog(month, placeId) {
+  const has = (id) => state.months.find((m) => m.place_id === id && m.month === month);
+  const pick = placeId ?? (state.places.find((p) => !has(p.id)) ?? state.places[0]).id;
+  const dlg = document.createElement("dialog");
+  document.body.append(dlg);
+  const draw = (id) => {
+    const m = has(id), p = placeOf(id);
+    dlg.innerHTML = `<form method="dialog" class="place-form">
+      <h2>${monthName(month)} 급여 직접 적기</h2>
+      <p class="muted small" style="margin:0">급여명세서나 통장에 찍힌 금액을 적어요. 적어 두면 그 곳은 이 달 근무 기록으로 계산하지 않고 이 금액을 써요.</p>
+      <div class="place-pick" role="radiogroup" aria-label="일하는 곳">${state.places.map((x) => `<label style="--c:${x.color}"><input type="radio" name="place" value="${x.id}" ${x.id === id ? "checked" : ""}><span><i></i>${esc(x.name)}${has(x.id) ? " ✓" : ""}</span></label>`).join("")}</div>
+      <div class="time-row two">
+        <label class="field">세전 금액<input class="input" name="gross" required inputmode="numeric" value="${m ? m.gross.toLocaleString("ko-KR") : ""}" placeholder="0"></label>
+        <label class="field"><span>세후 금액 <span class="muted">(선택)</span></span><input class="input" name="net" inputmode="numeric" value="${m?.net != null ? m.net.toLocaleString("ko-KR") : ""}" placeholder="비우면 계산"></label>
+      </div>
+      <p class="muted small" style="margin:-6px 0 0">세후를 비우면 ${esc(p.name)}의 세금 방식(${esc(taxName(p.tax_type, p))})대로 계산해요.${isDaily(p) && p.tax_type === "insured" ? " 일용직 세금은 하루 단위라 한 달 금액으로는 정확히 계산할 수 없어서, 세후도 적어 주세요." : ""}</p>
+      <label class="field">메모<input class="input" name="memo" maxlength="80" value="${esc(m?.memo ?? "")}" placeholder="선택"></label>
+      <div class="actions">${m ? '<button class="btn ghost danger" type="button" id="del-month">지우기</button><span class="spacer"></span>' : ""}<button class="btn ghost" type="button" value="cancel">취소</button><button class="btn primary" type="submit">저장</button></div>
+    </form>`;
+    const f = $("form", dlg);
+    $$('input[name="place"]', f).forEach((r) => r.onchange = () => draw(r.value));
+    [f.gross, f.net].forEach((i) => i.addEventListener("blur", () => { const n = num(i.value); i.value = i.value.trim() === "" ? "" : n.toLocaleString("ko-KR"); }));
+    $("button[value=cancel]", dlg).onclick = () => dlg.close();
+    $("#del-month", dlg)?.addEventListener("click", async () => {
+      if (!confirm("직접 적은 금액을 지울까요? 이 달은 다시 근무 기록으로 계산해요.")) return;
+      await sb.from("pay_months").delete().eq("id", m.id);
+      await loadAll(); dlg.close(); toast("지웠어요"); drawSummary(month);
+    });
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const gross = num(f.gross.value), net = f.net.value.trim() === "" ? null : num(f.net.value);
+      if (f.gross.value.trim() === "") { toast("세전 금액을 적어 주세요.", "error"); return; }
+      if (net !== null && net > gross) { toast("세후가 세전보다 많아요.", "error"); return; }
+      if (net === null && isDaily(p) && p.tax_type === "insured") { toast("일용직 세금은 세후 금액도 적어 주세요.", "error"); return; }
+      const row = { place_id: id, month, gross, net, memo: f.memo.value.trim() };
+      const res = m ? await sb.from("pay_months").update(row).eq("id", m.id) : await sb.from("pay_months").insert(row);
+      if (res.error) { toast("저장하지 못했어요.", "error"); return; }
+      await loadAll(); dlg.close(); toast("저장했어요"); drawSummary(month);
+    };
+  };
+  dlg.addEventListener("close", () => dlg.remove());
+  draw(pick);
+  dlg.showModal();
 }
 
 /* ---------- 날짜 창: 근무 적기·고치기 ---------- */
@@ -245,8 +298,8 @@ function dayDialog(day, editId = null) {
       ${shifts.length ? `<ul class="shift-list">${shifts.map((s) => {
         const p = placeOf(s.place_id), r = shiftPay(s, p);
         return `<li style="--c:${p.color}" class="${s.id === editing ? "editing" : ""}">
-          <div><p class="sl-top"><i></i><b>${esc(p.name)}</b> ${s.start_time}~${s.end_time}${s.break_min ? ` · 휴게 ${s.break_min}분` : ""}</p>
-            <p class="muted small">${hoursText(r.work)} × ${won(r.wage)}${r.overtime ? ` · 연장 +${won(r.overtime)}` : ""}${r.nightPay ? ` · 야간 +${won(r.nightPay)}` : ""}${s.memo ? ` · ${esc(s.memo)}` : ""}</p></div>
+          <div><p class="sl-top"><i></i><b>${esc(p.name)}</b> ${hasTime(s) ? `${s.start_time}~${s.end_time}${s.break_min ? ` · 휴게 ${s.break_min}분` : ""}` : ""}${r.daily ? ' <span class="tax-badge">일당</span>' : ""}</p>
+            <p class="muted small">${r.daily ? `일당 ${won(r.total)}${r.work ? ` · ${hoursText(r.work)}` : ""}` : `${hoursText(r.work)} × ${won(r.wage)}`}${r.overtime ? ` · 연장 +${won(r.overtime)}` : ""}${r.nightPay ? ` · 야간 +${won(r.nightPay)}` : ""}${s.memo ? ` · ${esc(s.memo)}` : ""}</p></div>
           <span class="sl-pay">${won(r.total)}</span>
           <span class="sl-acts"><button class="btn ghost sm" type="button" data-edit="${s.id}">고치기</button><button class="btn ghost sm danger" type="button" data-del="${s.id}">삭제</button></span>
         </li>`;
@@ -254,26 +307,36 @@ function dayDialog(day, editId = null) {
       <form class="shift-form" id="shift-form">
         <p class="form-title">${e ? "근무 고치기" : "근무 추가"}</p>
         <div class="place-pick" role="radiogroup" aria-label="일하는 곳">${state.places.map((p) => `<label style="--c:${p.color}"><input type="radio" name="place" value="${p.id}" ${p.id === place0.id ? "checked" : ""}><span><i></i>${esc(p.name)}</span></label>`).join("")}</div>
+        <p class="muted small daily-only" style="margin:0">일당은 금액만 적으면 돼요. 시간은 적고 싶을 때만 적어요.</p>
         <div class="time-row">
-          <label class="field">시작<input class="input" type="time" name="start" required value="${e?.start_time ?? lastOf(place0.id)?.start_time ?? "09:00"}"></label>
-          <label class="field">끝<input class="input" type="time" name="end" required value="${e?.end_time ?? lastOf(place0.id)?.end_time ?? "18:00"}"></label>
+          <label class="field"><span>시작<span class="daily-only muted"> (선택)</span></span><input class="input" type="time" name="start" value="${timeOf(e, "start_time", place0, "09:00")}"></label>
+          <label class="field"><span>끝<span class="daily-only muted"> (선택)</span></span><input class="input" type="time" name="end" value="${timeOf(e, "end_time", place0, "18:00")}"></label>
           <label class="field">휴게(분)<input class="input" type="number" name="brk" min="0" max="600" step="5" inputmode="numeric" value="${e?.break_min ?? lastOf(place0.id)?.break_min ?? 0}"></label>
         </div>
         <div class="time-row two">
-          <label class="field">시급<input class="input" name="wage" inputmode="numeric" value="${(e?.wage ?? place0.wage).toLocaleString("ko-KR")}"></label>
+          <label class="field"><span class="wage-label">${isDaily(place0) ? "일당" : "시급"}</span><input class="input" name="wage" inputmode="numeric" value="${(e?.wage ?? place0.wage).toLocaleString("ko-KR")}"></label>
           <label class="field">메모<input class="input" name="memo" maxlength="80" value="${esc(e?.memo ?? "")}" placeholder="선택"></label>
         </div>
         <p class="preview" id="preview"></p>
         <div class="actions">${e ? '<button class="btn ghost" type="button" id="cancel-edit">새로 적기</button>' : ""}<button class="btn primary" type="submit">${e ? "고친 내용 저장" : "추가"}</button></div>
       </form>`;
     const f = $("#shift-form", dlg);
+    const setKind = (p) => { f.classList.toggle("is-daily", isDaily(p)); $(".wage-label", f).textContent = isDaily(p) ? "일당" : "시급"; };
+    setKind(place0);
     const read = () => {
       const p = placeOf(f.place.value);
       const wage = num(f.wage.value);
-      return { p, s: { start_time: f.start.value, end_time: f.end.value, break_min: Math.max(0, Number(f.brk.value) || 0), wage: wage && wage !== p.wage ? wage : null, memo: f.memo.value.trim() } };
+      // 일당에서 시각을 비우면 '시각 없음'(00:00~00:00)으로 저장
+      const noTime = isDaily(p) && (!f.start.value || !f.end.value);
+      return { p, s: { start_time: noTime ? NO_TIME : f.start.value, end_time: noTime ? NO_TIME : f.end.value, break_min: noTime ? 0 : Math.max(0, Number(f.brk.value) || 0), wage: wage && wage !== p.wage ? wage : null, memo: f.memo.value.trim() } };
     };
     const preview = () => {
       const { p, s } = read();
+      if (isDaily(p)) {
+        const r = shiftPay(s, p);
+        $("#preview", dlg).innerHTML = `일당 <b>${won(r.total)}</b>${r.work ? ` <span class="muted">· ${hoursText(r.work)}</span>` : ""}`;
+        return;
+      }
       if (!f.start.value || !f.end.value) { $("#preview", dlg).textContent = ""; return; }
       const r = shiftPay(s, p);
       $("#preview", dlg).innerHTML = `${hoursText(r.work)}${r.night ? ` (야간 ${hoursText(r.night)})` : ""} → <b>${won(r.total)}</b>${r.overtime || r.nightPay ? ` <span class="muted">(기본 ${won(r.base)}${r.overtime ? ` + 연장 ${won(r.overtime)}` : ""}${r.nightPay ? ` + 야간 ${won(r.nightPay)}` : ""})</span>` : ""}${toMinEnd(s) ? ' <span class="muted">· 다음 날까지</span>' : ""}`;
@@ -282,7 +345,8 @@ function dayDialog(day, editId = null) {
     $$('input[name="place"]', f).forEach((r) => r.onchange = () => {
       const p = placeOf(r.value), last = lastOf(p.id);
       f.wage.value = p.wage.toLocaleString("ko-KR");
-      if (!e && last) { f.start.value = last.start_time; f.end.value = last.end_time; f.brk.value = last.break_min; }
+      setKind(p);
+      if (!e) { f.start.value = timeOf(null, "start_time", p, "09:00"); f.end.value = timeOf(null, "end_time", p, "18:00"); f.brk.value = last?.break_min ?? 0; }
       preview();
     });
     f.addEventListener("input", preview);
@@ -291,9 +355,14 @@ function dayDialog(day, editId = null) {
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const { p, s } = read();
-      if (!s.start_time || !s.end_time) return;
-      if (s.start_time === s.end_time) { toast("시작과 끝 시각이 같아요.", "error"); return; }
-      if (shiftPay(s, p).work <= 0) { toast("휴게시간이 일한 시간보다 길어요.", "error"); return; }
+      if (isDaily(p)) {
+        if (!num(f.wage.value)) { toast("일당을 적어 주세요.", "error"); return; }
+        if (hasTime(s) && s.start_time === s.end_time) { toast("시작과 끝 시각이 같아요.", "error"); return; }
+      } else {
+        if (!s.start_time || !s.end_time) { toast("시작과 끝 시각을 적어 주세요.", "error"); return; }
+        if (s.start_time === s.end_time) { toast("시작과 끝 시각이 같아요.", "error"); return; }
+        if (shiftPay(s, p).work <= 0) { toast("휴게시간이 일한 시간보다 길어요.", "error"); return; }
+      }
       const row = { ...s, place_id: p.id, work_date: day };
       const res = e ? await sb.from("pay_shifts").update(row).eq("id", e.id) : await sb.from("pay_shifts").insert(row);
       if (res.error) { toast("저장하지 못했어요.", "error"); return; }
@@ -319,6 +388,14 @@ function dayDialog(day, editId = null) {
   dlg.showModal();
 }
 const toMinEnd = (s) => s.end_time <= s.start_time;
+/** 날짜 창의 시작·끝 기본값: 고치는 근무 → 그 곳의 지난번 근무 → 시급이면 기본값, 일당이면 비움 */
+function timeOf(e, key, place, fallback) {
+  const pick = (s) => (s && hasTime(s) ? s[key] : "");
+  if (e) return pick(e);
+  const last = [...state.shifts].reverse().find((s) => s.place_id === place.id);
+  if (last) return pick(last);
+  return isDaily(place) ? "" : fallback;
+}
 
 /* ---------- 일하는 곳 ---------- */
 function renderPlaces(params) {
@@ -328,8 +405,8 @@ function renderPlaces(params) {
     <div class="page-head"><h2 class="page-title" style="margin:0">일하는 곳</h2><button class="btn primary" type="button" id="add-place">+ 일하는 곳 추가</button></div>
     ${state.places.length ? `<ul class="places">${state.places.map((p) => `<li class="paper" style="--c:${p.color}">
       <div class="pl-main"><h3><i></i>${esc(p.name)}</h3>
-        <p class="muted small">시급 ${won(p.wage)} · ${esc(TAX_TYPES.find((t) => t.id === p.tax_type)?.long ?? "")}</p>
-        <p class="muted small">${p.weekly ? "주휴수당 계산" : "주휴수당 없음"} · ${p.extra ? "연장수당" : "연장수당 없음"} · ${(p.night ?? p.extra) ? "야간수당" : "야간수당 없음"} · 근무 ${count(p.id)}번</p></div>
+        <p class="muted small">${isDaily(p) ? "일당" : "시급"} ${won(p.wage)} · ${esc(taxTypesOf(p).find((t) => t.id === p.tax_type)?.long ?? "")}</p>
+        <p class="muted small">${isDaily(p) ? "" : `${p.weekly ? "주휴수당 계산" : "주휴수당 없음"} · ${p.extra ? "연장수당" : "연장수당 없음"} · ${(p.night ?? p.extra) ? "야간수당" : "야간수당 없음"} · `}근무 ${count(p.id)}번</p></div>
       <span class="pl-acts"><button class="btn outline sm" type="button" data-edit="${p.id}">고치기</button></span>
     </li>`).join("")}</ul>` : '<p class="empty">아직 일하는 곳이 없어요.</p>'}`);
   bindShell();
@@ -344,23 +421,40 @@ function placeDialog(p) {
   dlg.innerHTML = `<form method="dialog" class="place-form">
     <h2>${p ? "일하는 곳 고치기" : "일하는 곳 추가"}</h2>
     <label class="field">이름<input class="input" name="name" required maxlength="30" value="${esc(p?.name ?? "")}" placeholder="예: 동네 카페"></label>
+    <fieldset class="kind-pick"><legend>받는 방식</legend>
+      <label><input type="radio" name="kind" value="hourly" ${isDaily(p) ? "" : "checked"}><span>시급</span></label>
+      <label><input type="radio" name="kind" value="daily" ${isDaily(p) ? "checked" : ""}><span>일당 (일용직)</span></label>
+    </fieldset>
     <div class="time-row two">
-      <label class="field">시급<input class="input" name="wage" required inputmode="numeric" value="${(p?.wage ?? MIN_WAGE_2026).toLocaleString("ko-KR")}"></label>
+      <label class="field"><span class="wage-label">시급</span><input class="input" name="wage" required inputmode="numeric" value="${(p?.wage ?? MIN_WAGE_2026).toLocaleString("ko-KR")}"></label>
       <label class="field">색<input type="color" name="color" value="${color}"></label>
     </div>
-    <p class="muted small" style="margin:-6px 0 0">2026년 최저시급은 ${won(MIN_WAGE_2026)}이에요.</p>
-    <fieldset class="tax-pick"><legend>세금 방식 <span class="muted">(급여명세서·계약서에 적힌 대로)</span></legend>
-      ${TAX_TYPES.map((t) => `<label><input type="radio" name="tax" value="${t.id}" ${(p?.tax_type ?? "biz33") === t.id ? "checked" : ""}><span><b>${t.name}</b><small>${t.long}</small></span></label>`).join("")}
-    </fieldset>
+    <p class="muted small wage-hint" style="margin:-6px 0 0"></p>
+    <fieldset class="tax-pick"><legend>세금 방식 <span class="muted">(급여명세서·계약서에 적힌 대로)</span></legend><div class="tax-opts"></div></fieldset>
+    <div class="hourly-only">
     <label class="check"><input type="checkbox" name="weekly" ${p?.weekly ?? true ? "checked" : ""}><span><span><b>주휴수당</b> 계산</span><small>한 주에 15시간 이상 일하면 하루치를 더 받아요</small></span></label>
     <label class="check"><input type="checkbox" name="extra" ${p?.extra ? "checked" : ""}><span><span><b>연장수당</b> 계산</span><small>하루 8시간을 넘게 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
     <label class="check"><input type="checkbox" name="night" ${(p?.night ?? p?.extra) ? "checked" : ""}><span><span><b>야간수당</b> 계산</span><small>밤 10시~아침 6시에 일한 시간에 시급의 0.5배를 더 받아요</small></span></label>
-    <p class="muted small" style="margin:-6px 0 0">연장·야간수당은 법으로는 상시 5명 이상 일하는 곳에서 줘요. 실제로 받는 대로 켜 주세요.</p>
+    <p class="muted small" style="margin:0">연장·야간수당은 법으로는 상시 5명 이상 일하는 곳에서 줘요. 실제로 받는 대로 켜 주세요.</p>
+    </div>
     <div class="actions">${p ? '<button class="btn ghost danger" type="button" id="del-place">삭제</button><span class="spacer"></span>' : ""}<button class="btn ghost" type="button" value="cancel">취소</button><button class="btn primary" type="submit">저장</button></div>
   </form>`;
   document.body.append(dlg);
   const f = $("form", dlg);
   f.wage.addEventListener("blur", () => { const n = num(f.wage.value); f.wage.value = n ? n.toLocaleString("ko-KR") : ""; });
+  // 시급/일당에 따라 금액 이름, 세금 방식 설명, 수당 칸이 바뀜
+  let tax = p?.tax_type ?? "biz33";
+  const setKind = (daily, first = false) => {
+    const types = daily ? DAILY_TAX_TYPES : TAX_TYPES;
+    $(".wage-label", f).textContent = daily ? "일당" : "시급";
+    $(".wage-hint", f).textContent = daily ? "하루에 받는 금액이에요. 날마다 다르면 근무를 적을 때 바꿀 수 있어요." : `2026년 최저시급은 ${won(MIN_WAGE_2026)}이에요.`;
+    if (!first && !p) f.wage.value = (daily ? 100000 : MIN_WAGE_2026).toLocaleString("ko-KR");
+    $(".tax-opts", f).innerHTML = types.map((t) => `<label><input type="radio" name="tax" value="${t.id}" ${tax === t.id ? "checked" : ""}><span><b>${t.name}</b><small>${t.long}</small></span></label>`).join("");
+    $$('input[name="tax"]', f).forEach((r) => r.onchange = () => { tax = r.value; });
+    $(".hourly-only", f).hidden = daily;
+  };
+  $$('input[name="kind"]', f).forEach((r) => r.onchange = () => setKind(r.value === "daily"));
+  setKind(isDaily(p), true);
   $("button[value=cancel]", dlg).onclick = () => dlg.close();
   dlg.addEventListener("close", () => dlg.remove());
   $("#del-place", dlg)?.addEventListener("click", async () => {
@@ -375,8 +469,9 @@ function placeDialog(p) {
   f.onsubmit = async (e) => {
     e.preventDefault();
     const wage = num(f.wage.value);
-    if (!f.name.value.trim() || !wage) { toast("이름과 시급을 적어 주세요.", "error"); return; }
-    const row = { name: f.name.value.trim(), wage, color: f.color.value, tax_type: f.tax.value, weekly: f.weekly.checked, extra: f.extra.checked, night: f.night.checked };
+    const daily = f.kind.value === "daily";
+    if (!f.name.value.trim() || !wage) { toast(`이름과 ${daily ? "일당" : "시급"}을 적어 주세요.`, "error"); return; }
+    const row = { name: f.name.value.trim(), pay_kind: daily ? "daily" : "hourly", wage, color: f.color.value, tax_type: tax, weekly: !daily && f.weekly.checked, extra: !daily && f.extra.checked, night: !daily && f.night.checked };
     const res = p ? await sb.from("pay_places").update(row).eq("id", p.id) : await sb.from("pay_places").insert({ ...row, sort: state.places.length });
     if (res.error) { toast("저장하지 못했어요.", "error"); return; }
     await loadAll();

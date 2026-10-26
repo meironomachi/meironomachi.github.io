@@ -18,7 +18,17 @@ export const TAX_TYPES = [
   { id: "insured", name: "4대보험", long: "4대보험 + 근로소득세 (간이세액 계산)" },
   { id: "none", name: "세금 없음", long: "떼는 것 없음" },
 ];
-export const taxName = (id) => TAX_TYPES.find((t) => t.id === id)?.name ?? "";
+// 일당으로 받는 곳(일용직)은 '4대보험' 자리에 일용근로소득세 + 고용보험
+export const DAILY_TAX_TYPES = [
+  { id: "biz33", name: "3.3%", long: "사업소득 3.3% (소득세 3% + 지방소득세 0.3%)" },
+  { id: "insured", name: "일용직 세금", long: "일용근로소득세 (하루 15만 원 넘는 부분의 2.7%) + 고용보험 0.9%" },
+  { id: "none", name: "세금 없음", long: "떼는 것 없음" },
+];
+export const isDaily = (place) => place?.pay_kind === "daily";
+export const taxTypesOf = (place) => (isDaily(place) ? DAILY_TAX_TYPES : TAX_TYPES);
+export const taxName = (id, place = null) => taxTypesOf(place).find((t) => t.id === id)?.name ?? "";
+export const NO_TIME = "00:00"; // 일당 근무에서 시각을 안 적으면 시작·끝 둘 다 00:00으로 저장
+export const hasTime = (s) => !(s.start_time === NO_TIME && s.end_time === NO_TIME);
 
 const floor10 = (n) => Math.floor(n / 10) * 10;
 export const won = (n) => `${Math.round(n).toLocaleString("ko-KR")}원`;
@@ -79,6 +89,12 @@ export function shiftMinutes(s) {
  * 근무 한 번의 돈. place.extra면 연장(하루 8시간 넘는 부분), place.night면 야간(22~06시)에(비어 있으면 extra와 같게) 시급의 0.5배를 더 줌.
  */
 export function shiftPay(s, place) {
+  // 일당: 그날 적은 금액(없으면 일하는 곳의 일당)을 그대로. 시각을 적었으면 시간만 셈
+  if (isDaily(place)) {
+    const amount = Number(s.wage) || Number(place.wage) || 0;
+    const work = hasTime(s) ? shiftMinutes(s).work : 0;
+    return { wage: amount, work, night: 0, base: amount, overtime: 0, nightPay: 0, total: amount, daily: true };
+  }
   const wage = Number(s.wage) || Number(place?.wage) || 0;
   const { work, night } = shiftMinutes(s);
   const base = Math.round(work / 60 * wage);
@@ -92,7 +108,7 @@ export function shiftPay(s, place) {
  * 그 주의 일요일이 속한 달에 들어감. 같은 일하는 곳끼리만 셈.
  */
 export function weeklyAllowances(shifts, place) {
-  if (!place?.weekly) return [];
+  if (!place?.weekly || isDaily(place)) return [];
   const weeks = new Map();
   for (const s of shifts.filter((x) => x.place_id === place.id)) {
     const k = weekStart(s.work_date);
@@ -148,24 +164,55 @@ export function deductions(gross, taxType, rates = RATES) {
   return { items, total: items.reduce((s, x) => s + x.amount, 0) };
 }
 
+/**
+ * 일용직 세금: 하루마다 (일당 − 15만 원) × 6% × (1 − 55%) = 일용근로소득세, 1,000원 미만이면 안 뗌(소액부징수).
+ * 지방소득세는 그 10%, 고용보험은 한 달 일당 합의 0.9%.
+ */
+export function dailyDeductions(amounts, taxType, rates = RATES) {
+  const gross = amounts.reduce((t, a) => t + a, 0);
+  if (taxType !== "insured") return deductions(gross, taxType, rates);
+  let income = 0, local = 0;
+  for (const a of amounts) {
+    const t = floor10(Math.max(0, a - 150000) * 0.06 * 0.45);
+    if (t >= 1000) { income += t; local += floor10(t * 0.1); }
+  }
+  const items = [
+    { name: "일용근로소득세", amount: income },
+    { name: "지방소득세 (소득세의 10%)", amount: local },
+    { name: `고용보험 (${+(rates.employment * 100).toFixed(1)}%)`, amount: floor10(gross * rates.employment) },
+  ];
+  return { items, total: items.reduce((t, x) => t + x.amount, 0) };
+}
+
 /* ---------- 한 달 합계 ---------- */
-/** month의 근무를 일하는 곳별로 모아 세전·공제·세후 계산. shifts는 앞뒤 주까지 넉넉히 넘겨야 주휴수당이 맞음 */
-export function monthSummary(shifts, places, month) {
+/**
+ * month의 근무를 일하는 곳별로 모아 세전·공제·세후 계산. shifts는 앞뒤 주까지 넉넉히 넘겨야 주휴수당이 맞음.
+ * manual: 직접 적은 그달 급여 { place_id, month, gross, net(없으면 세금 방식대로 계산), memo }. 있으면 그 곳의 계산 대신 씀.
+ */
+export function monthSummary(shifts, places, month, manual = []) {
   const inMonth = (d) => d.startsWith(`${month}-`);
   const byPlace = places.map((place) => {
     const mine = shifts.filter((s) => s.place_id === place.id && inMonth(s.work_date));
     const pays = mine.map((s) => shiftPay(s, place));
     const weekly = weeklyAllowances(shifts, place).filter((w) => inMonth(w.sunday));
     const sum = (k) => pays.reduce((t, p) => t + p[k], 0);
-    const gross = sum("total") + weekly.reduce((t, w) => t + w.amount, 0);
-    const ded = deductions(gross, place.tax_type);
-    return {
+    const info = {
       place, days: new Set(mine.map((s) => s.work_date)).size, shifts: mine.length,
       minutes: sum("work"), night: sum("night"), base: sum("base"), overtime: sum("overtime"), nightPay: sum("nightPay"),
       weekly: weekly.reduce((t, w) => t + w.amount, 0), weeks: weekly,
-      gross, deductions: ded.items, deducted: ded.total, net: gross - ded.total,
     };
-  }).filter((x) => x.shifts || x.weekly);
+    const m = manual.find((x) => x.place_id === place.id && x.month === month);
+    if (m) {
+      const gross = Number(m.gross) || 0;
+      const ded = m.net !== null && m.net !== undefined && m.net !== ""
+        ? { items: [{ name: "떼는 돈 (직접 적음)", amount: gross - Number(m.net) }], total: gross - Number(m.net) }
+        : deductions(gross, place.tax_type);
+      return { ...info, manual: m, gross, deductions: ded.items, deducted: ded.total, net: gross - ded.total };
+    }
+    const gross = sum("total") + info.weekly;
+    const ded = isDaily(place) ? dailyDeductions(pays.map((p) => p.total), place.tax_type) : deductions(gross, place.tax_type);
+    return { ...info, gross, deductions: ded.items, deducted: ded.total, net: gross - ded.total };
+  }).filter((x) => x.shifts || x.weekly || x.manual);
   const total = (k) => byPlace.reduce((t, x) => t + x[k], 0);
   const gross = total("gross"), deducted = total("deducted");
   return { month, byPlace, minutes: total("minutes"), gross, deducted, net: gross - deducted, rate: gross ? deducted / gross * 100 : 0 };
