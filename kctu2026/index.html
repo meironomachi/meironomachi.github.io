@@ -117,6 +117,30 @@ section+section{margin-top:56px}
 .slate[data-n="3"]{--c:var(--c3);--ci:var(--c3-ink);--cs:var(--c3-soft);--ca:var(--c3-accent)}
 .slate[data-n="4"]{--c:var(--c4);--ci:var(--c4-ink);--cs:var(--c4-soft);--ca:var(--c4)}
 .slate[data-n="3"] .top{border-bottom:3px solid var(--c3-ink)}
+/* 정책 토론회 발언 */
+.debate{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))}
+.speech{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.speech header{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--cs);border-bottom:3px solid var(--c)}
+.speech .sn{display:inline-grid;place-items:center;min-width:28px;height:28px;border-radius:8px;font-weight:900;background:var(--c);color:var(--ci)}
+.speech[data-n="3"] .sn{box-shadow:inset 0 0 0 2px var(--c3-ink)}
+.speech header b{font-size:17px}
+.speech .role-sm{font-size:12px;color:var(--muted)}
+.speech[data-n="1"]{--c:var(--c1);--ci:var(--c1-ink);--cs:var(--c1-soft);--ca:var(--c1)}
+.speech[data-n="2"]{--c:var(--c2);--ci:var(--c2-ink);--cs:var(--c2-soft);--ca:var(--c2)}
+.speech[data-n="3"]{--c:var(--c3-accent);--ci:#fff;--cs:var(--c3-soft);--ca:var(--c3-accent)}
+.speech[data-n="4"]{--c:var(--c4);--ci:var(--c4-ink);--cs:var(--c4-soft);--ca:var(--c4)}
+.points,.pledges{margin:0;padding:14px 16px 16px;display:grid;gap:10px}
+.points{list-style:none}
+.points li{position:relative;padding-left:14px;font-size:14.5px;line-height:1.65}
+.points li::before{content:"";position:absolute;left:2px;top:.7em;width:6px;height:6px;border-radius:50%;background:var(--ca)}
+.pledges{list-style:none;counter-reset:p}
+.pledges li{counter-increment:p;display:grid;gap:2px;padding-left:30px;position:relative}
+.pledges li::before{content:counter(p);position:absolute;left:0;top:1px;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--ca);color:#fff}
+.pledges b{font-size:15px}
+.pledges span{font-size:14px;line-height:1.6;color:var(--muted)}
+.debate-note{margin:12px 2px 0;font-size:12.5px;color:var(--muted)}
+.tool[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
 /* 직책별 비교 */
 .table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px}
 table{width:100%;border-collapse:collapse;min-width:720px}
@@ -169,6 +193,19 @@ footer.site a{color:inherit}
       </div>
     </div>
     <div class="slates" id="slates"></div>
+  </section>
+
+  <section aria-labelledby="debate-title">
+    <div class="sec-head">
+      <div><h2 id="debate-title">정책 토론회 발언</h2><p>후보 소견 발표와 기자단 공통 질의응답을 주제별로 나란히 봐요.</p></div>
+      <div class="tools" role="tablist" aria-label="주제">
+        <button class="tool" type="button" role="tab" data-topic="diag" aria-selected="true" aria-pressed="true">현장 진단</button>
+        <button class="tool" type="button" role="tab" data-topic="pledges" aria-selected="false" aria-pressed="false">주요 공약</button>
+        <button class="tool" type="button" role="tab" data-topic="qa" aria-selected="false" aria-pressed="false">질의응답 · 사회적 교섭과 임금</button>
+      </div>
+    </div>
+    <div class="debate" id="debate" role="tabpanel" aria-labelledby="debate-title"></div>
+    <p class="debate-note">토론회 영상의 발언을 요약한 내용이라 원래 표현과 다를 수 있어요. 정확한 발언은 토론회 영상과 각 선본 자료로 확인해 주세요.</p>
   </section>
 
   <section aria-labelledby="compare-title">
@@ -238,6 +275,90 @@ document.querySelectorAll("[data-order]").forEach((b) => b.onclick = () => {
     : SLATES.map((s) => s.n);
   document.querySelectorAll("[data-order]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   drawSlates();
+  drawDebate();
+});
+
+// 정책 토론회 발언 요약 (소견 발표 + 기자단 공통 질의응답). 후보조마다 같은 틀로
+const DEBATE = {
+  1: {
+    diag: [
+      "철도 노동자로 30년 일한 현장 경험을 바탕으로, AI 산업 전환이 가져올 피해(로봇 속도에 맞춘 노동, 고용 불안, 저임금·장시간 노동 강요)에 대비해야 한다고 진단",
+      "투쟁 없는 대화는 양보로, 대안 없는 교섭은 필패로, 전략 없는 사업은 현상 유지로 끝난다고 지적",
+    ],
+    pledges: [
+      ["새로운 교섭 패러다임", "임금 개념을 '존엄한 삶의 권리'로 넓히고, 기업 초과이윤·재벌 잉여금에 대한 징벌적 기후 과세 실현"],
+      ["정책·예산 중심 교섭", "임금·복지 조건을 넘어 경제정책, 산업정책, 정부 예산 확보까지 교섭 의제로"],
+      ["조직 강화", "늘어나는 플랫폼 노동자 조직화, 16개 산별에 갇히지 않는 공동 투쟁 기획 체계"],
+    ],
+    qa: [
+      "사회적 대화의 성패는 투쟁과 대안을 얼마나 철저히 준비했느냐에 달렸다",
+      "공공 영역(공공기관·공무원·교사 등)은 노정 교섭이 답이며, 협약 확장으로 모든 노동자에게 협약이 적용되게 하겠다",
+    ],
+  },
+  2: {
+    diag: [
+      "윤석열 정권의 탄압 속에서 가장 먼저 퇴진의 깃발을 들고, 계엄에 맞선 총파업과 한남동 투쟁을 이끈 민주노총의 저력을 강조",
+      "AI와 산업 전환이 빠른 만큼 위기를 기다리지 말고, 노동중심 산업전환 요구를 들고 사회적 교섭을 만들어야 한다고 주장",
+    ],
+    pledges: [
+      ["노동시간 단축·초과이윤 공유", "AI로 높아진 생산성을 일자리 축소가 아닌 노동시간 단축으로, 재벌의 초과이윤을 비정규직·하청 노동자와 나누도록 요구"],
+      ["정부 재정 개편", "추경 재정을 재벌 지원이 아니라 청년 고용 확대와 교육·의료·돌봄·주거 공공성 강화에 쓰도록 압박"],
+      ["사회적 교섭·산별교섭 발판", "노사정 교섭을 지렛대로 사용자를 교섭 테이블로 끌어내고, 산별·업종별 논의 구조로 '모든 노동자의 민주노총' 건설. 당선 즉시 대의원대회에서 방침을 정하고 교섭과 투쟁을 함께"],
+    ],
+    qa: [
+      "산별교섭이 잘 안되는 핵심 이유는 사용자가 교섭에 나오지 않기 때문 — 사회적 교섭으로 사용자를 특정하고, 노사·노정·사용자-정부 교섭 내용을 나눠 체계를 만들겠다",
+      "시장임금 비율이 높은 구조를 짚으며 사회임금(사회안전망) 비중 확대, 최저임금·공무원보수위·생활임금위 등 흩어진 교섭 테이블을 하나로 묶고, 고정급(기본급) 비율을 높여 임금 안정성 확보",
+    ],
+  },
+  3: {
+    diag: [
+      "23년간 전교조 조합원·현장 간부로 활동한 경험을 바탕으로, 상층 간부들이 민주노총을 위기로 몰고 정체성을 잃어 가고 있다고 비판",
+      "위원장의 보수정당(이재명) 지지 선거 방침 제출, 원청 교섭 무력화 시행령에 대한 대비 실패, 전략 없는 노사정 대화와 '초광역 특구법(메가 특구법)' 문제를 지적",
+    ],
+    pledges: [
+      ["완전히 새로운 민주노총", "현장 조합원과 상층 간부 사이의 벽, 우경화의 벽, 관성의 벽을 깨고 첫 여성 위원장으로 도약"],
+      ["민주노총당 건설", "보수정당에 기대는 선거 방침을 끝내고, 100만 조합원이 정치의 주인이 되어 2028년 총선에 독자 진출"],
+      ["산별 재편·재정 투자", "16개 산별을 50여 개 동일 업종 산별로 확대·재편하고, 비정규직·미조직 노동자 조직에 인력과 재정을 과감히 투자"],
+      ["경사노위 전면 거부", "권리 후퇴를 의제로 하는 경사노위에는 들어가지 않고 대화판을 완전히 뒤집겠다"],
+    ],
+    qa: [
+      "업종별로 산별을 재편해야 단결과 투쟁력이 높아진다 — 학교비정규직 연대처럼 상시 공동 교섭·투쟁 체계를 만들고, 저임금·취약 노동자 조직을 위해 조직 구조와 재정을 전면 개편",
+      "AI 반도체 초과이익과 초과세수가 생기면 국민 배당과 노동자 배당을 요구하는 의제를 먼저 던져 여론을 만들어야 한다",
+    ],
+  },
+  4: {
+    diag: [
+      "지난 6년 양경수 집행부의 노선을 '파탄 난 실패'로 규정 — 원칙 없는 대정부 관계, 조직 없이 일정만 있는 총파업, 직권 조치와 포기의 반복, 성과 없는 사회적 교섭 등을 비판",
+      "노동조직률 13%의 한계 속에 AI·기후·인구구조 대전환기를 맞아, 민주노총이 일하는 모든 사람의 기준을 만들어야 한다고 강조",
+    ],
+    pledges: [
+      ["현장·산별 중심 운영", "총파업·사회적 교섭·정치 방침 등 중대 결정을 산별과 지역이 함께 토론·합의하고, 조합원의 결정권을 온전히 복원"],
+      ["공세적 사회적 교섭", "AI·기후·인구 의제를 산별들과 미리 준비해 결정 단계부터 노동이 주도하는 교섭"],
+      ["모든 일하는 사람의 민주노총", "초기업 교섭과 단체협약 확장 적용으로 2035년까지 단협 적용률 50%. 5인 미만 사업장 노동자 400만 명에 근로기준법 전면 적용, 특수고용·플랫폼 노동자 노동기본권 보장을 총연맹 중심 사업으로"],
+      ["메가 특구법(초광역 특구법) 저지", "노동·환경·지역 공동체를 파괴하는 규제 완화와 노동 특례는 협상 대상이 아니며, 조항 철회가 확인되지 않는 대화에는 응하지 않고 투쟁으로 저지"],
+    ],
+    qa: [
+      "사회적 대화는 참가 선언만으로 돌파할 수 없고, 지난 6년 집행부에 부족했던 것은 기회가 아니라 '준비' — 제대로 준비된 공세적 교섭을 펴겠다",
+      "최저임금이 물가 상승을 따라가지 못해 실질적으로 떨어졌다며 최저임금 실질화, 생활임금위원회 노동자 위원 참여 보장을 촉구. 공적 연금·상병 제도 등 사회안전망을 강화해 국민 전체의 삶을 지키는 버팀목이 되겠다",
+    ],
+  },
+};
+let topic = "diag";
+function drawDebate() {
+  $("#debate").innerHTML = order.map((n) => {
+    const s = SLATES.find((x) => x.n === n), d = DEBATE[n][topic];
+    return `<article class="speech" data-n="${n}" aria-label="기호 ${n}번 ${esc(s.people[0][0])} 후보">
+      <header><span class="sn">${n}</span><b>${esc(s.people[0][0])}</b><span class="role-sm">위원장 후보</span></header>
+      ${topic === "pledges"
+        ? `<ol class="pledges">${d.map(([t, body]) => `<li><b>${esc(t)}</b><span>${esc(body)}</span></li>`).join("")}</ol>`
+        : `<ul class="points">${d.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`}
+    </article>`;
+  }).join("");
+}
+document.querySelectorAll("[data-topic]").forEach((b) => b.onclick = () => {
+  topic = b.dataset.topic;
+  document.querySelectorAll("[data-topic]").forEach((x) => { x.setAttribute("aria-selected", String(x === b)); x.setAttribute("aria-pressed", String(x === b)); });
+  drawDebate();
 });
 
 // 직책별 비교 표
@@ -245,6 +366,7 @@ $("#compare").innerHTML = `<thead><tr><th scope="col">직책</th>${SLATES.map((s
   <tbody><tr class="slogan-row"><th scope="row">선본 슬로건</th>${SLATES.map((s) => `<td data-n="${s.n}"><q>${esc(s.slogan)}</q></td>`).join("")}</tr>${ROLES.map((r, i) => `<tr><th scope="row">${r}</th>${SLATES.map((s) => `<td data-n="${s.n}"><b>${esc(s.people[i][0])}</b><span>${esc(s.people[i][1])}</span></td>`).join("")}</tr>`).join("")}</tbody>`;
 
 drawSlates();
+drawDebate();
 
 $("#theme").addEventListener("click", () => {
   const root = document.documentElement;
