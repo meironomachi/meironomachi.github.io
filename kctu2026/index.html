@@ -96,6 +96,9 @@ section+section{margin-top:56px}
 .slate .slogan{margin:14px 0 0;font-size:clamp(19px,2.2vw,23px);font-weight:900;line-height:1.3;letter-spacing:-.02em;text-wrap:balance}
 .slate .slogan::before{content:"“"}.slate .slogan::after{content:"”"}
 .slate .top .lead{margin:8px 0 0;font-size:13px;font-weight:700;opacity:.8}
+@media (min-width:640px){.slate .top{min-height:266px}}
+.slate .top .lead{margin-top:auto;padding-top:8px}
+.slate .slogan-img{display:block;margin:14px 0 0;height:96px;width:auto;max-width:100%;object-fit:contain;object-position:left center}
 .slate .tagline{margin:6px 0 0;font-size:14px;font-weight:700;opacity:.92}
 .slate .people > li{grid-template-areas:"role who" "career career"}
 .slate .role{grid-area:role}.slate .who{grid-area:who}
@@ -181,16 +184,16 @@ footer.site a{color:inherit}
 <script>
 // 후보조: 기호, 선본 슬로건, 위원장·수석부위원장·사무총장 (이름 옆은 출신 산별노조·연맹)
 const ROLES = ["위원장", "수석부위원장", "사무총장"];
-// tagline·careers는 각 선본 홍보물에 적힌 그대로 (없으면 빈 칸)
+// tagline·careers는 각 선본 홍보물에 적힌 그대로 (없으면 빈 칸). logo는 홍보물의 슬로건 글씨를 흰색 SVG로 옮긴 것
 const SLATES = [
-  { n: 1, slogan: "다시 뛴다! 민주노총", tagline: "양보 말고 쟁취, 대안과 실력으로!",
+  { n: 1, slogan: "다시 뛴다! 민주노총", logo: "slogan1.svg?v=1", tagline: "양보 말고 쟁취, 대안과 실력으로!",
     people: [["엄길용", "공공운수노조"], ["이승현", "사무금융노조"], ["박옥주", "전교조"]],
     careers: [
       ["현) 공공운수노조 위원장", "전) 철도노조 위원장", "고속철도분리민영화저지 파업투쟁·구속"],
       ["전) 사무금융연맹 부위원장", "전) 사무금융노조 일반사무업종본부장", "전) 전세버스공제조합노조 위원장"],
       ["현) 민주노총 충북본부장", "전) 전교조 수석부위원장, 법외노조투쟁·해고", "전) 전교조 충북지부장"],
     ] },
-  { n: 2, slogan: "돌파! 사회적 교섭", tagline: "길을 여는 민주노총",
+  { n: 2, slogan: "돌파! 사회적 교섭", logo: "slogan2.svg?v=1", logoHasTagline: true, tagline: "길을 여는 민주노총",
     people: [["양경수", "금속노조"], ["정재범", "보건의료노조"], ["엄미경", "민주일반연맹"]],
     careers: [
       ["10기, 11기 민주노총 위원장", "전) 기아자동차지부 화성지회 사내하청분회장", "전) 민주노총 경기지역본부장"],
@@ -210,7 +213,7 @@ function drawSlates() {
   $("#slates").innerHTML = order.map((n) => {
     const s = SLATES.find((x) => x.n === n);
     return `<article class="slate" data-n="${n}" aria-label="기호 ${n}번 후보조">
-      <div class="top"><div class="num"><small>기호</small><b>${n}</b></div><p class="slogan">${esc(s.slogan)}</p>${s.tagline ? `<p class="tagline">${esc(s.tagline)}</p>` : ""}<p class="lead">${esc(s.people[0][0])} 후보조</p></div>
+      <div class="top"><div class="num"><small>기호</small><b>${n}</b></div>${s.logo ? `<img class="slogan-img" src="${s.logo}" alt="${esc(s.slogan)}${s.logoHasTagline ? ` ${esc(s.tagline)}` : ""}">` : `<p class="slogan">${esc(s.slogan)}</p>`}${s.tagline && !s.logoHasTagline ? `<p class="tagline">${esc(s.tagline)}</p>` : ""}<p class="lead">${esc(s.people[0][0])} 후보조</p></div>
       <ul class="people">${s.people.map(([name, u], i) => `<li>
         <span class="role">${ROLES[i]}</span>
         <span class="who"><b>${esc(name)}</b><span>${esc(u)}</span></span>
