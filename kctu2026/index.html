@@ -100,26 +100,11 @@ section+section{margin-top:56px}
 .who{display:flex;flex-direction:column}
 .who b{font-size:21px;font-weight:800;letter-spacing:-.01em}
 .who span{font-size:13px;color:var(--muted)}
-.union-tag{display:inline-block;border-radius:6px;padding:0 6px;transition:background .2s,color .2s}
 .slate[data-n="1"]{--c:var(--c1);--ci:var(--c1-ink);--cs:var(--c1-soft);--ca:var(--c1)}
 .slate[data-n="2"]{--c:var(--c2);--ci:var(--c2-ink);--cs:var(--c2-soft);--ca:var(--c2)}
 .slate[data-n="3"]{--c:var(--c3);--ci:var(--c3-ink);--cs:var(--c3-soft);--ca:var(--c3-accent)}
 .slate[data-n="4"]{--c:var(--c4);--ci:var(--c4-ink);--cs:var(--c4-soft);--ca:var(--c4)}
 .slate[data-n="3"] .top{border-bottom:3px solid var(--c3-ink)}
-/* 산별 고르기: 맞는 후보만 또렷하게 */
-body.filtering .people li{opacity:.28;transition:opacity .25s}
-body.filtering .people li.hit{opacity:1}
-body.filtering .people li.hit .union-tag{background:var(--ca);color:var(--card)}
-body.filtering .slate[data-n="3"] .people li.hit .union-tag{color:#fff}
-
-/* 산별 고르기 */
-.unions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.u-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:8px 12px;cursor:pointer;font-weight:700;font-size:14px}
-.u-btn .dots{display:inline-flex;gap:3px}
-.u-btn .dots i{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.12)}
-.u-btn small{color:var(--muted);font-weight:600}
-.u-btn[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
-
 /* 직책별 비교 */
 .table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px}
 table{width:100%;border-collapse:collapse;min-width:720px}
@@ -136,19 +121,6 @@ th[data-n="2"],td[data-n="2"]{--c:var(--c2);--ci:var(--c2-ink)}
 th[data-n="3"],td[data-n="3"]{--c:var(--c3);--ci:var(--c3-ink)}
 th[data-n="4"],td[data-n="4"]{--c:var(--c4);--ci:var(--c4-ink)}
 td[data-n]{box-shadow:inset 3px 0 0 var(--c)}
-
-/* 산별 분포 */
-.dist{display:grid;gap:10px}
-.dist-row{display:grid;grid-template-columns:150px 1fr 36px;align-items:center;gap:12px}
-.dist-row .name{font-weight:700;font-size:14px}
-.dist-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;height:30px}
-.dist-bar span{min-width:0;overflow:hidden;white-space:nowrap;border-radius:6px;background:var(--c);color:var(--ci);display:grid;place-items:center;font-size:12px;font-weight:800}
-.dist-bar span[data-n="1"]{--c:var(--c1);--ci:var(--c1-ink)}.dist-bar span[data-n="2"]{--c:var(--c2);--ci:var(--c2-ink)}
-.dist-bar span[data-n="3"]{--c:var(--c3);--ci:var(--c3-ink);box-shadow:inset 0 0 0 2px var(--c3-ink)}.dist-bar span[data-n="4"]{--c:var(--c4);--ci:var(--c4-ink)}
-.dist-row .cnt{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;font-size:13px;color:var(--muted)}
-.legend i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:5px;vertical-align:-1px}
-@media (max-width:560px){.dist-row{grid-template-columns:96px 1fr 28px}.dist-row .name{font-size:12.5px}}
 
 .note{margin:48px 0 0;padding:16px 18px;border-radius:12px;background:var(--soft);color:var(--muted);font-size:13px;line-height:1.7}
 footer.site{padding:24px 0 8px;color:var(--muted);font-size:13px}
@@ -168,7 +140,7 @@ footer.site a{color:inherit}
     </div>
     <span class="kicker">SPECIAL PAGE · 비공식</span>
     <h1>2026 민주노총<br><em>직선 5기</em> 임원 선거</h1>
-    <p>위원장 · 수석부위원장 · 사무총장 후보조 네 팀을 한눈에 보고, 산별노조·연맹별로 나눠 봐요.</p>
+    <p>위원장 · 수석부위원장 · 사무총장 후보조 네 팀을 한눈에 봐요.</p>
     <div class="chips" id="hero-chips"></div>
   </div>
   <div class="stripes" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
@@ -183,19 +155,12 @@ footer.site a{color:inherit}
         <button class="tool" type="button" data-order="shuffle" aria-pressed="false">무작위 순서</button>
       </div>
     </div>
-    <div class="unions" id="unions" role="group" aria-label="산별노조·연맹으로 보기"></div>
     <div class="slates" id="slates"></div>
   </section>
 
   <section aria-labelledby="compare-title">
     <div class="sec-head"><div><h2 id="compare-title">직책별 비교</h2><p>같은 자리에 나선 후보를 나란히 봐요.</p></div></div>
     <div class="table-wrap"><table id="compare"></table></div>
-  </section>
-
-  <section aria-labelledby="dist-title">
-    <div class="sec-head"><div><h2 id="dist-title">산별로 보기</h2><p>후보 12명이 어느 산별노조·연맹에서 나왔고, 어느 후보조에 있는지.</p></div></div>
-    <div class="dist" id="dist"></div>
-    <div class="legend" id="legend"></div>
   </section>
 
   <p class="note">이 페이지는 meiro.kr에서 만든 <b>비공식</b> 페이지로, 민주노총이나 선거관리위원회, 어느 후보조와도 관계가 없어요. 후보조 순서는 기호 순이고 특정 후보를 지지하지 않아요. 정확한 선거 일정과 공약은 공식 공고를 확인해 주세요.</p>
@@ -214,32 +179,19 @@ const SLATES = [
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const $ = (s) => document.querySelector(s);
 
-// 산별별 후보 수 (많은 순, 같으면 가나다순)
-const byUnion = {};
-for (const s of SLATES) s.people.forEach(([name, u], i) => (byUnion[u] ??= []).push({ name, n: s.n, role: ROLES[i] }));
-const UNIONS = Object.keys(byUnion).sort((a, b) => byUnion[b].length - byUnion[a].length || a.localeCompare(b, "ko"));
-
-$("#hero-chips").innerHTML = `<span>후보조 ${SLATES.length}팀</span><span>후보 ${SLATES.length * 3}명</span><span>산별노조·연맹 ${UNIONS.length}곳</span>`;
+$("#hero-chips").innerHTML = `<span>후보조 ${SLATES.length}팀</span><span>후보 ${SLATES.length * 3}명</span>`;
 
 let order = SLATES.map((s) => s.n);
-let union = null;
 function drawSlates() {
   $("#slates").innerHTML = order.map((n) => {
     const s = SLATES.find((x) => x.n === n);
     return `<article class="slate" data-n="${n}" aria-label="기호 ${n}번 후보조">
       <div class="top"><div class="num"><small>기호</small><b>${n}</b></div><p class="lead">${esc(s.people[0][0])} 후보조</p></div>
-      <ul class="people">${s.people.map(([name, u], i) => `<li class="${union === u ? "hit" : ""}">
+      <ul class="people">${s.people.map(([name, u], i) => `<li>
         <span class="role">${ROLES[i]}</span>
-        <span class="who"><b>${esc(name)}</b><span><span class="union-tag">${esc(u)}</span></span></span></li>`).join("")}</ul>
+        <span class="who"><b>${esc(name)}</b><span>${esc(u)}</span></span></li>`).join("")}</ul>
     </article>`;
   }).join("");
-  document.body.classList.toggle("filtering", !!union);
-}
-function drawUnions() {
-  $("#unions").innerHTML = `<button class="u-btn" type="button" data-u="" aria-pressed="${!union}">전체</button>` +
-    UNIONS.map((u) => `<button class="u-btn" type="button" data-u="${esc(u)}" aria-pressed="${union === u}">${esc(u)}
-      <span class="dots" aria-hidden="true">${byUnion[u].map((p) => `<i style="background:var(--c${p.n})"></i>`).join("")}</span><small>${byUnion[u].length}명</small></button>`).join("");
-  document.querySelectorAll("[data-u]").forEach((b) => b.onclick = () => { union = b.dataset.u || null; drawUnions(); drawSlates(); });
 }
 document.querySelectorAll("[data-order]").forEach((b) => b.onclick = () => {
   order = b.dataset.order === "shuffle"
@@ -253,13 +205,6 @@ document.querySelectorAll("[data-order]").forEach((b) => b.onclick = () => {
 $("#compare").innerHTML = `<thead><tr><th scope="col">직책</th>${SLATES.map((s) => `<th scope="col" data-n="${s.n}"><span class="tn">${s.n}</span>기호 ${s.n}번</th>`).join("")}</tr></thead>
   <tbody>${ROLES.map((r, i) => `<tr><th scope="row">${r}</th>${SLATES.map((s) => `<td data-n="${s.n}"><b>${esc(s.people[i][0])}</b><span>${esc(s.people[i][1])}</span></td>`).join("")}</tr>`).join("")}</tbody>`;
 
-// 산별 분포: 칸 하나가 후보 한 명, 색은 후보조
-$("#dist").innerHTML = UNIONS.map((u) => `<div class="dist-row"><span class="name">${esc(u)}</span>
-  <div class="dist-bar" role="img" aria-label="${esc(u)}: ${byUnion[u].map((p) => `기호 ${p.n}번 ${p.role} ${p.name}`).join(", ")}">${byUnion[u].map((p) => `<span data-n="${p.n}" title="기호 ${p.n}번 ${p.role} ${esc(p.name)}">${esc(p.name)}</span>`).join("")}</div>
-  <span class="cnt">${byUnion[u].length}</span></div>`).join("");
-$("#legend").innerHTML = SLATES.map((s) => `<span><i style="background:var(--c${s.n});${s.n === 3 ? "box-shadow:inset 0 0 0 2px var(--c3-ink)" : ""}"></i>기호 ${s.n}번</span>`).join("");
-
-drawUnions();
 drawSlates();
 
 $("#theme").addEventListener("click", () => {
