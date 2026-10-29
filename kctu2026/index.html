@@ -134,6 +134,59 @@ img{display:block;max-width:100%}
 .slate[data-n="1"] .bundle li::before{color:#fff}
 .src{position:relative;margin:22px 0 0;font-size:12px;opacity:.7}
 
+/* ---------- 개표 결과 ---------- */
+.results{background:var(--paper);border-bottom:1px solid var(--line);padding:32px 0 36px}
+.res-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.res-kicker{margin:0;font-size:13px;font-weight:900;letter-spacing:.22em;color:var(--muted)}
+.res-title{margin:4px 0 0;font-size:clamp(22px,3.4vw,34px);font-weight:900;letter-spacing:-.02em;line-height:1.25}
+.res-title[data-n]{color:var(--c)}
+:root[data-theme="dark"] .res-title[data-n="3"]{color:var(--c3-hi)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .res-title[data-n="3"]{color:var(--c3-hi)}}
+.results[data-state="won"] .res-title::before{content:"당선 ";display:inline-block;margin-right:8px;padding:2px 10px;border-radius:8px;font-size:.55em;vertical-align:.3em;background:#ffd400;color:#111}
+.res-round{margin-top:22px}
+.res-round h3{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:17px;font-weight:900}
+.res-round h3 span{font-size:12px;font-weight:800;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--muted)}
+.res-round h3 span.live{background:#e3001b;color:#fff;animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{50%{opacity:.55}}
+.res-stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 12px;font-size:13px;color:var(--muted)}
+.res-stats div{display:flex;gap:6px}.res-stats dd{margin:0;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.res-bars{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.res-bars li{display:grid;grid-template-columns:40px minmax(110px,180px) minmax(0,1fr) 88px 78px;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--soft)}
+.res-bars li.picked{box-shadow:inset 0 0 0 2px var(--c)}
+.res-bars .rn{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--c);color:var(--ch);font-size:22px;font-weight:900}
+.res-bars li[data-n="1"] .rn{color:#fff}
+.res-bars .rw{display:grid;line-height:1.3;min-width:0}
+.res-bars .rw b{font-size:16px}
+.res-bars .rw small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rbar{position:relative;height:18px;border-radius:6px;background:var(--paper);overflow:hidden}
+.rbar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--c);transition:width .6s ease}
+.rbar em{position:absolute;left:50%;top:-2px;bottom:-2px;border-left:2px dashed var(--ink);opacity:.45}
+.res-bars .rv{display:grid;text-align:right;line-height:1.25;font-variant-numeric:tabular-nums}
+.res-bars .rv b{font-size:18px}.res-bars .rv small{font-size:12px;color:var(--muted)}
+.tag{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:900;white-space:nowrap}
+.tag.won{background:#ffd400;color:#111}.tag.run{background:var(--c);color:#fff}
+@media (max-width:640px){
+  .res-bars li{grid-template-columns:36px minmax(0,1fr) auto;grid-template-areas:"n w v" "bar bar bar" "tag tag tag";gap:6px 10px}
+  .res-bars .rn{grid-area:n;width:36px;height:36px;font-size:19px}.res-bars .rw{grid-area:w}.res-bars .rv{grid-area:v}.rbar{grid-area:bar}.res-bars .rtag{grid-area:tag}
+  .res-bars .rtag:empty{display:none}
+}
+:root[data-theme="dark"] .res-bars li[data-n="3"] .rbar i{background:var(--c3-hi)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .res-bars li[data-n="3"] .rbar i{background:var(--c3-hi)}}
+.res-note{margin:14px 0 0;font-size:13px;color:var(--muted);line-height:1.7}
+.tool.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.res-dlg{border:1px solid var(--line);border-radius:16px;background:var(--paper);color:var(--ink);padding:22px;width:min(640px,calc(100vw - 24px));max-height:calc(100dvh - 32px)}
+.res-dlg::backdrop{background:rgba(0,0,0,.5)}
+.res-dlg form{display:grid;gap:12px}
+.res-dlg h2{margin:0;font-size:20px}.res-dlg h3{margin:8px 0 0;font-size:15px}
+.rgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+.rf{display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+.rf input{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-variant-numeric:tabular-nums;width:100%}
+.rb{border:0;margin:0;padding:0;display:grid;gap:4px;font-size:14px}.rb legend{font-size:12.5px;color:var(--muted);margin-bottom:4px;padding:0}
+.rcheck{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700}
+.res-help{margin:0;font-size:13px;color:var(--muted)}
+.res-msg{margin:0;font-size:13px;color:#d4342c;min-height:1em}
+.ractions{display:flex;justify-content:flex-end;gap:8px}
+
 /* ---------- 비교 ---------- */
 main.compare{padding:56px 0 24px}
 .compare section+section{margin-top:56px}
@@ -202,6 +255,8 @@ footer.site a{color:inherit}
     <nav class="front" id="front" aria-label="후보조"></nav>
   </div>
 </header>
+
+<section class="results" id="results" data-meiro-sb-wait aria-label="개표 결과"><div class="wrap"><p class="res-kicker">개표 결과</p><p class="res-note">불러오는 중…</p></div></section>
 
 <div id="slates"></div>
 
@@ -326,6 +381,7 @@ const SLATES = [
     ],
   },
 ];
+window.KCTU = { SLATES }; // 개표 결과 화면(results-ui.js)에서 이름·슬로건을 씀
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const $ = (s) => document.querySelector(s);
 const by = (n) => SLATES.find((x) => x.n === n);
@@ -475,6 +531,7 @@ $("#theme").addEventListener("click", () => {
   try { localStorage.setItem("meiro-theme", root.dataset.theme); } catch (e) {}
 });
 </script>
-<script type="module" src="/feedback.js?v=1"></script>
+<script type="module" src="results-ui.js?v=1"></script>
+<script type="module" src="/feedback.js?v=2"></script>
 </body>
 </html>

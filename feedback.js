@@ -30,8 +30,8 @@ const css = `
 
 async function client() {
   if (window.__meiroSb) return window.__meiroSb;
-  // 사이트 앱이 있는 페이지는 그 앱의 연결을 잠깐 기다림 (같은 로그인을 두 번 관리하지 않게)
-  if (document.getElementById("app")) {
+  // 사이트 앱이 있는 페이지(또는 data-meiro-sb-wait 표시가 있는 페이지)는 그 연결을 잠깐 기다림 (같은 로그인을 두 번 관리하지 않게)
+  if (document.getElementById("app") || document.querySelector("[data-meiro-sb-wait]")) {
     const got = await new Promise((res) => {
       const t = setTimeout(() => res(null), 6000);
       addEventListener("meiro-sb", () => { clearTimeout(t); res(window.__meiroSb); }, { once: true });
