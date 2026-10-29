@@ -149,7 +149,7 @@ function editDialog() {
       : '<p class="res-help">1차를 확정했는데 단독 과반이 없으면, 저장 뒤 다시 열었을 때 결선 칸이 생겨요.</p>'}
     <label class="rcheck mock-check"><input type="checkbox" name="mock" ${data.mock ?? mode === "pct" ? "checked" : ""}> 모의 결과로 표시 (페이지에 "모의 개표 · 실제 결과가 아니에요" 띠가 붙어요)</label>
     <p class="res-msg" id="res-msg" role="status"></p>
-    <div class="ractions"><button class="tool" type="button" value="cancel">취소</button><button class="tool primary" type="submit">저장</button></div>
+    <div class="ractions">${data.first || data.runoff ? '<button class="tool danger" type="button" value="wipe">결과 삭제</button>' : ""}<button class="tool" type="button" value="cancel">취소</button><button class="tool primary" type="submit">저장</button></div>
   </form>`;
   document.body.append(dlg);
   const fm = dlg.querySelector("form");
@@ -172,6 +172,18 @@ function editDialog() {
   fm.querySelectorAll("[name=mode]").forEach((x) => x.onchange = () => { fm.dataset.mode = x.value; if (x.value === "pct") fm.mock.checked = true; preview(); });
   preview();
   fm.querySelector("[value=cancel]").onclick = () => dlg.close();
+  // 1차·결선 결과를 모두 지워 개표 전 상태로 (행은 남기고 내용만 비움)
+  const wipe = fm.querySelector("[value=wipe]");
+  if (wipe) wipe.onclick = async () => {
+    if (!confirm("입력한 개표 결과(1차·결선)를 모두 지울까요? 되돌릴 수 없어요.")) return;
+    wipe.disabled = true;
+    const now = new Date().toISOString();
+    const { error } = await sb.from("kctu_election").update({ data: {}, updated_at: now }).eq("id", ROW_ID);
+    if (error) { wipe.disabled = false; msg("삭제하지 못했어요. 관리자 계정으로 로그인했는지 확인해 주세요."); return; }
+    data = {}; updatedAt = now;
+    dlg.close();
+    draw();
+  };
   dlg.addEventListener("close", () => dlg.remove());
   fm.onsubmit = async (e) => {
     e.preventDefault();
