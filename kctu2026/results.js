@@ -63,3 +63,21 @@ export function headline(first, runoff) {
   }
   return { kind: "runoff", text: `과반 후보조 없음 · 기호 ${first.runoff[0]}번과 ${first.runoff[1]}번 결선 진출` };
 }
+
+/**
+ * 퍼센트로 넣은 모의 결과를 표 수로: 투표수 = 선거인 × 투표율, 득표 = 투표수 × 득표율(총 투표수 대비),
+ * 무효표 = 나머지. 득표율 합이 100%를 넘거나 투표율이 0~100%가 아니면 error
+ */
+export function fromPercents({ eligible, turnoutPct, pcts }, ids) {
+  const p = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v));
+  const t = p(turnoutPct);
+  if (!(t > 0 && t <= 100)) return { error: "투표율을 0보다 크고 100 이하로 적어 주세요." };
+  const shares = ids.map((n) => ({ n, v: p(pcts?.[n]) }));
+  if (shares.some((s) => !(s.v >= 0))) return { error: "득표율을 모두 적어 주세요." };
+  const sum = shares.reduce((a, s) => a + s.v, 0);
+  if (sum > 100.0001) return { error: `득표율 합이 ${Math.round(sum * 10) / 10}%로 100%를 넘어요.` };
+  const turnout = Math.round(num(eligible) * t / 100);
+  const votes = Object.fromEntries(shares.map((s) => [s.n, Math.round(turnout * s.v / 100)]));
+  const used = Object.values(votes).reduce((a, v) => a + v, 0);
+  return { turnout, votes, invalid: Math.max(0, turnout - used), invalidPct: Math.max(0, 100 - sum), error: null };
+}

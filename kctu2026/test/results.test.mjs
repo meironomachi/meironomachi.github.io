@@ -52,3 +52,19 @@ test("결선: 많이 얻은 쪽 당선, 동률은 따로 표시", () => {
   assert.equal(headline(f, t).kind, "tie");
   assert.equal(count({ 1: "abc", 2: -5, 3: 12.7 }, [1, 2, 3]).valid, 12); // 이상한 값은 0, 소수는 버림
 });
+
+test("퍼센트로 넣으면 표 수로 바뀜 (모의)", async () => {
+  const { fromPercents } = await import("../results.js");
+  const r = fromPercents({ eligible: 977175, turnoutPct: 70, pcts: { 1: 30, 2: 40, 3: 12, 4: 15 } }, [1, 2, 3, 4]);
+  assert.equal(r.error, null);
+  assert.equal(r.turnout, 684023); // 977,175 × 70% (반올림)
+  assert.equal(r.votes[2], Math.round(684023 * 0.4));
+  assert.equal(r.invalid, 684023 - Object.values(r.votes).reduce((a, v) => a + v, 0)); // 3%
+  assert.equal(Math.round(r.invalidPct), 3);
+  // 1차 판정: 40%는 총 투표수 과반이 아님 → 1·2위 결선
+  const f = judgeFirst({ first: { votes: r.votes, turnout: r.turnout, invalid: r.invalid, final: true } });
+  assert.deepEqual(f.runoff, [1, 2]);
+  assert.match(fromPercents({ eligible: 100, turnoutPct: 50, pcts: { 1: 60, 2: 50 } }, [1, 2]).error, /100%를 넘어요/);
+  assert.match(fromPercents({ eligible: 100, turnoutPct: 0, pcts: { 1: 60 } }, [1]).error, /투표율/);
+  assert.match(fromPercents({ eligible: 100, turnoutPct: 50, pcts: { 1: 60 } }, [1, 2]).error, /모두/);
+});

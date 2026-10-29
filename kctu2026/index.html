@@ -186,6 +186,14 @@ img{display:block;max-width:100%}
 .res-help{margin:0;font-size:13px;color:var(--muted)}
 .res-msg{margin:0;font-size:13px;color:#d4342c;min-height:1em}
 .ractions{display:flex;justify-content:flex-end;gap:8px}
+.res-dlg form[data-mode="votes"] .m-pct,.res-dlg form[data-mode="pct"] .m-votes{display:none}
+.m-votes,.m-pct{display:grid;gap:8px}
+.rb-row{display:flex;flex-wrap:wrap;gap:6px 16px}.rb-row legend{width:100%}
+.pv{padding:8px 10px;border-radius:8px;background:var(--soft);color:var(--ink);font-variant-numeric:tabular-nums}
+.pv.bad{color:#d4342c}
+.mock-check{padding-top:8px;border-top:1px solid var(--line)}
+.mock-band{margin:0 0 14px;padding:8px 14px;border-radius:10px;background:repeating-linear-gradient(-45deg,#ffd400 0 14px,#ffe45c 14px 28px);color:#111;font-weight:900;letter-spacing:.06em;text-align:center}
+.results[data-mock="1"] .res-bars{opacity:.92}
 
 /* ---------- 비교 ---------- */
 main.compare{padding:56px 0 24px}
@@ -531,7 +539,7 @@ $("#theme").addEventListener("click", () => {
   try { localStorage.setItem("meiro-theme", root.dataset.theme); } catch (e) {}
 });
 </script>
-<script type="module" src="results-ui.js?v=1"></script>
+<script type="module" src="results-ui.js?v=3"></script>
 <script type="module" src="/feedback.js?v=2"></script>
 </body>
 </html>
