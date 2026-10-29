@@ -21,8 +21,8 @@ test("정확히 절반은 과반이 아님 → 1·2위 결선", () => {
   assert.equal(headline(f).text, "과반 후보조 없음 · 기호 1번과 2번 결선 진출");
 });
 
-test("투표수 기준이면 무효표까지 분모에 들어감", () => {
-  const d = { basis: "turnout", first: { votes: { 1: 260, 2: 140, 3: 50, 4: 50 }, invalid: 30, final: true } };
+test("기본은 총 투표수 기준: 무효표까지 분모에 들어감", () => {
+  const d = { first: { votes: { 1: 260, 2: 140, 3: 50, 4: 50 }, invalid: 30, final: true } };
   const f = judgeFirst(d);
   assert.equal(f.base, 530);
   assert.equal(f.winner, null); // 260 / 530 < 50%

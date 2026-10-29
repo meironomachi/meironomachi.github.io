@@ -1,10 +1,11 @@
 // 개표 결과 화면: 누구나 보고, 관리자로 로그인했으면 직접 입력. 1분마다 새로 불러옴
-import { judgeFirst, judgeRunoff, headline } from "./results.js?v=2";
+import { judgeFirst, judgeRunoff, headline } from "./results.js?v=3";
 
 const SUPABASE_URL = "https://eonixnwmqpiktmcaeznf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvbml4bndtcXBpa3RtY2Flem5mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3MjU3OTMsImV4cCI6MjEwODMwMTc5M30.2N_5RvUGwQUrBYEwq2EvuAoYTqa8faA9bWf2ZdDmB2U";
 const ROW_ID = "2026";
 const IDS = [1, 2, 3, 4];
+const ELIGIBLE = 977175; // 선거인수 (입력 창에서 다른 값을 적으면 그 값을 씀)
 
 const box = document.getElementById("results");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -43,20 +44,23 @@ async function checkAdmin(session) {
 
 /* ---------- 그리기 ---------- */
 function bars(result, { badge }) {
+  // 막대는 유효표 대비 비율이라, 총 투표수 기준이면 과반선이 50%보다 오른쪽에 옴
+  const line = result.valid ? Math.min(100, (result.base / 2 / result.valid) * 100) : 50;
   return `<ol class="res-bars">${result.rows.map((r, i) => {
     const s = slate(r.n);
     const tag = badge(r.n, i);
     return `<li data-n="${r.n}" class="${tag ? "picked" : ""}">
       <span class="rn">${r.n}</span>
       <span class="rw"><b>${esc(s?.people[0][0] ?? "")}</b><small>${esc(s?.slogan ?? "")}</small></span>
-      <span class="rbar" aria-hidden="true"><i style="width:${Math.min(100, r.pct)}%"></i><em title="과반선"></em></span>
-      <span class="rv"><b>${pct(r.pct)}</b><small>${n0(r.votes)}표</small></span>
+      <span class="rbar" aria-hidden="true"><i style="width:${Math.min(100, r.pct)}%"></i><em title="과반선" style="left:${line}%"></em></span>
+      <span class="rv" title="과반 기준 대비 ${pct(r.basePct)}"><b>${pct(r.pct)}</b><small>${n0(r.votes)}표</small></span>
       <span class="rtag">${tag ? `<span class="tag ${tag.cls}">${tag.text}</span>` : ""}</span>
     </li>`;
   }).join("")}</ol>`;
 }
 
 function stats(round, valid) {
+  round = { ...round, eligible: round.eligible || ELIGIBLE };
   const items = [
     round.eligible ? ["선거인", `${n0(round.eligible)}명`] : null,
     round.turnout ? ["투표", `${n0(round.turnout)}명${round.eligible ? ` · 투표율 ${pct(round.turnout / round.eligible * 100)}` : ""}`] : null,
@@ -72,7 +76,7 @@ function draw() {
   const pair = first.final && first.runoff && !first.tie ? first.runoff : null;
   const runoff = pair ? judgeRunoff(data, pair) : null;
   const head = headline(first, runoff);
-  const basisText = data.basis === "turnout" ? "투표수" : "유효투표";
+  const basisText = data.basis === "valid" ? "유효투표" : "총 투표수(무효표 포함)";
   box.dataset.state = head.kind;
   box.innerHTML = `<div class="wrap">
     <div class="res-head">
@@ -91,7 +95,7 @@ function draw() {
         ${bars(first, { badge: (n) => first.final ? (first.winner === n ? { cls: "won", text: "당선" } : first.runoff?.includes(n) && !first.tie ? { cls: "run", text: "결선 진출" } : null) : null })}
       </section>
       <p class="res-note">과반 기준: ${basisText}의 절반 초과 (막대의 점선). 단독 과반 후보조가 없으면 1·2위 후보조가 결선에 올라가요. 결과는 공식 발표를 옮겨 적은 것으로, 정확한 결과는 선거관리위원회 공고를 확인해 주세요.${updatedAt && first.started ? ` · ${stamp(updatedAt)} 기준` : ""}</p>`
-      : `<p class="res-note">개표가 시작되면 후보조별 득표와 당선·결선 여부를 여기에 보여 드려요. 단독 과반 후보조가 없으면 1·2위 후보조가 결선에 올라가요.</p>`}
+      : `<dl class="res-stats" style="margin-top:12px"><div><dt>선거인</dt><dd>${n0(ELIGIBLE)}명</dd></div></dl><p class="res-note">개표가 시작되면 후보조별 득표와 당선·결선 여부를 여기에 보여 드려요. 단독 과반 후보조가 없으면 1·2위 후보조가 결선에 올라가요.</p>`}
   </div>`;
   document.getElementById("res-edit")?.addEventListener("click", editDialog);
 }
@@ -107,16 +111,16 @@ function editDialog() {
   dlg.innerHTML = `<form method="dialog">
     <h2>개표 결과 입력</h2>
     <fieldset class="rb"><legend>과반 기준</legend>
-      <label><input type="radio" name="basis" value="valid" ${data.basis !== "turnout" ? "checked" : ""}> 유효투표의 절반 초과</label>
-      <label><input type="radio" name="basis" value="turnout" ${data.basis === "turnout" ? "checked" : ""}> 투표수(무효표 포함)의 절반 초과</label>
+      <label><input type="radio" name="basis" value="turnout" ${data.basis !== "valid" ? "checked" : ""}> 총 투표수(무효표 포함)의 절반 초과 (기본)</label>
+      <label><input type="radio" name="basis" value="valid" ${data.basis === "valid" ? "checked" : ""}> 유효투표의 절반 초과</label>
     </fieldset>
     <h3>1차 투표</h3>
     <div class="rgrid">${IDS.map((n) => field(`f${n}`, `기호 ${n}번 ${esc(slate(n)?.people[0][0] ?? "")}`, f.votes?.[n])).join("")}</div>
-    <div class="rgrid">${field("fe", "선거인수 (선택)", f.eligible)}${field("ft", "투표수 (선택)", f.turnout)}${field("fi", "무효표 (선택)", f.invalid)}${field("fc", "개표율 % (선택)", f.counted, 'inputmode="decimal"')}</div>
+    <div class="rgrid">${field("fe", "선거인수", f.eligible ?? ELIGIBLE)}${field("ft", "총 투표수 (비우면 유효+무효)", f.turnout)}${field("fi", "무효표 (선택)", f.invalid)}${field("fc", "개표율 % (선택)", f.counted, 'inputmode="decimal"')}</div>
     <label class="rcheck"><input type="checkbox" name="ff" ${f.final ? "checked" : ""}> 1차 개표 확정 (확정해야 당선·결선이 정해져요)</label>
     ${pair ? `<h3>결선 투표 · 기호 ${pair[0]}번 vs ${pair[1]}번</h3>
       <div class="rgrid">${pair.map((n) => field(`r${n}`, `기호 ${n}번 ${esc(slate(n)?.people[0][0] ?? "")}`, r.votes?.[n])).join("")}</div>
-      <div class="rgrid">${field("rt", "투표수 (선택)", r.turnout)}${field("ri", "무효표 (선택)", r.invalid)}${field("rc", "개표율 % (선택)", r.counted, 'inputmode="decimal"')}</div>
+      <div class="rgrid">${field("rt", "총 투표수 (비우면 유효+무효)", r.turnout)}${field("ri", "무효표 (선택)", r.invalid)}${field("rc", "개표율 % (선택)", r.counted, 'inputmode="decimal"')}</div>
       <label class="rcheck"><input type="checkbox" name="rf" ${r.final ? "checked" : ""}> 결선 개표 확정</label>`
       : '<p class="res-help">1차를 확정했는데 단독 과반이 없으면, 저장 뒤 다시 열었을 때 결선 칸이 생겨요.</p>'}
     <p class="res-msg" id="res-msg" role="status"></p>

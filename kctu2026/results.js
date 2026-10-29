@@ -1,14 +1,14 @@
-// 개표 결과 판정: 단독 과반이면 당선, 아니면 1·2위 결선. 결선은 많이 얻은 쪽이 당선
+// 개표 결과 판정: 총 투표수(무효표 포함)의 단독 과반이면 당선, 아니면 1·2위 결선. 결선은 많이 얻은 쪽이 당선
 // data = { basis: "valid"|"turnout", first: { votes: {1..4}, eligible, turnout, invalid, counted, final }, runoff: { votes: {n: 표}, final } }
 
 const num = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : 0);
 
 /** 한 차례(1차 또는 결선) 집계: 득표 많은 순, 비율, 과반 기준 */
-export function count(votes, ids, { basis = "valid", turnout = 0, invalid = 0 } = {}) {
+export function count(votes, ids, { basis = "turnout", turnout = 0, invalid = 0 } = {}) {
   const rows = ids.map((n) => ({ n, votes: num(votes?.[n]) }));
   const valid = rows.reduce((t, r) => t + r.votes, 0);
   // 투표수 기준: 적어 둔 투표수가 있으면 그것, 없으면 유효표 + 무효표
-  const base = basis === "turnout" ? Math.max(num(turnout), valid + num(invalid)) : valid;
+  const base = basis === "valid" ? valid : Math.max(num(turnout), valid + num(invalid));
   for (const r of rows) {
     r.pct = valid ? (r.votes / valid) * 100 : 0; // 막대는 유효표 대비
     r.basePct = base ? (r.votes / base) * 100 : 0; // 과반 판단은 기준 대비
