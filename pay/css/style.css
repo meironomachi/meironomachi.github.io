@@ -254,7 +254,7 @@ label.field .input { color: var(--fg); }
 .big-cal { padding: 16px; }
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .cal-head h2 { font-size: 22px; min-width: 150px; text-align: center; }
-.cal-head .today-btn { margin-left: auto; }
+.cal-head .head-tools { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-grid .dow { text-align: center; font-size: 12px; font-weight: 700; color: var(--muted-fg); padding: 4px 0; }
 .cal-grid .sun { color: #e03131; }
@@ -375,3 +375,16 @@ dialog.day-dlg { width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh 
 /* 직접 적은 달 */
 .manual-btn { width: 100%; margin-top: 14px; }
 .manual-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 0 10px; font-size: 13px; color: var(--accent-fg); }
+
+/* 반복 근무 */
+.bulk-form { margin-top: 0; padding-top: 0; border-top: 0; }
+.bulk-form h2 { margin-bottom: 0; }
+.bulk-rows { display: grid; gap: 8px; }
+.bulk-row { display: grid; grid-template-columns: 1.1fr 1fr 1fr 80px 32px; gap: 6px; align-items: end; }
+.bulk-row .del-row { height: 38px; padding: 0; font-size: 18px; }
+@media (max-width: 520px) {
+  .bulk-row { grid-template-columns: 1fr 1fr 32px; }
+  .bulk-row label:nth-child(1) { grid-column: 1 / 3; }
+  .bulk-row label:nth-child(4) { grid-column: 1 / 3; }
+  .bulk-row .del-row { grid-column: 3; grid-row: 1; }
+}

@@ -136,3 +136,15 @@ test("직접 적은 달 급여: 계산 대신 쓰고, 세후를 비우면 세금
   // 기록도 직접 적은 것도 없는 달은 비어 있음
   assert.equal(monthSummary(shifts, [cafe, pub], "2026-07", manual).byPlace.length, 0);
 });
+
+test("반복 근무: 매주 일 12~20, 수 17~22:30, 이미 있는 날은 건너뜀", async () => {
+  const { weeklyPlan } = await import("../js/pay.js");
+  const rows = [{ dow: 0, start_time: "12:00", end_time: "20:00", break_min: 0 }, { dow: 3, start_time: "17:00", end_time: "22:30", break_min: 0 }];
+  const existing = [{ place_id: "c", work_date: "2026-11-04", start_time: "17:00" }, { place_id: "x", work_date: "2026-11-01", start_time: "12:00" }];
+  const { add, skipped } = weeklyPlan(rows, "2026-11-01", "2026-11-30", existing, "c");
+  // 11월 일요일 5번(1,8,15,22,29) + 수요일 4번(4,11,18,25) 중 4일은 이미 있음
+  assert.deepEqual(add.map((s) => s.work_date), ["2026-11-01", "2026-11-08", "2026-11-11", "2026-11-15", "2026-11-18", "2026-11-22", "2026-11-25", "2026-11-29"]);
+  assert.deepEqual(skipped, ["2026-11-04"]);
+  assert.deepEqual([add[1].start_time, add[1].end_time, add[2].end_time], ["12:00", "20:00", "22:30"]);
+  assert.equal(weeklyPlan(rows, "2026-11-30", "2026-11-01", [], "c").add.length, 0); // 거꾸로 된 기간
+});

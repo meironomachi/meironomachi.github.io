@@ -1,8 +1,8 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610261655";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610290727";
 import {
   MIN_WAGE_2026, RATES, TAX_TYPES, DAILY_TAX_TYPES, taxName, taxTypesOf, isDaily, NO_TIME, hasTime, won, hoursText, hoursShort, isDay, isMonth, shiftMonth, monthCells, dow,
-  shiftPay, monthSummary, compare, dayTotals,
-} from "./pay.js?v=202610261655";
+  shiftPay, monthSummary, compare, dayTotals, weeklyPlan, addDays,
+} from "./pay.js?v=202610290727";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -154,7 +154,8 @@ function renderCalendar(params) {
         <a class="btn ghost sm" href="#/?month=${shiftMonth(month, -1)}" aria-label="이전 달">${icon("left")}</a>
         <h2>${monthName(month)}</h2>
         <a class="btn ghost sm" href="#/?month=${shiftMonth(month, 1)}" aria-label="다음 달">${icon("right")}</a>
-        ${month !== today.slice(0, 7) ? `<a class="btn outline sm today-btn" href="#/">이번 달</a>` : ""}
+        <span class="head-tools">${month !== today.slice(0, 7) ? `<a class="btn outline sm" href="#/">이번 달</a>` : ""}
+          <button class="btn primary sm" type="button" id="bulk-btn">반복 근무 추가</button></span>
       </div>
       <div class="cal-grid">${DOW.map((d, i) => `<span class="dow ${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${d}</span>`).join("")}
         ${monthCells(month).map((d) => {
@@ -173,6 +174,7 @@ function renderCalendar(params) {
   </div>`);
   bindShell();
   $$("[data-day]").forEach((b) => b.onclick = () => dayDialog(b.dataset.day));
+  $("#bulk-btn").onclick = () => bulkDialog(month);
   drawSummary(month);
 }
 
@@ -388,6 +390,87 @@ function dayDialog(day, editId = null) {
   dlg.showModal();
 }
 const toMinEnd = (s) => s.end_time <= s.start_time;
+
+/* ---------- 반복 근무 한 번에 넣기 (예: 매주 일 12~20시, 수 17~22:30) ---------- */
+const PATTERN_KEY = (placeId) => `meiropay-pattern:${placeId}`;
+function loadPattern(placeId) {
+  try {
+    const v = JSON.parse(localStorage.getItem(PATTERN_KEY(placeId)) ?? "null");
+    if (Array.isArray(v) && v.length) return v;
+  } catch { /* 기억해 둔 패턴은 선택 사항 */ }
+  return [{ dow: 1, start_time: "09:00", end_time: "18:00", break_min: 0 }];
+}
+function bulkDialog(month) {
+  const lastDay = addDays(`${shiftMonth(month, 1)}-01`, -1);
+  const today = kstToday();
+  let placeId = (placeOf(state.shifts.at(-1)?.place_id) ?? state.places[0]).id;
+  let rows = loadPattern(placeId);
+  let from = today.slice(0, 7) === month ? today : `${month}-01`, to = lastDay;
+  const dlg = document.createElement("dialog");
+  dlg.className = "day-dlg";
+  document.body.append(dlg);
+  const draw = () => {
+    const p = placeOf(placeId);
+    dlg.innerHTML = `<form method="dialog" class="shift-form bulk-form">
+      <h2>반복 근무 추가</h2>
+      <p class="muted small" style="margin:-6px 0 0">요일마다 시간을 정하면 고른 기간에 한 번에 넣어요. 이미 같은 날·같은 시작 시각 근무가 있으면 건너뛰어요.</p>
+      <div class="place-pick" role="radiogroup" aria-label="일하는 곳">${state.places.map((x) => `<label style="--c:${x.color}"><input type="radio" name="place" value="${x.id}" ${x.id === placeId ? "checked" : ""}><span><i></i>${esc(x.name)}</span></label>`).join("")}</div>
+      <div class="bulk-rows">${rows.map((r, i) => `<div class="bulk-row" data-i="${i}">
+        <label class="field">요일<select class="input" name="dow">${DOW.map((d, k) => `<option value="${k}" ${Number(r.dow) === k ? "selected" : ""}>${d}요일</option>`).join("")}</select></label>
+        <label class="field">시작<input class="input" type="time" name="start" required value="${r.start_time}"></label>
+        <label class="field">끝<input class="input" type="time" name="end" required value="${r.end_time}"></label>
+        <label class="field">휴게(분)<input class="input" type="number" name="brk" min="0" max="600" step="5" inputmode="numeric" value="${r.break_min ?? 0}"></label>
+        <button class="btn ghost sm danger del-row" type="button" aria-label="이 요일 빼기" ${rows.length < 2 ? "disabled" : ""}>×</button>
+      </div>`).join("")}</div>
+      <button class="btn outline sm" type="button" id="add-row" style="justify-self:start">+ 요일 추가</button>
+      <div class="time-row two">
+        <label class="field">시작 날짜<input class="input" type="date" name="from" required value="${from}"></label>
+        <label class="field">끝 날짜<input class="input" type="date" name="to" required value="${to}"></label>
+      </div>
+      <p class="preview" id="bulk-preview"></p>
+      <div class="actions"><button class="btn ghost" type="button" value="cancel">취소</button><button class="btn primary" type="submit" id="bulk-save">추가</button></div>
+    </form>`;
+    const f = $("form", dlg);
+    const read = () => {
+      rows = $$(".bulk-row", f).map((el) => ({ dow: Number($('[name="dow"]', el).value), start_time: $('[name="start"]', el).value, end_time: $('[name="end"]', el).value, break_min: Math.max(0, Number($('[name="brk"]', el).value) || 0) }));
+      from = f.from.value; to = f.to.value;
+    };
+    const preview = () => {
+      read();
+      const bad = rows.some((r) => !r.start_time || !r.end_time || r.start_time === r.end_time);
+      const plan = weeklyPlan(rows, from, to, state.shifts, placeId);
+      const total = plan.add.reduce((t, s) => t + shiftPay({ ...s, wage: null }, p).total, 0);
+      const days = plan.add.map((s) => `${Number(s.work_date.slice(5, 7))}.${Number(s.work_date.slice(8))}(${DOW[dow(s.work_date)]})`);
+      $("#bulk-preview", dlg).innerHTML = bad ? "시작과 끝 시각을 확인해 주세요."
+        : from > to ? "끝 날짜가 시작 날짜보다 앞이에요."
+        : `<b>${plan.add.length}번</b> 추가돼요 · 세전 약 ${won(total)} <span class="muted">(주휴수당 빼고)</span>${plan.skipped.length ? ` <span class="muted">(이미 있는 ${plan.skipped.length}번은 건너뜀)</span>` : ""}${days.length ? `<br><span class="muted small">${days.join(", ")}</span>` : ""}`;
+      $("#bulk-save", dlg).disabled = bad || !plan.add.length;
+    };
+    $$('input[name="place"]', f).forEach((r) => r.onchange = () => { read(); placeId = r.value; rows = loadPattern(placeId); draw(); });
+    $$(".del-row", f).forEach((b) => b.onclick = () => { read(); rows.splice(Number(b.closest(".bulk-row").dataset.i), 1); draw(); });
+    $("#add-row", f).onclick = () => { read(); const last = rows.at(-1); rows.push({ ...last, dow: (Number(last.dow) + 1) % 7 }); draw(); };
+    f.addEventListener("input", preview);
+    $("button[value=cancel]", f).onclick = () => dlg.close();
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      preview();
+      const plan = weeklyPlan(rows, from, to, state.shifts, placeId);
+      if (!plan.add.length) return;
+      $("#bulk-save", dlg).disabled = true;
+      const { error } = await sb.from("pay_shifts").insert(plan.add.map((s) => ({ ...s, wage: null, memo: "" })));
+      if (error) { $("#bulk-save", dlg).disabled = false; toast("추가하지 못했어요.", "error"); return; }
+      try { localStorage.setItem(PATTERN_KEY(placeId), JSON.stringify(rows)); } catch { /* 기억은 선택 사항 */ }
+      await loadAll();
+      dlg.close();
+      toast(`근무 ${plan.add.length}번을 추가했어요`);
+      renderCalendar(parseHash().params);
+    };
+    preview();
+  };
+  dlg.addEventListener("close", () => dlg.remove());
+  draw();
+  dlg.showModal();
+}
 /** 날짜 창의 시작·끝 기본값: 고치는 근무 → 그 곳의 지난번 근무 → 시급이면 기본값, 일당이면 비움 */
 function timeOf(e, key, place, fallback) {
   const pick = (s) => (s && hasTime(s) ? s[key] : "");

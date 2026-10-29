@@ -243,3 +243,23 @@ export function dayTotals(shifts, places) {
   }
   return out;
 }
+
+/* ---------- 반복 근무 한 번에 넣기 ---------- */
+/**
+ * 요일별 패턴(rows: { dow 0=일~6=토, start_time, end_time, break_min })으로 from~to 사이 근무를 만듦.
+ * 같은 곳·같은 날·같은 시작 시각 근무가 이미 있으면 건너뜀.
+ */
+export function weeklyPlan(rows, from, to, existing, placeId) {
+  const add = [], skipped = [];
+  if (!isDay(from) || !isDay(to) || from > to) return { add, skipped };
+  const has = new Set(existing.filter((s) => s.place_id === placeId).map((s) => `${s.work_date}|${s.start_time}`));
+  for (let d = from, guard = 0; d <= to && guard < 400; d = addDays(d, 1), guard++) {
+    for (const r of rows.filter((x) => Number(x.dow) === dow(d))) {
+      const key = `${d}|${r.start_time}`;
+      if (has.has(key)) { skipped.push(d); continue; }
+      has.add(key);
+      add.push({ place_id: placeId, work_date: d, start_time: r.start_time, end_time: r.end_time, break_min: Number(r.break_min) || 0 });
+    }
+  }
+  return { add, skipped };
+}

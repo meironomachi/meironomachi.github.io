@@ -26,7 +26,7 @@ class Query {
   select() { return this; }
   eq(k, v) { this.f.push([k, v]); return this; }
   order(k) { this.sorts.push(k); return this; }
-  insert(r) { this.op = "insert"; this.rows = [r]; return this; }
+  insert(r) { this.op = "insert"; this.rows = Array.isArray(r) ? r : [r]; return this; }
   update(p) { this.op = "update"; this.patch = p; return this; }
   delete() { this.op = "delete"; return this; }
   maybeSingle() { this.one = true; return this; }
