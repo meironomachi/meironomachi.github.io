@@ -92,6 +92,8 @@ export function parseBankRows(rows) {
     const i = header.findIndex((h, j) => re.test(h) && !Object.values(col).includes(j));
     if (i >= 0) col[key] = i;
   }
+  // 하나은행처럼 '내용' 칸 없이 '적요'에 거래 상대가 적히는 파일: 적요를 거래 상대로
+  if (col.place === undefined && col.txType !== undefined && /적요/.test(header[col.txType])) { col.place = col.txType; delete col.txType; }
   const items = [];
   for (const r of rows.slice(headerIdx + 1)) {
     const at = parseKstDateTime(col.time !== undefined ? `${clean(r[col.date])} ${clean(r[col.time])}` : clean(r[col.date]));
