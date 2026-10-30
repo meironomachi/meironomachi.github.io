@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301444";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301649";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610301444";
+} from "./money.js?v=202610301649";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -60,7 +60,18 @@ const go = (hash, replace = false) => {
   if (replace) history.replaceState(null, "", hash); else history.pushState(null, "", hash);
   route();
 };
-const rerender = () => route();
+// 저장·삭제 뒤 같은 화면을 다시 그릴 때: 검색·필터 값과 스크롤 위치를 그대로 둠
+const KEEP_INPUTS = ["q", "f-acc", "f-cat", "f-kind"];
+const rerender = async () => {
+  const y = window.scrollY;
+  const kept = KEEP_INPUTS.map((id) => [id, document.getElementById(id)?.value]).filter(([, v]) => v !== undefined);
+  await route();
+  for (const [id, v] of kept) {
+    const el = document.getElementById(id);
+    if (el && el.value !== v) { el.value = v; el.dispatchEvent(new Event("input")); }
+  }
+  window.scrollTo(0, y);
+};
 
 /* ---------- 테마 ---------- */
 const themeButton = (extra = "") => `<button class="btn ghost sm theme-btn ${extra}" type="button" data-act="theme" aria-label="라이트/다크 모드 바꾸기" title="라이트/다크 모드 바꾸기"><span class="moon">${icon("moon")}</span><span class="sun">${icon("sun")}</span></button>`;
@@ -722,7 +733,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202610301444");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202610301649");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
