@@ -79,21 +79,35 @@ const H = {
   memo: /^(메모|비고)$/,
 };
 const DIR_ONLY = /^(입금|출금|지급|입|출)$/;
+// 거래 종류로 쓰이는 말 (적요가 거래 종류인지 거래 상대인지 가를 때)
+const TYPE_WORD = /^(체크카드|신용카드|카드|대체|이체|자동이체|타행이체|당행이체|타행입금|당행입금|입금|출금|지급|ATM|CD|현금|급여|이자|결제|환불|취소|오픈뱅킹|인터넷|인터넷뱅킹|모바일|모바일뱅킹|스마트폰|폰뱅킹|펌뱅킹|CMS|송금|간편결제|.{0,6}(이체|입금|출금|결제|송금|뱅킹|카드))(\(.*\))?$/i;
 const OUT_WORD = /출금|지급|^출$/, IN_WORD = /입금|^입$/;
 const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
 /** 시트의 행들(글자 배열) → 거래 목록 [{occurred_at, amount, balance_after, tx_type, place, memo}] */
 export function parseBankRows(rows) {
-  const headerIdx = rows.findIndex((r) => r.some((c) => H.date.test(clean(c))) && r.some((c) => H.amount.test(clean(c)) || H.out.test(clean(c))));
+  // 칸 이름은 띄어쓰기를 빼고 비교 ("적 요", "거 래 일 시" 같은 제목도 있음)
+  const tight = (c) => clean(c).replace(/\s+/g, "");
+  const headerIdx = rows.findIndex((r) => r.some((c) => H.date.test(tight(c))) && r.some((c) => H.amount.test(tight(c)) || H.out.test(tight(c))));
   if (headerIdx < 0) return { error: "거래일시와 금액 칸을 찾지 못했어요. 은행에서 받은 거래내역 파일인지 확인해 주세요.", items: [] };
-  const header = rows[headerIdx].map(clean);
+  const header = rows[headerIdx].map(tight);
   const col = {};
   for (const [key, re] of Object.entries(H)) {
     const i = header.findIndex((h, j) => re.test(h) && !Object.values(col).includes(j));
     if (i >= 0) col[key] = i;
   }
-  // 하나은행처럼 '내용' 칸 없이 '적요'에 거래 상대가 적히는 파일: 적요를 거래 상대로
-  if (col.place === undefined && col.txType !== undefined && /적요/.test(header[col.txType])) { col.place = col.txType; delete col.txType; }
+  // 적요: 은행마다 뜻이 다름. 카카오뱅크 등은 '체크카드·이체' 같은 거래 종류, 하나은행은 거래 상대 이름.
+  // 적요 칸 값이 대부분 거래 종류 말이 아니면 거래 상대로 보고, 원래 거래 상대 칸은 메모로 돌림
+  const memoIdx = header.findIndex((h) => h === "적요");
+  if (memoIdx >= 0) {
+    const vals = rows.slice(headerIdx + 1).map((r) => clean(r[memoIdx])).filter(Boolean);
+    const typeLike = vals.filter((v) => TYPE_WORD.test(v)).length;
+    if (vals.length && typeLike / vals.length < 0.5) {
+      if (col.txType === memoIdx) delete col.txType;
+      if (col.place !== undefined && col.place !== memoIdx && col.memo === undefined) col.memo = col.place;
+      col.place = memoIdx;
+    } else if (col.place === undefined && col.txType === undefined) col.txType = memoIdx;
+  }
   const items = [];
   for (const r of rows.slice(headerIdx + 1)) {
     const at = parseKstDateTime(col.time !== undefined ? `${clean(r[col.date])} ${clean(r[col.time])}` : clean(r[col.date]));
@@ -204,7 +218,8 @@ export function parsePastedHistory(text) {
 // PDF에는 표가 없고 글자 조각과 위치만 있음. 줄(lines: [{page, y, h, cells: [{x0, x1, text}]}], 위→아래)을 받아
 // 제목 줄의 칸 위치에 맞춰 칸을 나눔. 날짜 칸이 비어 있는 줄(두 줄로 쓴 시각·내용)은 바로 위 거래에 이어 붙임
 export function alignPdfRows(lines) {
-  const isHead = (l) => l.cells.some((c) => H.date.test(clean(c.text))) && l.cells.some((c) => H.amount.test(clean(c.text)) || H.out.test(clean(c.text)));
+  const t = (x) => clean(x).replace(/\s+/g, "");
+  const isHead = (l) => l.cells.some((c) => H.date.test(t(c.text))) && l.cells.some((c) => H.amount.test(t(c.text)) || H.out.test(t(c.text)));
   const hi = lines.findIndex(isHead);
   if (hi < 0) return null;
   const names = lines[hi].cells.slice().sort((a, b) => a.x0 - b.x0).map((c) => clean(c.text));
@@ -222,8 +237,8 @@ export function alignPdfRows(lines) {
     for (let i = 1; i < centers.length; i++) if (Math.abs(centers[i] - m) < Math.abs(centers[best] - m)) best = i;
     return best;
   };
-  const dateCol = names.findIndex((n) => H.date.test(n));
-  const numCols = new Set(names.map((n, i) => (H.amount.test(n) || H.out.test(n) || H.in.test(n) || H.balance.test(n) ? i : -1)).filter((i) => i >= 0));
+  const dateCol = names.findIndex((n) => H.date.test(t(n)));
+  const numCols = new Set(names.map((n, i) => (H.amount.test(t(n)) || H.out.test(t(n)) || H.in.test(t(n)) || H.balance.test(t(n)) ? i : -1)).filter((i) => i >= 0));
   const rows = [names];
   let prev = null; // 마지막 거래 줄 {cells, line}
   for (const l of lines.slice(hi + 1)) {

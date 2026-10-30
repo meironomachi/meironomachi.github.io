@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301441";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301444";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610301441";
+} from "./money.js?v=202610301444";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -722,7 +722,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202610301441");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202610301444");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
@@ -935,13 +935,20 @@ async function previewImport(box, accountId, items) {
   const { data } = await sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to);
   const existing = data ?? [];
   const keys = new Set(existing.map((t) => t.import_key).filter(Boolean));
+  const byKey = new Map(existing.filter((t) => t.import_key).map((t) => [t.import_key, t]));
+  const fixes = []; // 이미 있는 내역인데 이번 파일에서 거래 상대·거래구분을 다르게(더 바르게) 읽은 것
   const manuals = existing.filter((t) => t.source === "manual" && !t.pair_id);
   const taken = new Set();
   const fresh = [], merges = [];
   let dup = 0;
   for (const it of items) {
     const key = importKey(accountId, it);
-    if (keys.has(key)) { dup++; continue; }
+    if (keys.has(key)) {
+      dup++;
+      const old = byKey.get(key);
+      if (old && it.place && (old.place !== it.place || old.tx_type !== it.tx_type)) fixes.push({ id: old.id, place: it.place, tx_type: it.tx_type });
+      continue;
+    }
     keys.add(key);
     const t = { ...it, account_id: accountId, import_key: key, source: "import" };
     const m = findManualMatch(t, manuals, taken);
@@ -966,6 +973,7 @@ async function previewImport(box, accountId, items) {
       <li><b>${fresh.length}</b>새 내역</li>
       <li><b>${merges.length}</b>직접 넣은 것과 합침</li>
       <li><b>${dup}</b>이미 있음 (건너뜀)</li>
+      ${fixes.length ? `<li><b>${fixes.length}</b>이미 있는 내역의 거래 상대 고침</li>` : ""}
       <li><b>${cancels.length}</b>결제 취소 짝</li>
       <li><b>${transfers.length}</b>내 계좌 이체</li>
     </ul>
@@ -974,7 +982,8 @@ async function previewImport(box, accountId, items) {
         <td>${tag(t)}${t.kind === "expense" || t.kind === "income" ? esc(catOf(t.category_id)?.name ?? "분류 없음") : ""}</td><td class="r ${t.kind}">${signedWon(t.amount)}</td></tr>`).join("")}
     </tbody></table></div>${show.length > 80 ? `<p class="muted small">외 ${show.length - 80}건</p>` : ""}` : ""}
     <p class="muted small">분류 없는 내역은 저장한 뒤 내역 화면에서 한 번 분류해 두면, 다음부터 같은 곳은 자동으로 분류돼요.</p>
-    <div class="actions"><button class="btn primary" type="button" id="i-save" ${fresh.length + merges.length ? "" : "disabled"}>${fresh.length + merges.length ? `${fresh.length + merges.length}건 저장` : "새로 저장할 내역이 없어요"}</button></div>
+    ${fixes.length ? `<p class="muted small">이미 있는 내역 ${fixes.length}건은 거래 상대를 이번에 읽은 대로 고쳐요. (예: ${esc(fixes.slice(0, 3).map((f) => f.place).join(", "))})</p>` : ""}
+    <div class="actions"><button class="btn primary" type="button" id="i-save" ${fresh.length + merges.length + fixes.length ? "" : "disabled"}>${[fresh.length + merges.length ? `${fresh.length + merges.length}건 저장` : "", fixes.length ? `${fixes.length}건 고치기` : ""].filter(Boolean).join(" · ") || "새로 저장할 내역이 없어요"}</button></div>
   </section>`;
   $("#i-save").onclick = async () => {
     $("#i-save").disabled = true; $("#i-save").textContent = "저장 중…";
@@ -990,7 +999,8 @@ async function previewImport(box, accountId, items) {
     for (const t of [...cancels.flat(), ...transfers.flat()].filter((x) => !x._new)) {
       await sb.from("money_transactions").update({ kind: t.kind, category_id: t.category_id ?? null, pair_id: t.pair_id ?? null }).eq("id", t.id);
     }
-    toast(`${rows.length + merges.length}건을 저장했어요`);
+    for (const f of fixes) await sb.from("money_transactions").update({ place: f.place, tx_type: f.tx_type }).eq("id", f.id);
+    toast(rows.length + merges.length ? `${rows.length + merges.length}건을 저장했어요${fixes.length ? ` · ${fixes.length}건 고쳤어요` : ""}` : `${fixes.length}건을 고쳤어요`);
     const latest = items.map((t) => t.occurred_at).sort().at(-1);
     go(`#/list?m=${kstMonth(latest)}`);
   };
