@@ -130,6 +130,59 @@ export function fromScreenshotRows(rows) {
   return items;
 }
 
+/* ---------- 캡처 글자 붙여넣기 (아이폰 텍스트 인식으로 복사한 글자) ---------- */
+// 하나원큐: "2026.10.26 (월)" 날짜 줄 아래로 [시각(초) · 이름 · 거래구분 · ±금액 · 잔액 · (메모)]
+// NH: [2026.10.16 15:11 · 이름 · 금액 · 잔액]. 들어온 돈은 + 없이 숫자만이라, −가 붙은 것만 나간 돈
+const P_DATETIME = /(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\.?\s+(\d{1,2}:\d{2}(?::\d{2})?)/;
+const P_DATE = /(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\.?(?:\s*\(?[월화수목금토일]\)?)?/;
+const P_TIME = /(?<![\d:])(\d{1,2}:\d{2}(?::\d{2})?)(?![\d:])/;
+const P_AMOUNT = /([+\-−–]?)\s?(\d{1,3}(?:,\d{3})+|\d+)\s?원/;
+const TX_TYPES = /^(체크카드|신용카드|대체|이체|타행이체|타행입금|당행이체|입금|출금|ATM|자동이체|급여|이자|오픈뱅킹|인터넷|모바일|스마트폰|펌뱅킹|CMS|카드|현금|결제|환불)$/i;
+// 화면 위쪽 메뉴 같은 글자 (거래 줄이 아님)
+const NOISE = /^(거래내역조회|입출금\s*거래내역\s*조회|거래내역|전체|최신순|과거순|잔액|입금|출금|\d+개월|오늘|어제|조회|지금입장|LTE|5G|더보기)$/;
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** 복사한 글자 → 거래 줄 [{date "YYYY-MM-DD"|"", time, amount, place, balance_after, tx_type, memo}] */
+export function parsePastedHistory(text) {
+  const rows = [];
+  let date = "", cur = null;
+  const close = () => { if (cur?.amount) rows.push(cur); cur = null; };
+  const start = (d, t) => { close(); cur = { date: d, time: t.length === 4 ? `0${t}` : t, amount: 0, place: "", balance_after: null, tx_type: "", memo: "" }; };
+  for (let line of String(text ?? "").split(/\r?\n/)) {
+    line = clean(line);
+    if (!line || /~/.test(line)) continue; // 조회 기간 줄
+    // 한 줄에 여러 조각이 붙어 있을 수 있어 앞에서부터 차례로 떼어 냄
+    while (line) {
+      const cand = [
+        ["dt", P_DATETIME.exec(line)], ["d", P_DATE.exec(line)], ["t", P_TIME.exec(line)], ["a", P_AMOUNT.exec(line)],
+      ].filter(([, m]) => m).sort((x, y) => x[1].index - y[1].index || (x[0] === "dt" ? -1 : 1));
+      const [kind, m] = cand[0] ?? [];
+      const textPart = clean(m ? line.slice(0, m.index) : line);
+      if (textPart) {
+        if (cur && !NOISE.test(textPart)) {
+          if (TX_TYPES.test(textPart) && !cur.tx_type) cur.tx_type = textPart;
+          else if (/^\(.*\)$/.test(textPart) || cur.place) cur.memo = clean(`${cur.memo} ${textPart.replace(/^\((.*)\)$/, "$1")}`);
+          else cur.place = textPart;
+        }
+      }
+      if (!m) break;
+      line = clean(line.slice(m.index + m[0].length));
+      if (kind === "dt") { date = `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`; start(date, m[4]); }
+      else if (kind === "d") { close(); date = `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`; }
+      else if (kind === "t") start(date, m[1]);
+      else if (kind === "a" && cur) {
+        const n = Number(m[2].replace(/,/g, ""));
+        if (!cur.amount) cur.amount = m[1] && m[1] !== "+" ? -n : n;
+        else if (cur.balance_after === null) cur.balance_after = n;
+      }
+    }
+  }
+  close();
+  // 여러 캡처를 이어 붙여 겹친 줄은 하나만
+  const seen = new Set();
+  return rows.filter((r) => { const k = `${r.date}|${r.time}|${r.amount}|${r.balance_after}|${r.place}`; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 /** 같은 계좌의 같은 거래인지 알아보는 열쇠 */
 export const importKey = (accountId, t) => `${accountId}|${t.occurred_at}|${t.amount}|${t.balance_after ?? ""}`;
 

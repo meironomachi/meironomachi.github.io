@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -153,4 +153,64 @@ test("캡처에서 읽은 줄: 한국 시각으로, 겹친 줄은 하나만, 금
   assert.deepEqual(items[0], { occurred_at: "2026-10-28T05:03:00.000Z", amount: -4500, balance_after: 120000, tx_type: "체크카드", place: "메가커피", memo: "" });
   assert.equal(items[1].occurred_at, "2026-10-27T15:00:00.000Z");
   assert.equal(items[1].balance_after, null);
+});
+
+test("붙여넣기: 하나원큐 (날짜 줄 아래 시각, +/− 금액, 잔액, 메모)", () => {
+  const text = `5:32
+지금입장
+거래내역조회
+1개월 전체 최신순
+2026.10.01~2026.10.30
+잔액
+13:29:25
+체크카드
+(주)맘스터치
+-7,700원
+0원
+13:26:39
+대체
+김도현
++600원
+7,700원
+2026.10.26 (월)
+21:51:00
+대체
+토스 김도현
+-5,000원
+20,000원
+(비바리퍼블리카-오픈뱅킹)
+16:42:28 대체
+토스 김도현 -4,775원
+25,000원
+(비바리퍼블리카-오픈뱅킹)`;
+  const rows = parsePastedHistory(text);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows[0], { date: "", time: "13:29:25", amount: -7700, place: "(주)맘스터치", balance_after: 0, tx_type: "체크카드", memo: "" });
+  assert.equal(rows[1].amount, 600);
+  assert.deepEqual(rows[2], { date: "2026-10-26", time: "21:51:00", amount: -5000, place: "토스 김도현", balance_after: 20000, tx_type: "대체", memo: "비바리퍼블리카-오픈뱅킹" });
+  assert.deepEqual([rows[3].time, rows[3].amount, rows[3].balance_after, rows[3].place], ["16:42:28", -4775, 25000, "토스 김도현"]);
+});
+
+test("붙여넣기: NH (줄마다 날짜·시각, 들어온 돈은 부호 없음, 금액 없는 끝 줄은 뺌)", () => {
+  const text = `입출금 거래내역 조회
+2026.10.16 15:11
+김도현
+-34,000원
+0원
+2026.10.16 15:06
+김도현
+34,000원
+34,000원
+2026.10.14 10:14
+NHK패스환급
+88,000원
+88,000원
+2026.10.01 17:49`;
+  const rows = parsePastedHistory(text);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows[0], { date: "2026-10-16", time: "15:11", amount: -34000, place: "김도현", balance_after: 0, tx_type: "", memo: "" });
+  assert.equal(rows[1].amount, 34000);
+  assert.equal(rows[2].place, "NHK패스환급");
+  // 같은 글자를 두 번 붙여도 한 번만
+  assert.equal(parsePastedHistory(text + "\n" + text).length, 3);
 });

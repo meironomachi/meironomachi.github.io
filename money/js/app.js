@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610300831";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610300836";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
-  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parseKstDateTime,
+  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610300831";
+} from "./money.js?v=202610300836";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -682,12 +682,21 @@ async function renderImport() {
       <p class="muted small">같은 파일이나 기간이 겹치는 파일을 다시 올려도, 이미 있는 내역은 건너뛰어요.</p>
     </section>
     <section class="paper import-card">
-      <h3>거래내역 캡처 올리기</h3>
-      <p class="muted small">은행 앱의 거래내역 목록(몇 시에 누구에게 얼마)을 캡처해 올리면 읽어서 표로 만들어 드려요. 위에서 고른 계좌로 들어가요. 저장하기 전에 한 번 확인하고 고칠 수 있어요.</p>
-      <label class="field">캡처 (여러 장 가능)<input class="input" type="file" id="i-shot" accept="image/*" multiple></label>
-      <p class="muted small">캡처는 읽는 데만 쓰고 저장하지 않아요. 긴 캡처는 나눠서 읽어요.</p>
+      <h3>거래내역 캡처 글자 붙여넣기</h3>
+      <p class="muted small">아이폰 사진 앱에서 거래내역 캡처를 열고, 글자를 길게 눌러 <b>전체 선택 → 복사</b>한 뒤 아래에 붙여 넣어 주세요. 하나원큐·NH 화면을 읽을 수 있어요. 여러 장은 이어서 붙여도 되고, 겹친 줄은 하나로 합쳐요. 위에서 고른 계좌로 들어가요.</p>
+      <textarea class="input" id="i-paste" rows="6" placeholder="2026.10.16 15:11&#10;김도현&#10;-34,000원&#10;0원"></textarea>
+      <div class="actions"><button class="btn primary" type="button" id="i-read">읽기</button></div>
+      <details class="shot-ai"><summary class="muted small">캡처 이미지로 바로 읽기 (Anthropic API 키를 넣었을 때만)</summary>
+        <label class="field">캡처 (여러 장 가능)<input class="input" type="file" id="i-shot" accept="image/*" multiple></label>
+        <p class="muted small">Claude가 캡처를 읽어요. 캡처는 읽는 데만 쓰고 저장하지 않아요.</p>
+      </details>
     </section>
     <div id="preview"></div>`);
+  $("#i-read").onclick = () => {
+    const rows = parsePastedHistory($("#i-paste").value);
+    if (!rows.length) { $("#preview").innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>거래를 찾지 못했어요. 거래내역 목록 화면의 글자를 전체 복사했는지 확인해 주세요.</p></div>`; return; }
+    reviewShots($("#preview"), $("#i-acc").value, rows);
+  };
   $("#i-shot").onchange = async (e) => {
     const files = [...e.target.files];
     e.target.value = "";
@@ -704,7 +713,7 @@ async function renderImport() {
       }
       const items = fromScreenshotRows(data.items);
       if (!items.length) throw new Error("캡처에서 거래를 찾지 못했어요. 거래내역 목록 화면인지 확인해 주세요.");
-      reviewShots(box, $("#i-acc").value, items);
+      reviewShots(box, $("#i-acc").value, items.map((t) => ({ ...t, date: kstDay(t.occurred_at), time: kstTime(t.occurred_at) })));
     } catch (err) {
       box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(err.message)}</p></div>`;
     }
@@ -751,21 +760,24 @@ async function shotPieces(files) {
 }
 
 // 캡처에서 읽은 내역을 저장 전에 확인·수정 (잘못 읽은 줄은 고치거나 빼기)
-function reviewShots(box, accountId, items) {
-  const rows = items.slice().sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+// rows: [{date "YYYY-MM-DD"|"", time, amount, place, balance_after, tx_type, memo}]
+function reviewShots(box, accountId, rows) {
+  const noDate = rows.filter((r) => !r.date).length;
   box.innerHTML = `<section class="paper import-card">
-    <h3>읽은 내역 확인</h3>
+    <h3>읽은 내역 확인 <span class="muted small">${rows.length}건</span></h3>
     <p class="muted small">캡처와 비교해 보고 틀린 곳은 고쳐 주세요. 나가는 돈은 −, 들어오는 돈은 +예요. 체크를 끈 줄은 빼고 넘어가요.</p>
+    ${noDate ? `<p class="s-msg small">날짜 줄이 캡처 위로 잘려서 날짜를 모르는 줄이 ${noDate}건 있어요. 날짜를 채워 주세요.</p>` : ""}
     <div class="table-scroll"><table class="import-table shot-table"><thead><tr><th></th><th>날짜</th><th>시각</th><th>누구·어디</th><th class="r">금액</th></tr></thead><tbody>
       ${rows.map((t, i) => `<tr data-i="${i}"><td><input type="checkbox" class="s-on" checked aria-label="이 줄 넣기"></td>
-        <td><input class="input s-date" type="date" value="${kstDay(t.occurred_at)}"></td>
-        <td><input class="input s-time" type="time" value="${kstTime(t.occurred_at)}"></td>
-        <td><input class="input s-place" value="${esc(t.place)}" maxlength="100"></td>
+        <td><input class="input s-date${t.date ? "" : " need"}" type="date" value="${t.date}"></td>
+        <td><input class="input s-time" type="time" step="1" value="${esc(t.time)}"></td>
+        <td><input class="input s-place" value="${esc(t.place)}" maxlength="100">${t.tx_type || t.memo ? `<small class="muted">${esc([t.tx_type, t.memo].filter(Boolean).join(" · "))}</small>` : ""}</td>
         <td class="r"><input class="input s-amount" inputmode="numeric" value="${t.amount > 0 ? "+" : "−"}${Math.abs(t.amount).toLocaleString("ko-KR")}"></td></tr>`).join("")}
     </tbody></table></div>
     <p class="s-msg small" id="s-msg" role="status"></p>
     <div class="actions"><button class="btn primary" type="button" id="s-next">다음: 중복 확인</button></div>
   </section>`;
+  box.querySelectorAll(".s-date.need").forEach((el) => el.addEventListener("input", () => el.classList.toggle("need", !el.value)));
   $("#s-next").onclick = async () => {
     const out = [];
     for (const tr of box.querySelectorAll("tbody tr")) {
@@ -774,9 +786,8 @@ function reviewShots(box, accountId, items) {
       const at = parseKstDateTime(`${tr.querySelector(".s-date").value} ${tr.querySelector(".s-time").value || "00:00"}`);
       const amount = parseAmount(tr.querySelector(".s-amount").value.replace(/[−–]/g, "-"));
       if (!at || !amount) { $("#s-msg").textContent = "날짜와 금액을 확인해 주세요."; tr.querySelector(at ? ".s-amount" : ".s-date").focus(); return; }
-      // 날짜·시각·금액을 고쳤으면 잔액은 맞지 않을 수 있어 뺌
-      const same = at === t.occurred_at && amount === t.amount;
-      out.push({ ...t, occurred_at: at, amount, place: tr.querySelector(".s-place").value.trim(), balance_after: same ? t.balance_after : null });
+      // 금액을 고쳤으면 잔액은 맞지 않을 수 있어 뺌
+      out.push({ occurred_at: at, amount, place: tr.querySelector(".s-place").value.trim(), balance_after: amount === t.amount ? t.balance_after ?? null : null, tx_type: t.tx_type ?? "", memo: t.memo ?? "" });
     }
     if (!out.length) { $("#s-msg").textContent = "넣을 줄이 없어요."; return; }
     box.innerHTML = loading();

@@ -286,8 +286,13 @@ dialog.tx-dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100dv
 .import-table .r { text-align: right; }
 .shot-table td { padding: 4px 6px; }
 .s-msg { margin: 0; color: var(--danger, #d4342c); }
+.shot-table .s-date.need { border-color: var(--danger, #d4342c); }
+.shot-table td small { display: block; margin-top: 2px; font-size: 11px; }
+#i-paste { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
+.shot-ai summary { cursor: pointer; }
+.shot-ai[open] { display: grid; gap: 10px; }
 .shot-table .input { padding: 6px 8px; font-size: 13px; min-width: 0; }
-.shot-table .s-date { width: 138px; } .shot-table .s-time { width: 124px; } .shot-table .s-place { width: 100%; min-width: 140px; } .shot-table .s-amount { width: 110px; text-align: right; }
+.shot-table .s-date { width: 138px; } .shot-table .s-time { width: 136px; } .shot-table .s-place { width: 100%; min-width: 140px; } .shot-table .s-amount { width: 110px; text-align: right; }
 
 /* 예산·분류 */
 .budget-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
@@ -359,3 +364,13 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .d-legend i { width: 10px; height: 10px; border-radius: 3px; }
 .d-legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-legend b { font-variant-numeric: tabular-nums; }
+/* 캡처 확인 표: 좁은 화면에서는 한 줄을 카드처럼 (체크 | 날짜 시각 / 누구 / 금액) */
+@media (max-width: 640px) {
+  .shot-table thead { display: none; }
+  .shot-table, .shot-table tbody { display: block; }
+  .shot-table tr { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .shot-table td { border: 0; padding: 0; }
+  .shot-table td:nth-child(1) { grid-row: span 3; align-self: center; }
+  .shot-table td:nth-child(4), .shot-table td:nth-child(5) { grid-column: 2 / 4; }
+  .shot-table .input, .shot-table .s-date, .shot-table .s-time, .shot-table .s-amount { width: 100%; box-sizing: border-box; }
+}
