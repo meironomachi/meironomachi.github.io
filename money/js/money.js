@@ -69,7 +69,7 @@ export const signedWon = (n) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(M
 const H = {
   date: /^(거래\s*일시|거래\s*일자|거래일|일시|날짜|거래\s*날짜)$/,
   time: /^(거래\s*시간|시간)$/,
-  dir: /^(구분|입출금\s*구분|입출구분)$/,
+  dir: /^(구분|입출금\s*구분|입출\s*구분|입\s*\/\s*출금?|입출금|입출|입금\s*\/\s*출금|거래\s*유형)$/,
   amount: /^(거래\s*금액|금액)$/,
   out: /^(출금\s*(액|금액)?|찾으신\s*금액|지급\s*금액)(\(원\))?$/,
   in: /^(입금\s*(액|금액)?|맡기신\s*금액)(\(원\))?$/,
@@ -78,6 +78,8 @@ const H = {
   place: /^(내용|거래\s*내용|기재\s*내용|거래\s*기록\s*사항|기록\s*사항|통장\s*표시\s*내용|거래처|가맹점(명)?|받는\s*분|보낸\s*분|상대\s*(계좌)?\s*(예금주)?(명)?|의뢰인|수취인)$/,
   memo: /^(메모|비고)$/,
 };
+const DIR_ONLY = /^(입금|출금|지급|입|출)$/;
+const OUT_WORD = /출금|지급|^출$/, IN_WORD = /입금|^입$/;
 const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
 /** 시트의 행들(글자 배열) → 거래 목록 [{occurred_at, amount, balance_after, tx_type, place, memo}] */
@@ -97,9 +99,10 @@ export function parseBankRows(rows) {
     let amount = null;
     if (col.amount !== undefined) {
       amount = parseAmount(r[col.amount]);
-      const dir = clean(r[col.dir]);
-      if (amount !== null && dir.includes("출금") && amount > 0) amount = -amount;
-      if (amount !== null && dir.includes("입금") && amount < 0) amount = -amount;
+      // 입출금 구분: 구분 칸이 있으면 그 칸, 없으면(또는 칸이 어긋나 비었으면) 줄 안에 "입금"·"출금"만 적힌 칸
+      const dir = clean(r[col.dir]) || r.map(clean).find((c) => DIR_ONLY.test(c)) || "";
+      if (amount !== null && OUT_WORD.test(dir) && amount > 0) amount = -amount;
+      if (amount !== null && IN_WORD.test(dir) && amount < 0) amount = -amount;
     } else {
       const o = parseAmount(r[col.out]) ?? 0, i = parseAmount(r[col.in]) ?? 0;
       amount = i - Math.abs(o);
@@ -146,7 +149,15 @@ const pad2 = (n) => String(n).padStart(2, "0");
 export function parsePastedHistory(text) {
   const rows = [];
   let date = "", cur = null;
-  const close = () => { if (cur?.amount) rows.push(cur); cur = null; };
+  const close = () => {
+    if (cur?.amount) {
+      // "출금"·"입금"이 따로 적혀 있으면 부호보다 그 말을 따름
+      if (cur.dir) cur.amount = cur.dir * Math.abs(cur.amount);
+      delete cur.dir;
+      rows.push(cur);
+    }
+    cur = null;
+  };
   const start = (d, t) => { close(); cur = { date: d, time: t.length === 4 ? `0${t}` : t, amount: 0, place: "", balance_after: null, tx_type: "", memo: "" }; };
   for (let line of String(text ?? "").split(/\r?\n/)) {
     line = clean(line);
@@ -157,9 +168,13 @@ export function parsePastedHistory(text) {
         ["dt", P_DATETIME.exec(line)], ["d", P_DATE.exec(line)], ["t", P_TIME.exec(line)], ["a", P_AMOUNT.exec(line)],
       ].filter(([, m]) => m).sort((x, y) => x[1].index - y[1].index || (x[0] === "dt" ? -1 : 1));
       const [kind, m] = cand[0] ?? [];
-      const textPart = clean(m ? line.slice(0, m.index) : line);
+      let textPart = clean(m ? line.slice(0, m.index) : line);
+      // "입금 김도현"처럼 앞에 붙은 입출금 말은 떼어 냄
+      const lead = cur && textPart.match(/^(입금|출금|지급)\s+(.+)$/);
+      if (lead) { cur.dir = OUT_WORD.test(lead[1]) ? -1 : 1; textPart = lead[2]; }
       if (textPart) {
-        if (cur && !NOISE.test(textPart)) {
+        if (cur && DIR_ONLY.test(textPart)) cur.dir = OUT_WORD.test(textPart) ? -1 : 1;
+        else if (cur && !NOISE.test(textPart)) {
           if (TX_TYPES.test(textPart) && !cur.tx_type) cur.tx_type = textPart;
           else if (/^\(.*\)$/.test(textPart) || cur.place) cur.memo = clean(`${cur.memo} ${textPart.replace(/^\((.*)\)$/, "$1")}`);
           else cur.place = textPart;
