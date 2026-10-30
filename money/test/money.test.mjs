@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -139,4 +139,18 @@ test("수입·저축 목표", async () => {
   assert.equal(goalStatus(85000, 100000).state, "near");
   assert.equal(goalStatus(10, 100).state, "ok");
   assert.deepEqual(inflowByCat([{ kind: "income", amount: 300000, category_id: "pocket" }, { kind: "saving", amount: -50000, category_id: "save" }, { kind: "expense", amount: -1, category_id: "x" }]), { pocket: 300000, save: 50000 });
+});
+
+test("캡처에서 읽은 줄: 한국 시각으로, 겹친 줄은 하나만, 금액 없는 줄은 뺌", () => {
+  const items = fromScreenshotRows([
+    { date: "2026-10-28", time: "14:03", amount: -4500, counterparty: " 메가커피 ", balance_after: 120000, tx_type: "체크카드" },
+    { date: "2026-10-28", time: "14:03", amount: -4500, counterparty: "메가커피", balance_after: 120000, tx_type: "체크카드" },
+    { date: "2026-10-28", time: "", amount: 30000, counterparty: "홍길동", balance_after: null, tx_type: "" },
+    { date: "2026-10-27", time: "09:00", amount: 0, counterparty: "?", balance_after: null, tx_type: "" },
+    { date: "", time: "09:00", amount: -100, counterparty: "?", balance_after: null, tx_type: "" },
+  ]);
+  assert.equal(items.length, 2);
+  assert.deepEqual(items[0], { occurred_at: "2026-10-28T05:03:00.000Z", amount: -4500, balance_after: 120000, tx_type: "체크카드", place: "메가커피", memo: "" });
+  assert.equal(items[1].occurred_at, "2026-10-27T15:00:00.000Z");
+  assert.equal(items[1].balance_after, null);
 });

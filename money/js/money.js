@@ -114,6 +114,22 @@ export function parseBankRows(rows) {
   return { error: items.length ? null : "읽을 거래가 없어요.", items };
 }
 
+/** 캡처에서 읽은 줄({date "YYYY-MM-DD", time "HH:MM", amount, counterparty, balance_after, tx_type}) → 거래 목록.
+ * 캡처를 나눠 읽을 때 겹친 부분의 같은 줄은 하나만 남김 */
+export function fromScreenshotRows(rows) {
+  const seen = new Set(), items = [];
+  for (const r of rows ?? []) {
+    const at = parseKstDateTime(`${clean(r.date)} ${clean(r.time)}`);
+    const amount = parseAmount(r.amount);
+    if (!at || !amount) continue;
+    const it = { occurred_at: at, amount, balance_after: r.balance_after == null ? null : parseAmount(r.balance_after), tx_type: clean(r.tx_type), place: clean(r.counterparty), memo: "" };
+    const k = `${it.occurred_at}|${it.amount}|${it.balance_after ?? ""}|${it.place}`;
+    if (seen.has(k)) continue;
+    seen.add(k); items.push(it);
+  }
+  return items;
+}
+
 /** 같은 계좌의 같은 거래인지 알아보는 열쇠 */
 export const importKey = (accountId, t) => `${accountId}|${t.occurred_at}|${t.amount}|${t.balance_after ?? ""}`;
 

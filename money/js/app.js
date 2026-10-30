@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610231546";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610300831";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
-  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch,
+  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610231546";
+} from "./money.js?v=202610300831";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -681,7 +681,34 @@ async function renderImport() {
       </div>
       <p class="muted small">같은 파일이나 기간이 겹치는 파일을 다시 올려도, 이미 있는 내역은 건너뛰어요.</p>
     </section>
+    <section class="paper import-card">
+      <h3>거래내역 캡처 올리기</h3>
+      <p class="muted small">은행 앱의 거래내역 목록(몇 시에 누구에게 얼마)을 캡처해 올리면 읽어서 표로 만들어 드려요. 위에서 고른 계좌로 들어가요. 저장하기 전에 한 번 확인하고 고칠 수 있어요.</p>
+      <label class="field">캡처 (여러 장 가능)<input class="input" type="file" id="i-shot" accept="image/*" multiple></label>
+      <p class="muted small">캡처는 읽는 데만 쓰고 저장하지 않아요. 긴 캡처는 나눠서 읽어요.</p>
+    </section>
     <div id="preview"></div>`);
+  $("#i-shot").onchange = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    if (!files.length) return;
+    const box = $("#preview");
+    box.innerHTML = `<div class="paper notice"><h2>캡처를 읽는 중…</h2><p>장 수에 따라 10초~1분쯤 걸려요.</p></div>`;
+    try {
+      const images = await shotPieces(files);
+      const { data, error } = await sb.functions.invoke("money-ocr", { body: { images } });
+      if (error || data?.error) {
+        let msg = data?.error;
+        try { msg = msg ?? (await error.context.json()).error; } catch { /* 메시지 없음 */ }
+        throw new Error(msg || "캡처를 읽지 못했어요. 잠시 뒤 다시 해 주세요.");
+      }
+      const items = fromScreenshotRows(data.items);
+      if (!items.length) throw new Error("캡처에서 거래를 찾지 못했어요. 거래내역 목록 화면인지 확인해 주세요.");
+      reviewShots(box, $("#i-acc").value, items);
+    } catch (err) {
+      box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(err.message)}</p></div>`;
+    }
+  };
   $("#i-file").onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -697,6 +724,63 @@ async function renderImport() {
     } catch (err) {
       box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(err.message)}</p></div>`;
     }
+  };
+}
+
+// 캡처 → 보낼 이미지 조각: 가로 1000px까지 줄이고, 긴 캡처는 위아래로 조금 겹치게 잘라 글자가 작아지지 않게 함
+const SHOT_W = 1000, SHOT_H = 1600, SHOT_OVERLAP = 160, SHOT_MAX = 8;
+async function shotPieces(files) {
+  const out = [];
+  for (const f of files) {
+    const img = await createImageBitmap(f).catch(() => null);
+    if (!img) throw new Error(`${f.name}: 이미지를 열지 못했어요.`);
+    const scale = Math.min(1, SHOT_W / img.width);
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    for (let y = 0; y < h; y += SHOT_H - SHOT_OVERLAP) {
+      const ph = Math.min(SHOT_H, h - y);
+      if (y > 0 && ph <= SHOT_OVERLAP) break; // 앞 조각과 겹치는 자투리
+      const c = document.createElement("canvas");
+      c.width = w; c.height = ph;
+      c.getContext("2d").drawImage(img, 0, -y, w, h);
+      out.push({ media_type: "image/jpeg", data: c.toDataURL("image/jpeg", 0.9).split(",")[1] });
+      if (out.length > SHOT_MAX) throw new Error(`캡처가 너무 길거나 많아요. 한 번에 ${SHOT_MAX}조각까지 읽을 수 있으니 나눠서 올려 주세요.`);
+      if (y + ph >= h) break;
+    }
+  }
+  return out;
+}
+
+// 캡처에서 읽은 내역을 저장 전에 확인·수정 (잘못 읽은 줄은 고치거나 빼기)
+function reviewShots(box, accountId, items) {
+  const rows = items.slice().sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+  box.innerHTML = `<section class="paper import-card">
+    <h3>읽은 내역 확인</h3>
+    <p class="muted small">캡처와 비교해 보고 틀린 곳은 고쳐 주세요. 나가는 돈은 −, 들어오는 돈은 +예요. 체크를 끈 줄은 빼고 넘어가요.</p>
+    <div class="table-scroll"><table class="import-table shot-table"><thead><tr><th></th><th>날짜</th><th>시각</th><th>누구·어디</th><th class="r">금액</th></tr></thead><tbody>
+      ${rows.map((t, i) => `<tr data-i="${i}"><td><input type="checkbox" class="s-on" checked aria-label="이 줄 넣기"></td>
+        <td><input class="input s-date" type="date" value="${kstDay(t.occurred_at)}"></td>
+        <td><input class="input s-time" type="time" value="${kstTime(t.occurred_at)}"></td>
+        <td><input class="input s-place" value="${esc(t.place)}" maxlength="100"></td>
+        <td class="r"><input class="input s-amount" inputmode="numeric" value="${t.amount > 0 ? "+" : "−"}${Math.abs(t.amount).toLocaleString("ko-KR")}"></td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="s-msg small" id="s-msg" role="status"></p>
+    <div class="actions"><button class="btn primary" type="button" id="s-next">다음: 중복 확인</button></div>
+  </section>`;
+  $("#s-next").onclick = async () => {
+    const out = [];
+    for (const tr of box.querySelectorAll("tbody tr")) {
+      if (!tr.querySelector(".s-on").checked) continue;
+      const t = rows[tr.dataset.i];
+      const at = parseKstDateTime(`${tr.querySelector(".s-date").value} ${tr.querySelector(".s-time").value || "00:00"}`);
+      const amount = parseAmount(tr.querySelector(".s-amount").value.replace(/[−–]/g, "-"));
+      if (!at || !amount) { $("#s-msg").textContent = "날짜와 금액을 확인해 주세요."; tr.querySelector(at ? ".s-amount" : ".s-date").focus(); return; }
+      // 날짜·시각·금액을 고쳤으면 잔액은 맞지 않을 수 있어 뺌
+      const same = at === t.occurred_at && amount === t.amount;
+      out.push({ ...t, occurred_at: at, amount, place: tr.querySelector(".s-place").value.trim(), balance_after: same ? t.balance_after : null });
+    }
+    if (!out.length) { $("#s-msg").textContent = "넣을 줄이 없어요."; return; }
+    box.innerHTML = loading();
+    await previewImport(box, accountId, out);
   };
 }
 
