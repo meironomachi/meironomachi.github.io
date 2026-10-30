@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301415";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301419";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610301415";
+} from "./money.js?v=202610301419";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -306,6 +306,7 @@ function txRow(t) {
   const title = t.place || c?.name || t.tx_type || kindName(t.kind);
   const tag = (t.recurring_id ? '<span class="tag fixed">고정</span>' : "") + (t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`);
   return `<li><button type="button" class="tx" data-tx="${t.id}">
+    <span class="tx-check" aria-hidden="true"></span>
     <span class="tx-cat" style="--c:${c?.color ?? "var(--border)"}">${esc(c?.name ?? "분류 없음")}</span>
     <span class="tx-main"><b>${esc(title)}</b><span class="muted small">${kstTime(t.occurred_at)} · ${esc(a?.name ?? "")}${t.memo ? ` · ${esc(t.memo)}` : ""}${t.source === "manual" ? " · 직접 입력" : ""}</span></span>
     <span class="tx-amt ${t.kind}">${tag}${signedWon(t.amount)}</span>
@@ -320,8 +321,9 @@ function txList(txs) {
   }).join("");
 }
 let shown = [];
-function bindTxRows() {
-  $$("[data-tx]").forEach((b) => b.onclick = () => txDialog(shown.find((t) => t.id === b.dataset.tx)));
+// pick이 있으면(여러 개 고르기) 누를 때 고치기 창 대신 고르기
+function bindTxRows(pick) {
+  $$("[data-tx]").forEach((b) => b.onclick = () => (pick ? pick(b) : txDialog(shown.find((t) => t.id === b.dataset.tx))));
 }
 
 async function renderList(params) {
@@ -338,7 +340,15 @@ async function renderList(params) {
       <select class="input" id="f-cat" aria-label="분류"><option value="">모든 분류</option><option value="none">분류 없음</option>${base.categories.map((c) => `<option value="${c.id}" ${params.get("c") === c.id ? "selected" : ""}>${kindName(c.kind)} · ${esc(c.name)}</option>`).join("")}</select>
       <select class="input" id="f-kind" aria-label="종류"><option value="">모든 종류</option>${KINDS.map((k) => `<option value="${k.id}">${k.name}</option>`).join("")}</select>
     </div>
-    <p class="muted small" id="count"></p>
+    <div class="list-bar"><p class="muted small" id="count"></p>
+      <button class="btn ghost sm" type="button" id="sel-toggle">여러 개 지우기</button></div>
+    <div class="sel-bar" id="sel-bar" hidden>
+      <span id="sel-count">0건 선택</span>
+      <button class="btn ghost sm" type="button" id="sel-all">보이는 내역 모두 선택</button>
+      <button class="btn ghost sm" type="button" id="sel-none">선택 해제</button>
+      <span style="flex:1"></span>
+      <button class="btn sm danger-fill" type="button" id="sel-del" disabled>삭제</button>
+    </div>
     <div id="rows"></div>`);
   if (params.get("c") === "none") $("#f-cat").value = "none";
   if (params.get("k")) $("#f-kind").value = params.get("k");
@@ -349,7 +359,42 @@ async function renderList(params) {
     const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0), inc = list.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
     $("#count").textContent = `${list.length}건 · 지출 ${won(out)} · 수입 ${won(inc)}`;
     $("#rows").innerHTML = list.length ? txList(list) : '<p class="empty">내역이 없어요.</p>';
-    bindTxRows();
+    visible = list;
+    $("#rows").classList.toggle("selecting", selecting);
+    bindTxRows(selecting ? (b) => { picked.has(b.dataset.tx) ? picked.delete(b.dataset.tx) : picked.add(b.dataset.tx); syncSel(); } : null);
+    syncSel();
+  };
+  // 여러 개 지우기: 고른 내역(이체 짝이면 반대쪽 내역도)을 한꺼번에 지움
+  let selecting = false, visible = [];
+  const picked = new Set();
+  const syncSel = () => {
+    $$("#rows [data-tx]").forEach((b) => b.setAttribute("aria-pressed", selecting ? String(picked.has(b.dataset.tx)) : "false"));
+    $("#sel-count").textContent = `${picked.size}건 선택`;
+    $("#sel-del").disabled = !picked.size;
+    $("#sel-del").textContent = picked.size ? `${picked.size}건 삭제` : "삭제";
+  };
+  $("#sel-toggle").onclick = () => {
+    selecting = !selecting; picked.clear();
+    $("#sel-bar").hidden = !selecting;
+    $("#sel-toggle").textContent = selecting ? "그만 고르기" : "여러 개 지우기";
+    draw();
+  };
+  $("#sel-all").onclick = () => { visible.forEach((t) => picked.add(t.id)); syncSel(); };
+  $("#sel-none").onclick = () => { picked.clear(); syncSel(); };
+  $("#sel-del").onclick = async () => {
+    const chosen = txs.filter((t) => picked.has(t.id));
+    const pairs = [...new Set(chosen.map((t) => t.pair_id).filter(Boolean))];
+    const partners = txs.filter((t) => t.pair_id && pairs.includes(t.pair_id) && !picked.has(t.id)).length;
+    if (!confirm(`${chosen.length}건을 지울까요? 되돌릴 수 없어요.${pairs.length ? `\n이체로 짝지어진 반대쪽 내역${partners ? ` ${partners}건` : ""}도 함께 지워져요.` : ""}${chosen.some((t) => t.recurring_id) ? "\n'고정' 내역은 예산·분류의 고정 항목을 끝내지 않으면 다시 만들어져요." : ""}`)) return;
+    $("#sel-del").disabled = true; $("#sel-del").textContent = "지우는 중…";
+    const ids = chosen.map((t) => t.id);
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await sb.from("money_transactions").delete().in("id", ids.slice(i, i + 100));
+      if (error) { toast("지우지 못했어요. 다시 해 주세요.", "error"); syncSel(); return; }
+    }
+    if (pairs.length) await sb.from("money_transactions").delete().in("pair_id", pairs);
+    toast(`${ids.length}건을 지웠어요`);
+    rerender();
   };
   ["q", "f-acc", "f-cat", "f-kind"].forEach((id) => $(`#${id}`).addEventListener("input", draw));
   draw();
