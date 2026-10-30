@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301419";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301441";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610301419";
+} from "./money.js?v=202610301441";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -712,6 +712,32 @@ async function loadXlsx() {
   return window.XLSX;
 }
 
+/** 파일 비밀번호 묻기. 취소하면 멈춤 */
+function askPassword(what, first) {
+  const pw = prompt(first ? `${what} 비밀번호를 입력해 주세요. (은행 거래내역 파일은 보통 생년월일 6자리예요)` : "비밀번호가 맞지 않아요. 다시 입력해 주세요.");
+  if (pw === null) throw new Error("비밀번호를 넣어야 파일을 열 수 있어요.");
+  return pw;
+}
+
+/** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
+async function readWorkbook(XLSX, file) {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202610301441");
+  if (isEncryptedOffice(XLSX.CFB, data)) {
+    for (let first = true; ; first = false) {
+      const pw = askPassword("엑셀 파일", first);
+      try { return XLSX.read(await decryptOffice(XLSX.CFB, data, pw), { type: "array" }); } catch (err) { if (!(err instanceof WrongPassword)) throw err; }
+    }
+  }
+  try { return XLSX.read(data, { type: "array" }); } catch (err) {
+    if (!/password|encrypt/i.test(err?.message ?? "")) throw err;
+  }
+  for (let first = true; ; first = false) {
+    const password = askPassword("엑셀 파일", first);
+    try { return XLSX.read(data, { type: "array", password }); } catch (err) { if (!/password|encrypt/i.test(err?.message ?? "")) throw err; }
+  }
+}
+
 // PDF는 pdf.js로 글자 조각과 위치를 꺼냄 (이것도 이 화면에서만 불러옴)
 const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38";
 async function loadPdfjs() {
@@ -732,8 +758,7 @@ async function pdfLines(file) {
       break;
     } catch (err) {
       if (err?.name !== "PasswordException") throw new Error("PDF를 열지 못했어요.");
-      password = prompt(password === undefined ? "PDF 비밀번호를 입력해 주세요. (은행 거래내역서는 보통 생년월일 6자리예요)" : "비밀번호가 맞지 않아요. 다시 입력해 주세요.");
-      if (password === null) throw new Error("비밀번호가 있어야 PDF를 열 수 있어요.");
+      password = askPassword("PDF", password === undefined);
     }
   }
   const lines = [];
@@ -770,7 +795,7 @@ async function renderImport() {
   const def = base.accounts.find((a) => a.bank === "kakao") ?? base.accounts[0];
   fill(`<section class="paper import-card">
       <h3>은행 거래내역 파일 올리기</h3>
-      <p class="muted small">은행 앱이나 인터넷뱅킹에서 거래내역을 엑셀(xlsx)·CSV·PDF로 받아 올려 주세요. 비밀번호가 걸린 PDF는 올릴 때 비밀번호를 물어봐요. 파일은 이 브라우저 안에서만 읽고, 날짜·금액·잔액·거래구분·내용만 저장해요. 계좌번호는 저장하지 않아요.</p>
+      <p class="muted small">은행 앱이나 인터넷뱅킹에서 거래내역을 엑셀(xlsx)·CSV·PDF로 받아 올려 주세요. 비밀번호가 걸린 엑셀·PDF는 올릴 때 비밀번호를 물어봐요. 파일은 이 브라우저 안에서만 읽고, 날짜·금액·잔액·거래구분·내용만 저장해요. 계좌번호는 저장하지 않아요.</p>
       <div class="grid2">
         <label class="field">어느 계좌의 파일인가요?<select class="input" id="i-acc">${base.accounts.filter((a) => a.bank !== "cash").map((a) => `<option value="${a.id}" ${a.id === def?.id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
         <label class="field">파일<input class="input" type="file" id="i-file" accept=".xlsx,.xls,.csv,.pdf,application/pdf"></label>
@@ -834,7 +859,7 @@ async function renderImport() {
         return;
       }
       const XLSX = await loadXlsx();
-      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const wb = await readWorkbook(XLSX, file);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });
       const { error, items } = parseBankRows(rows);
       if (error) { box.innerHTML = `<div class="paper notice"><h2>읽지 못했어요</h2><p>${esc(error)}</p></div>`; return; }

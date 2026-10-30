@@ -288,3 +288,13 @@ test("하나은행: '내용' 칸이 없으면 '적요'를 거래 상대로", () 
   const k = parseBankRows([["거래일시", "적요", "거래금액", "내용"], ["2026.10.16 15:11:02", "체크카드", "-7,700", "맘스터치"]]);
   assert.deepEqual([k.items[0].place, k.items[0].tx_type], ["맘스터치", "체크카드"]);
 });
+
+test("엑셀 비밀번호 풀기에 쓰는 SHA-512·SHA-1이 맞게 계산됨", async () => {
+  const { HASH } = await import("../js/office-crypto.js");
+  const { createHash } = await import("node:crypto");
+  for (const n of [0, 3, 55, 56, 64, 111, 112, 128, 300]) {
+    const m = new Uint8Array(n).map((_, i) => (i * 37 + 11) & 255);
+    assert.equal(Buffer.from(HASH.SHA512(m)).toString("hex"), createHash("sha512").update(m).digest("hex"));
+    assert.equal(Buffer.from(HASH.SHA1(m)).toString("hex"), createHash("sha1").update(m).digest("hex"));
+  }
+});

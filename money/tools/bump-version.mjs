@@ -8,7 +8,7 @@ for (const f of files) {
   const before = readFileSync(f, "utf8");
   const after = before
     .replace(/((?:href|src)="(?:css|js)\/[\w-]+\.(?:css|js))(?:\?v=\w+)?"/g, `$1?v=${v}"`)
-    .replace(/(from "\.\/[\w-]+\.js)(?:\?v=\w+)?"/g, `$1?v=${v}"`);
+    .replace(/((?:from |import\()"\.\/[\w-]+\.js)(?:\?v=\w+)?"/g, `$1?v=${v}"`);
   if (after !== before) writeFileSync(f, after);
 }
 console.log(`버전 ${v}`);
