@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610300836";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202610301410";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
-  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, parseKstDateTime,
+  parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202610300836";
+} from "./money.js?v=202610301410";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -667,6 +667,57 @@ async function loadXlsx() {
   return window.XLSX;
 }
 
+// PDF는 pdf.js로 글자 조각과 위치를 꺼냄 (이것도 이 화면에서만 불러옴)
+const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38";
+async function loadPdfjs() {
+  const base = window.__PDFJS_URL__ ?? PDFJS;
+  const pdfjs = await import(`${base}/legacy/build/pdf.min.mjs`);
+  pdfjs.GlobalWorkerOptions.workerSrc = `${base}/legacy/build/pdf.worker.min.mjs`;
+  return { pdfjs, base };
+}
+
+/** PDF → 줄 목록 [{page, y, h, cells: [{x0, x1, text}]}] (위→아래). 비밀번호가 걸려 있으면 물어봄 */
+async function pdfLines(file) {
+  const { pdfjs, base } = await loadPdfjs();
+  const data = new Uint8Array(await file.arrayBuffer());
+  let doc, password;
+  for (;;) {
+    try {
+      doc = await pdfjs.getDocument({ data: data.slice(), password, cMapUrl: `${base}/cmaps/`, cMapPacked: true, standardFontDataUrl: `${base}/standard_fonts/` }).promise;
+      break;
+    } catch (err) {
+      if (err?.name !== "PasswordException") throw new Error("PDF를 열지 못했어요.");
+      password = prompt(password === undefined ? "PDF 비밀번호를 입력해 주세요. (은행 거래내역서는 보통 생년월일 6자리예요)" : "비밀번호가 맞지 않아요. 다시 입력해 주세요.");
+      if (password === null) throw new Error("비밀번호가 있어야 PDF를 열 수 있어요.");
+    }
+  }
+  const lines = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const { items } = await page.getTextContent();
+    const parts = items.filter((it) => it.str && it.str.trim()).map((it) => {
+      const h = Math.abs(it.height || Math.hypot(it.transform[2], it.transform[3])) || 10;
+      return { x0: it.transform[4], x1: it.transform[4] + it.width, y: it.transform[5], h, text: it.str };
+    }).sort((a, b) => b.y - a.y || a.x0 - b.x0);
+    // 높이가 거의 같은 조각끼리 한 줄, 한 줄 안에서 가까이 붙은 조각끼리 한 칸
+    const rowsOnPage = [];
+    for (const p of parts) {
+      const row = rowsOnPage.find((r) => Math.abs(r.y - p.y) < Math.max(r.h, p.h) * 0.5);
+      if (row) row.parts.push(p); else rowsOnPage.push({ y: p.y, h: p.h, parts: [p] });
+    }
+    for (const r of rowsOnPage.sort((a, b) => b.y - a.y)) {
+      const cells = [];
+      for (const p of r.parts.sort((a, b) => a.x0 - b.x0)) {
+        const last = cells.at(-1);
+        if (last && p.x0 - last.x1 < r.h * 0.45) { last.text += (p.x0 - last.x1 > r.h * 0.15 ? " " : "") + p.text; last.x1 = Math.max(last.x1, p.x1); }
+        else cells.push({ x0: p.x0, x1: p.x1, text: p.text });
+      }
+      lines.push({ page: n, y: r.y, h: r.h, cells });
+    }
+  }
+  return lines;
+}
+
 async function renderImport() {
   document.title = "가져오기 — $TDL";
   app.innerHTML = shell("/import", loading());
@@ -674,10 +725,10 @@ async function renderImport() {
   const def = base.accounts.find((a) => a.bank === "kakao") ?? base.accounts[0];
   fill(`<section class="paper import-card">
       <h3>은행 거래내역 파일 올리기</h3>
-      <p class="muted small">은행 앱이나 인터넷뱅킹에서 거래내역을 엑셀(xlsx)이나 CSV로 받아 올려 주세요. 파일은 이 브라우저 안에서만 읽고, 날짜·금액·잔액·거래구분·내용만 저장해요. 계좌번호는 저장하지 않아요.</p>
+      <p class="muted small">은행 앱이나 인터넷뱅킹에서 거래내역을 엑셀(xlsx)·CSV·PDF로 받아 올려 주세요. 비밀번호가 걸린 PDF는 올릴 때 비밀번호를 물어봐요. 파일은 이 브라우저 안에서만 읽고, 날짜·금액·잔액·거래구분·내용만 저장해요. 계좌번호는 저장하지 않아요.</p>
       <div class="grid2">
         <label class="field">어느 계좌의 파일인가요?<select class="input" id="i-acc">${base.accounts.filter((a) => a.bank !== "cash").map((a) => `<option value="${a.id}" ${a.id === def?.id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
-        <label class="field">파일<input class="input" type="file" id="i-file" accept=".xlsx,.xls,.csv"></label>
+        <label class="field">파일<input class="input" type="file" id="i-file" accept=".xlsx,.xls,.csv,.pdf,application/pdf"></label>
       </div>
       <p class="muted small">같은 파일이나 기간이 겹치는 파일을 다시 올려도, 이미 있는 내역은 건너뛰어요.</p>
     </section>
@@ -724,6 +775,19 @@ async function renderImport() {
     const box = $("#preview");
     box.innerHTML = loading();
     try {
+      if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+        const lines = await pdfLines(file);
+        const rows = alignPdfRows(lines);
+        if (rows) {
+          const { error, items } = parseBankRows(rows);
+          if (!error) { await previewImport(box, $("#i-acc").value, items); return; }
+        }
+        // 표 모양이 아닌 PDF(앱 화면을 PDF로 저장한 것 등)는 붙여넣기처럼 읽고 확인 표로
+        const pasted = parsePastedHistory(lines.map((l) => l.cells.map((c) => c.text).join(" ")).join("\n"));
+        if (!pasted.length) throw new Error("PDF에서 거래내역 표를 찾지 못했어요. 은행에서 받은 거래내역 PDF인지 확인해 주세요.");
+        reviewShots(box, $("#i-acc").value, pasted);
+        return;
+      }
       const XLSX = await loadXlsx();
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });

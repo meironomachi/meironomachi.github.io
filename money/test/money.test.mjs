@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -213,4 +213,45 @@ NHK패스환급
   assert.equal(rows[2].place, "NHK패스환급");
   // 같은 글자를 두 번 붙여도 한 번만
   assert.equal(parsePastedHistory(text + "\n" + text).length, 3);
+});
+
+test("PDF 거래내역서: 제목 줄 칸 위치로 나누고, 두 줄로 쓴 시각·내용은 위 거래에 붙임", () => {
+  const L = (page, y, cells) => ({ page, y, h: 9, cells: cells.map(([x0, x1, text]) => ({ x0, x1, text })) });
+  const head = (p, y) => L(p, y, [[30, 70, "거래일시"], [100, 130, "적요"], [170, 210, "출금(원)"], [240, 280, "입금(원)"], [310, 350, "잔액(원)"], [380, 420, "내용"]]);
+  const lines = [
+    L(1, 800, [[30, 200, "거래내역조회 (2026.10.01 ~ 2026.10.31)"]]),
+    head(1, 760),
+    L(1, 740, [[30, 75, "2026.10.16"], [100, 130, "체크카드"], [185, 210, "7,700"], [330, 350, "0"], [380, 440, "(주)맘스터치"]]),
+    L(1, 730, [[30, 70, "15:11:02"], [380, 430, "강남점"]]),
+    L(1, 715, [[30, 75, "2026.10.16"], [100, 130, "대체"], [262, 280, "600"], [318, 350, "7,700"], [380, 420, "김도현"]]),
+    L(1, 705, [[30, 70, "13:26:39"]]),
+    L(1, 40, [[200, 230, "1 / 2"]]),
+    head(2, 760),
+    L(2, 740, [[30, 75, "2026.10.14"], [100, 130, "타행입금"], [255, 280, "88,000"], [318, 350, "88,000"], [380, 440, "NHK패스환급"]]),
+    L(2, 730, [[30, 70, "10:14:00"]]),
+  ];
+  const rows = alignPdfRows(lines);
+  const { error, items } = parseBankRows(rows);
+  assert.equal(error, null);
+  assert.equal(items.length, 3);
+  assert.deepEqual(items[0], { occurred_at: "2026-10-16T06:11:02.000Z", amount: -7700, balance_after: 0, tx_type: "체크카드", place: "(주)맘스터치 강남점", memo: "" });
+  assert.equal(items[1].amount, 600);
+  assert.equal(items[2].amount, 88000);
+  assert.equal(items[2].occurred_at, "2026-10-14T01:14:00.000Z");
+  assert.equal(alignPdfRows([L(1, 10, [[0, 10, "아무 글자"]])]), null);
+});
+
+test("PDF 거래내역서: 쪽마다 칸 위치가 달라도, 금액과 옆 칸 글자가 붙어 나와도 읽음", () => {
+  const L = (page, y, cells) => ({ page, y, h: 9, cells: cells.map(([x0, x1, text]) => ({ x0, x1, text })) });
+  const head = (p, dx) => L(p, 780, [[30 + dx, 70 + dx, "거래일시"], [170 + dx, 210 + dx, "출금(원)"], [240 + dx, 280 + dx, "입금(원)"], [310 + dx, 350 + dx, "잔액(원)"], [380 + dx, 420 + dx, "내용"]]);
+  const rows = alignPdfRows([
+    head(1, 0),
+    L(1, 760, [[30, 75, "2026.10.15 00:16:23"], [180, 210, "12,900"], [320, 400, "7,100 (주)우아한형제들_"]]),
+    head(2, 25),
+    L(2, 760, [[55, 100, "2026.10.14 10:14:00"], [290, 300, "88,000"], [350, 375, "88,000"], [410, 460, "NHK패스환급"]]),
+  ]);
+  assert.deepEqual(rows.slice(1), [
+    ["2026.10.15 00:16:23", "12,900", "", "7,100", "(주)우아한형제들_"],
+    ["2026.10.14 10:14:00", "", "88,000", "88,000", "NHK패스환급"],
+  ]);
 });

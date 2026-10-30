@@ -75,7 +75,7 @@ const H = {
   in: /^(입금\s*(액|금액)?|맡기신\s*금액)(\(원\))?$/,
   balance: /^(거래\s*후\s*잔액|잔액|거래후잔액)(\(원\))?$/,
   txType: /^(거래\s*구분|적요|거래\s*종류)$/,
-  place: /^(내용|거래\s*내용|기재\s*내용|거래처|가맹점(명)?|받는\s*분|보낸\s*분|상대\s*(계좌)?\s*(예금주)?(명)?|의뢰인|수취인)$/,
+  place: /^(내용|거래\s*내용|기재\s*내용|거래\s*기록\s*사항|기록\s*사항|통장\s*표시\s*내용|거래처|가맹점(명)?|받는\s*분|보낸\s*분|상대\s*(계좌)?\s*(예금주)?(명)?|의뢰인|수취인)$/,
   memo: /^(메모|비고)$/,
 };
 const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
@@ -181,6 +181,57 @@ export function parsePastedHistory(text) {
   // 여러 캡처를 이어 붙여 겹친 줄은 하나만
   const seen = new Set();
   return rows.filter((r) => { const k = `${r.date}|${r.time}|${r.amount}|${r.balance_after}|${r.place}`; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/* ---------- PDF 거래내역서 ---------- */
+// PDF에는 표가 없고 글자 조각과 위치만 있음. 줄(lines: [{page, y, h, cells: [{x0, x1, text}]}], 위→아래)을 받아
+// 제목 줄의 칸 위치에 맞춰 칸을 나눔. 날짜 칸이 비어 있는 줄(두 줄로 쓴 시각·내용)은 바로 위 거래에 이어 붙임
+export function alignPdfRows(lines) {
+  const isHead = (l) => l.cells.some((c) => H.date.test(clean(c.text))) && l.cells.some((c) => H.amount.test(clean(c.text)) || H.out.test(clean(c.text)));
+  const hi = lines.findIndex(isHead);
+  if (hi < 0) return null;
+  const names = lines[hi].cells.slice().sort((a, b) => a.x0 - b.x0).map((c) => clean(c.text));
+  let centers;
+  const useHead = (l) => {
+    // 쪽마다 칸 위치가 조금씩 달라도 맞도록, 제목 줄을 만날 때마다 이름별로 칸 위치를 다시 잡음
+    const next = names.map(() => null);
+    for (const c of l.cells) { const i = names.indexOf(clean(c.text)); if (i >= 0) next[i] = (c.x0 + c.x1) / 2; }
+    centers = next.map((x, i) => x ?? centers?.[i] ?? 0);
+  };
+  useHead(lines[hi]);
+  const colOf = (c) => {
+    const m = (c.x0 + c.x1) / 2;
+    let best = 0;
+    for (let i = 1; i < centers.length; i++) if (Math.abs(centers[i] - m) < Math.abs(centers[best] - m)) best = i;
+    return best;
+  };
+  const dateCol = names.findIndex((n) => H.date.test(n));
+  const numCols = new Set(names.map((n, i) => (H.amount.test(n) || H.out.test(n) || H.in.test(n) || H.balance.test(n) ? i : -1)).filter((i) => i >= 0));
+  const rows = [names];
+  let prev = null; // 마지막 거래 줄 {cells, line}
+  for (const l of lines.slice(hi + 1)) {
+    if (isHead(l)) { useHead(l); prev = null; continue; } // 다음 쪽의 제목 줄
+    const cells = names.map(() => "");
+    for (const c of l.cells.slice().sort((a, b) => a.x0 - b.x0)) {
+      const i = colOf(c);
+      // 금액과 옆 칸 글자가 한 조각으로 붙어 나온 경우 ("7,100 (주)가게"): 금액은 금액 칸, 글자는 오른쪽 칸으로
+      const m = clean(c.text).match(/^(-?\d{1,3}(?:,\d{3})+|-?\d+)\s+(\D.*)$/);
+      const [a, b] = numCols.has(i) ? [i, i + 1] : [i - 1, i];
+      if (m && numCols.has(a) && !numCols.has(b) && b < names.length && !cells[a]) { cells[a] = m[1]; cells[b] = clean(`${cells[b]} ${m[2]}`); continue; }
+      cells[i] = clean(`${cells[i]} ${c.text}`);
+    }
+    if (parseKstDateTime(cells[dateCol])) { prev = { cells, line: l }; rows.push(cells); continue; }
+    // 이어지는 줄(칸 안에서 위아래로 나뉜 글자): 같은 쪽, 바로 아래일 때만. 금액 칸은 비어 있을 때만 채움
+    if (prev && prev.line.page === l.page && Math.abs(l.y - prev.line.y) < 2.6 * (l.h || 10)) {
+      cells.forEach((t, i) => {
+        if (!t) return;
+        if (!numCols.has(i)) prev.cells[i] = clean(`${prev.cells[i]} ${t}`);
+        else if (!prev.cells[i]) prev.cells[i] = t;
+      });
+      prev.line = l;
+    } else prev = null;
+  }
+  return rows;
 }
 
 /** 같은 계좌의 같은 거래인지 알아보는 열쇠 */
