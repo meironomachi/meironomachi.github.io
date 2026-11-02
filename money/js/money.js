@@ -364,7 +364,7 @@ export function savingDeposits(account, txs, categories = []) {
 }
 
 /* ---------- 적금 계산 (청년미래적금처럼 정부 기여금이 붙는 적금) ---------- */
-// plan: { start: "YYYY-MM-DD" 가입일, months: 기간(개월), monthly: 월 납입액, rate: 적금 금리(%), match: 기여금 비율(%) }
+// plan: { start: "YYYY-MM-DD" 가입일, months: 기간(개월), rate: 적금 금리(%), match: 기여금 비율(%) }
 // 엑셀 계산기와 같은 방식: 이자는 단리(일수/365 × 금액 × 금리). 기여금 = 입금액 × 비율, 입금한 다음 달 15일에 적립
 const dayNum = (d) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 86400000;
 const ymd = (y, m, d) => { const t = new Date(Date.UTC(y, m, 1)); const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate(); return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(Math.min(d, last))}`; };
@@ -375,17 +375,10 @@ export function savingPlan(plan, deposits, today) {
   const months = Number(plan.months) || 36, rate = (Number(plan.rate) || 0) / 100, match = (Number(plan.match) || 0) / 100;
   const maturity = addMonths(plan.start, months);
   const actual = deposits.filter((d) => d.amount > 0 && !d.planned).map((d) => ({ ...d, planned: false })).sort((a, b) => a.date.localeCompare(b.date));
-  // 앞으로 넣을 회차: 1회차는 가입일, 그다음은 매월 1일. 이미 넣은 달·예정 내역을 적어 둔 달·오늘 이전은 빼고 만기 전까지
-  const marked = deposits.filter((d) => d.amount > 0 && d.planned).map((d) => ({ ...d, planned: true, marked: true }));
-  const paidMonths = new Set([...actual, ...marked].map((d) => d.date.slice(0, 7)));
-  const planned = [...marked];
-  for (let n = 0; n < months; n++) {
-    const date = n === 0 ? plan.start : ymd(+plan.start.slice(0, 4), +plan.start.slice(5, 7) - 1 + n, 1);
-    if (date <= today || date >= maturity || paidMonths.has(date.slice(0, 7))) continue;
-    planned.push({ date, amount: Number(plan.monthly) || 0, planned: true });
-  }
-  const until = (from, to) => Math.max(0, dayNum(to) - dayNum(from)) / 365;
+  // 앞으로 넣을 돈은 가정하지 않음. 예정 내역으로 직접 적어 둔 것만 예정 회차로 넣음
+  const planned = deposits.filter((d) => d.amount > 0 && d.planned).map((d) => ({ ...d, planned: true, marked: true }));
   planned.sort((a, b) => a.date.localeCompare(b.date));
+  const until = (from, to) => Math.max(0, dayNum(to) - dayNum(from)) / 365;
   const rows = [...actual, ...planned].map((d, i) => {
     const matchDate = ymd(+d.date.slice(0, 4), +d.date.slice(5, 7), 15);
     const matchAmt = d.amount * match;

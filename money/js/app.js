@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021504";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021509";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021504";
+} from "./money.js?v=202611021509";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -683,7 +683,7 @@ async function renderSaving(params) {
     ...savingDeposits(a, all, base.categories).map((t) => ({ date: kstDay(t.occurred_at), amount: -t.amount })),
   ];
   const today = kstDay(new Date().toISOString());
-  const plan = { start: deposits.map((d) => d.date).sort()[0] ?? today, months: 36, monthly: 500000, rate: 5, match: 6, ...(a.saving_plan ?? {}) };
+  const plan = { start: deposits.map((d) => d.date).sort()[0] ?? today, months: 36, rate: 5, match: 6, ...(a.saving_plan ?? {}) };
   const r = savingPlan(plan, deposits, today);
   const w = (n) => won(Math.round(n));
   const d = (x) => x.replaceAll("-", ".");
@@ -694,26 +694,25 @@ async function renderSaving(params) {
       <div class="saving-cards">
         <div><span>지금까지 적립</span><b>${w(r.now.total)}</b>
           <small>원금 ${w(r.now.principal)} · 기여금 ${w(r.now.match)} · 이자 ${w(r.now.interest)}</small></div>
-        <div><span>만기 예상 (${d(r.maturity)})</span><b>${w(r.end.total)}</b>
+        <div><span>만기 때 (${d(r.maturity)}) – 지금까지 넣은 돈${r.rows.some((x) => x.marked) ? "과 예정 내역" : ""} 기준</span><b>${w(r.end.total)}</b>
           <small>원금 ${w(r.end.principal)} · 기여금 ${w(r.end.match)} · 원금이자 ${w(r.end.interest)} · 기여금이자 ${w(r.end.matchInterest)}</small></div>
       </div>
       <div class="saving-progress"><span style="width:${pct}%"></span></div>
       <p class="muted small">${r.months}회 중 ${r.paidCount}회 입금${a.saving_plan ? "" : " · 아래에서 내 가입 조건을 먼저 저장해 주세요"}</p>
     </section>
-    <details class="paper saving-set" ${a.saving_plan ? "" : "open"}><summary><b>가입 조건</b> <span class="muted small">금리 ${plan.rate}% · 기여금 ${plan.match}% · 월 ${won(plan.monthly)}</span></summary>
+    <details class="paper saving-set" ${a.saving_plan ? "" : "open"}><summary><b>가입 조건</b> <span class="muted small">금리 ${plan.rate}% · 기여금 ${plan.match}%</span></summary>
       <form id="plan-form" class="grid2">
         <label class="field">가입일<input class="input" type="date" name="start" value="${plan.start}" required></label>
         <label class="field">기간 (개월)<input class="input" name="months" inputmode="numeric" value="${plan.months}" required></label>
-        <label class="field">월 납입액 (예정)<input class="input" name="monthly" inputmode="numeric" value="${Number(plan.monthly).toLocaleString("ko-KR")}" required></label>
         <label class="field">적금 금리 (%)<input class="input" name="rate" inputmode="decimal" value="${plan.rate}" required></label>
         <label class="field">기여금 비율 (%) <span class="muted">일반형 6, 우대형 12</span><input class="input" name="match" inputmode="decimal" value="${plan.match}" required></label>
         <div class="add-as"><button class="btn primary sm" type="submit">저장</button></div>
       </form></details>
     <section class="paper saving-table">
-      <div class="section-head"><h3>입금 내역</h3><span class="muted small">흐린 줄은 앞으로 넣을 예정 (월 납입액 기준)</span></div>
+      <div class="section-head"><h3>입금 내역</h3><span class="muted small">흐린 줄은 직접 적어 둔 예정 내역 (아직 안 넣음)</span></div>
       <div class="table-scroll"><table class="import-table">
         <thead><tr><th>회차</th><th>입금일</th><th class="r">입금액</th><th>기여금 적립일</th><th class="r">기여금</th><th class="r">원금이자</th><th class="r">기여금이자</th></tr></thead>
-        <tbody>${r.rows.map((x) => `<tr class="${x.planned ? "planned" : ""}"><td>${x.no}</td><td>${d(x.date)}${x.marked ? " <small>예정 내역</small>" : x.planned ? " <small>예정</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
+        <tbody>${r.rows.map((x) => `<tr class="${x.planned ? "planned" : ""}"><td>${x.no}</td><td>${d(x.date)}${x.planned ? " <small>예정 내역</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
         <tfoot><tr><td colspan="2">합계</td><td class="r">${w(r.end.principal)}</td><td></td><td class="r">${w(r.end.match)}</td><td class="r">${w(r.end.interest)}</td><td class="r">${w(r.end.matchInterest)}</td></tr></tfoot>
       </table></div>
       <p class="muted small">이자는 단리(입금일부터 만기까지 일수 ÷ 365 × 금액 × 금리)로 계산한 예상치예요. 기여금은 입금한 다음 달 15일에 적립되는 것으로 셈해요. 실제 금리·기여금 조건과 세금은 은행 안내를 확인해 주세요.</p>
@@ -722,7 +721,7 @@ async function renderSaving(params) {
     e.preventDefault();
     const f = e.target;
     const num = (v) => Number(String(v).replace(/[^\d.]/g, ""));
-    const next = { start: f.start.value, months: Math.max(1, Math.round(num(f.months.value))), monthly: num(f.monthly.value), rate: num(f.rate.value), match: num(f.match.value) };
+    const next = { start: f.start.value, months: Math.max(1, Math.round(num(f.months.value))), rate: num(f.rate.value), match: num(f.match.value) };
     const { error } = await sb.from("money_accounts").update({ saving_plan: next }).eq("id", a.id);
     if (error) { toast("저장하지 못했어요.", "error"); return; }
     a.saving_plan = next;
@@ -861,7 +860,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021504");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021509");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

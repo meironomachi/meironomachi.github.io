@@ -368,10 +368,10 @@ test("적금 계산: 지금까지 넣은 것 + 남은 회차 예정, 기여금�
   const deps = [{ date: "2026-06-30", amount: 500000 }, { date: "2026-08-01", amount: 500000 }, { date: "2026-09-01", amount: 300000 }];
   const r = savingPlan(plan, deps, "2026-09-10");
   assert.equal(r.paidCount, 3);
-  assert.equal(r.rows.filter((x) => x.planned).length, 32); // 2026년 10월 ~ 2029년 5월 1일 (만기 2029-06-30 전)
+  assert.equal(r.rows.filter((x) => x.planned).length, 0); // 앞으로 넣을 돈은 가정하지 않음
   assert.equal(r.now.principal, 1300000);
   assert.equal(r.now.match, 30000); // 6/30분 기여금은 7/15에 적립, 8/1분은 9/15(아직)
-  assert.equal(r.end.principal, 1300000 + 32 * 500000);
+  assert.equal(r.end.principal, 1300000);
 });
 
 test("예정 내역은 합계·잔액·짝 찾기에서 빠지고, 적금 계산에서는 그 달의 예정 회차가 됨", async () => {
