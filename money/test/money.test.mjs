@@ -345,3 +345,31 @@ test("적금 계좌로 넣은 저축(짝): 통장 −, 적금 계좌 +, 저축 �
   assert.equal(accountBalance(acc, txs, cats), 800000);
   assert.equal(accountBalance({ id: "s1", opening_balance: 0 }, txs), 500000);
 });
+
+test("적금 계산: 엑셀 계산기(청년미래적금)와 같은 결과", async () => {
+  const { savingPlan } = await import("../js/money.js");
+  const plan = { start: "2026-06-30", months: 36, monthly: 500000, rate: 5, match: 6 };
+  // 엑셀의 입금일 그대로 (13·25회차는 엑셀이 가입일 기준 날짜를 씀)
+  const dates = ["2026-06-30"];
+  for (let k = 0; k < 35; k++) { const d = new Date(Date.UTC(2026, 6 + k, 1)); dates.push(d.toISOString().slice(0, 10)); }
+  dates[12] = "2027-06-30"; dates[24] = "2028-06-30";
+  const r = savingPlan(plan, dates.map((date) => ({ date, amount: 500000 })), "2029-07-01");
+  assert.equal(r.maturity, "2029-06-30");
+  assert.equal(r.end.principal, 18000000);
+  assert.equal(Math.round(r.end.match), 1080000);
+  assert.equal(r.end.interest.toFixed(2), "1453767.12");
+  assert.equal(r.end.matchInterest.toFixed(2), "81008.22");
+  assert.equal(r.end.total.toFixed(2), "20614775.34");
+});
+
+test("적금 계산: 지금까지 넣은 것 + 남은 회차 예정, 기여금은 다음 달 15일부터", async () => {
+  const { savingPlan } = await import("../js/money.js");
+  const plan = { start: "2026-06-30", months: 36, monthly: 500000, rate: 5, match: 6 };
+  const deps = [{ date: "2026-06-30", amount: 500000 }, { date: "2026-08-01", amount: 500000 }, { date: "2026-09-01", amount: 300000 }];
+  const r = savingPlan(plan, deps, "2026-09-10");
+  assert.equal(r.paidCount, 3);
+  assert.equal(r.rows.filter((x) => x.planned).length, 32); // 2026년 10월 ~ 2029년 5월 1일 (만기 2029-06-30 전)
+  assert.equal(r.now.principal, 1300000);
+  assert.equal(r.now.match, 30000); // 6/30분 기여금은 7/15에 적립, 8/1분은 9/15(아직)
+  assert.equal(r.end.principal, 1300000 + 32 * 500000);
+});

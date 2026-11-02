@@ -358,6 +358,51 @@ export function savingDeposits(account, txs, categories = []) {
     && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}${catName(t.category_id)}`).includes(key));
 }
 
+/* ---------- 적금 계산 (청년미래적금처럼 정부 기여금이 붙는 적금) ---------- */
+// plan: { start: "YYYY-MM-DD" 가입일, months: 기간(개월), monthly: 월 납입액, rate: 적금 금리(%), match: 기여금 비율(%) }
+// 엑셀 계산기와 같은 방식: 이자는 단리(일수/365 × 금액 × 금리). 기여금 = 입금액 × 비율, 입금한 다음 달 15일에 적립
+const dayNum = (d) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 86400000;
+const ymd = (y, m, d) => { const t = new Date(Date.UTC(y, m, 1)); const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate(); return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(Math.min(d, last))}`; };
+const addMonths = (d, n) => ymd(+d.slice(0, 4), +d.slice(5, 7) - 1 + n, +d.slice(8, 10));
+
+/** deposits: [{ date: "YYYY-MM-DD", amount }] 실제 입금. today: "YYYY-MM-DD" */
+export function savingPlan(plan, deposits, today) {
+  const months = Number(plan.months) || 36, rate = (Number(plan.rate) || 0) / 100, match = (Number(plan.match) || 0) / 100;
+  const maturity = addMonths(plan.start, months);
+  const actual = deposits.filter((d) => d.amount > 0).map((d) => ({ ...d, planned: false })).sort((a, b) => a.date.localeCompare(b.date));
+  // 앞으로 넣을 회차: 1회차는 가입일, 그다음은 매월 1일. 이미 넣은 달과 오늘 이전은 빼고 만기 전까지
+  const paidMonths = new Set(actual.map((d) => d.date.slice(0, 7)));
+  const planned = [];
+  for (let n = 0; n < months; n++) {
+    const date = n === 0 ? plan.start : ymd(+plan.start.slice(0, 4), +plan.start.slice(5, 7) - 1 + n, 1);
+    if (date <= today || date >= maturity || paidMonths.has(date.slice(0, 7))) continue;
+    planned.push({ date, amount: Number(plan.monthly) || 0, planned: true });
+  }
+  const until = (from, to) => Math.max(0, dayNum(to) - dayNum(from)) / 365;
+  const rows = [...actual, ...planned].map((d, i) => {
+    const matchDate = ymd(+d.date.slice(0, 4), +d.date.slice(5, 7), 15);
+    const matchAmt = d.amount * match;
+    return {
+      no: i + 1, ...d, matchDate, matchAmt,
+      interest: until(d.date, maturity) * d.amount * rate,
+      matchInterest: matchDate < maturity ? until(matchDate, maturity) * matchAmt * rate : 0,
+    };
+  });
+  const sum = (list, f) => list.reduce((s, r) => s + f(r), 0);
+  const paid = rows.filter((r) => !r.planned);
+  const credited = paid.filter((r) => r.matchDate <= today);
+  const now = {
+    principal: sum(paid, (r) => r.amount),
+    match: sum(credited, (r) => r.matchAmt),
+    interest: sum(paid, (r) => until(r.date, today < maturity ? today : maturity) * r.amount * rate)
+      + sum(credited, (r) => until(r.matchDate, today < maturity ? today : maturity) * r.matchAmt * rate),
+  };
+  now.total = now.principal + now.match + now.interest;
+  const end = { principal: sum(rows, (r) => r.amount), match: sum(rows, (r) => r.matchAmt), interest: sum(rows, (r) => r.interest), matchInterest: sum(rows, (r) => r.matchInterest) };
+  end.total = end.principal + end.match + end.interest + end.matchInterest;
+  return { maturity, rows, now, end, paidCount: paid.length, months };
+}
+
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
 export function frequentEntries(txs, limit = 6) {
   const count = new Map();

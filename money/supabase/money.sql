@@ -116,3 +116,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS money_tx_recurring ON public.money_transaction
 
 -- 적금·예금 계좌: 다른 통장에서 이 이름으로 나간 저축 내역만큼 잔액이 늘어남 (비우면 일반 계좌)
 ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_match text;
+
+-- 적금 계산 설정 {start 가입일, months 기간, monthly 월 납입액, rate 금리(%), match 기여금 비율(%)}
+ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_plan jsonb;
