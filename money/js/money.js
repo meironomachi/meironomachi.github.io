@@ -357,6 +357,21 @@ export function savingDeposits(account, txs) {
     && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}`).includes(key));
 }
 
+/** 저축 탭으로 넣은 돈을 저축 분류별로 모음 (계좌에서 나간 저축은 amount가 −라서 −를 더함). 적금 계좌(saving_match)에 이미 잡힌 내역은 뺌 */
+export function savingTotals(txs, accounts = []) {
+  const counted = new Set(accounts.flatMap((a) => savingDeposits(a, txs)));
+  const out = new Map();
+  for (const t of txs) {
+    if (t.kind !== "saving" || counted.has(t)) continue;
+    const k = t.category_id ?? "none";
+    const r = out.get(k) ?? { category_id: t.category_id ?? null, total: 0, count: 0, last: null };
+    r.total -= t.amount; r.count++;
+    if (!r.last || t.occurred_at > r.last) r.last = t.occurred_at;
+    out.set(k, r);
+  }
+  return [...out.values()].filter((r) => r.total !== 0).sort((a, b) => b.total - a.total);
+}
+
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
 export function frequentEntries(txs, limit = 6) {
   const count = new Map();

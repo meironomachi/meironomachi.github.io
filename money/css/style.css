@@ -387,3 +387,6 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
   .shot-table .input, .shot-table .s-date, .shot-table .s-time, .shot-table .s-amount { width: 100%; box-sizing: border-box; }
 }
 .acc-edit .field.full { grid-column: 1 / -1; }
+.savings { margin: 8px 0 20px; }
+.bank.b-saving { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--fg); }
+.small-total { margin: 4px 0 0; } .small-total b { font-size: 20px; }

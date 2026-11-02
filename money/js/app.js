@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021331";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021338";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
-  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, frequentEntries,
+  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingTotals, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021331";
+} from "./money.js?v=202611021338";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -551,7 +551,7 @@ async function renderAccounts() {
   document.title = "계좌 — $TDL";
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id");
+  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id");
   const all = data ?? [];
   const lastImport = (id) => all.filter((t) => t.account_id === id && t.source === "import").map((t) => t.occurred_at).sort().at(-1);
   const sum = base.accounts.reduce((s, a) => s + accountBalance(a, all), 0);
@@ -562,6 +562,8 @@ async function renderAccounts() {
     const last = dep.map((t) => t.occurred_at).sort().at(-1);
     return dep.length ? `적금 · '${a.saving_match}' 입금 ${dep.length}건 반영 (마지막 ${kstDay(last).replaceAll("-", ".")})` : `적금 · '${a.saving_match}' 이름으로 나간 내역이 아직 없어요`;
   };
+  const savings = savingTotals(all, base.accounts);
+  const savingSum = savings.reduce((s, r) => s + r.total, 0);
   fill(`<p class="total-balance"><span class="muted">모든 계좌</span><b>${won(sum)}</b></p>
     <ul class="accounts">${base.accounts.map((a) => {
       const li = lastImport(a.id);
@@ -578,18 +580,26 @@ async function renderAccounts() {
           </form></details>
       </li>`;
     }).join("")}</ul>
+    ${savings.length ? `<section class="savings">
+      <div class="section-head"><h3>저축</h3><span class="muted small">저축 탭으로 넣은 돈이 분류별로 쌓여요 · 합계 ${won(savingSum)}</span></div>
+      <ul class="accounts">${savings.map((r) => {
+        const c = catOf(r.category_id);
+        return `<li class="paper"><div class="acc-head"><span class="bank b-saving" style="--c:${c?.color ?? "var(--border)"}">저축</span><b>${esc(c?.name ?? "분류 없음")}</b></div>
+          <p class="acc-bal">${won(r.total)}</p>
+          <p class="muted small">${r.count}건 · 마지막 ${kstDay(r.last).replaceAll("-", ".")}</p></li>`;
+      }).join("")}</ul>
+      <p class="total-balance small-total"><span class="muted">계좌 + 저축</span><b>${won(sum + savingSum)}</b></p>
+    </section>` : ""}
     <form class="paper acc-add" id="acc-add">
       <h3>계좌 추가</h3>
       <div class="grid2">
         <label class="field">은행<select class="input" name="bank">${BANKS.map((b) => `<option value="${b.id}">${b.name}</option>`).join("")}</select></label>
         <label class="field">이름<input class="input" name="name" placeholder="예: 하나 월급통장" required></label>
         <label class="field">시작 잔액<input class="input" name="opening" inputmode="numeric" value="0"></label>
-        <label class="field">적금·예금 입금 내역 이름 <span class="muted">(적금이면)</span><input class="input" name="match" placeholder="예: 청년미래적금"></label>
       </div>
-      <p class="muted small">적금·예금 계좌는 입금 내역 이름을 적어 두면, 다른 통장에서 그 이름으로 빠져나간 저축(또는 이체) 내역만큼 이 계좌 잔액이 자동으로 늘어요. 시작 잔액에는 기록을 시작하기 전까지 모인 금액을 넣어 주세요.</p>
       <div><button class="btn outline" type="submit">추가</button></div>
     </form>`);
-  $$(".accounts li").forEach((li) => {
+  $$(".accounts li[data-id]").forEach((li) => {
     const a = accOf(li.dataset.id);
     $(".acc-edit", li).onsubmit = async (e) => {
       e.preventDefault();
@@ -606,7 +616,7 @@ async function renderAccounts() {
   $("#acc-add").onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target;
-    const { error } = await sb.from("money_accounts").insert({ bank: f.bank.value, name: f.name.value.trim(), opening_balance: parseAmount(f.opening.value) ?? 0, saving_match: f.match.value.trim() || null, sort: base.accounts.length });
+    const { error } = await sb.from("money_accounts").insert({ bank: f.bank.value, name: f.name.value.trim(), opening_balance: parseAmount(f.opening.value) ?? 0, sort: base.accounts.length });
     if (error) { toast("추가하지 못했어요.", "error"); return; }
     toast("계좌를 추가했어요"); rerender();
   };
@@ -743,7 +753,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021331");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021338");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
@@ -1048,7 +1058,8 @@ async function route() {
     if (path === "/budget") return await renderBudget(params);
     if (path === "/import") return await renderImport();
     return await renderMonth(params);
-  } catch {
+  } catch (err) {
+    console.error(err); // 원인 확인용 (화면에는 안내만)
     app.innerHTML = shell("/", '<div class="paper notice"><h2>불러오지 못했어요</h2><p>잠시 뒤 새로고침해 주세요. 계속되면 데이터베이스 설정(money.sql)을 확인해 주세요.</p></div>');
     bindShell();
   }
