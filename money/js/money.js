@@ -323,7 +323,7 @@ export function monthSummary(txs) {
   for (const t of txs) {
     if (t.kind === "income") income += t.amount;
     else if (t.kind === "expense") { expense += -t.amount; const k = t.category_id ?? "none"; byCat[k] = (byCat[k] ?? 0) + -t.amount; }
-    else if (t.kind === "saving") saving += -t.amount;
+    else if (t.kind === "saving" && t.amount < 0) saving += -t.amount; // 적금 계좌로 들어온 쪽(+)은 빼고 셈
   }
   return { income, expense, net: income - expense, saving, byCat };
 }
@@ -339,37 +339,23 @@ export function budgetStatus(spent, budget) {
 export const changeRate = (now, before) => (before ? Math.round(((now - before) / before) * 100) : null);
 
 /** 계좌 잔액: 잔액이 적힌 가장 최근 거래 + 그 뒤 손으로 넣은 거래들. 잔액 기록이 없으면 시작 잔액 + 합계 */
-export function accountBalance(account, txs) {
+export function accountBalance(account, txs, categories = []) {
   const mine = txs.filter((t) => t.account_id === account.id).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
   const lastIdx = mine.map((t) => t.balance_after != null).lastIndexOf(true);
   const own = lastIdx < 0
     ? (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0)
     : mine[lastIdx].balance_after + mine.slice(lastIdx + 1).reduce((s, t) => s + t.amount, 0);
-  return own + savingDeposits(account, txs).reduce((s, t) => s - t.amount, 0);
+  return own + savingDeposits(account, txs, categories).reduce((s, t) => s - t.amount, 0);
 }
 
-/** 적금·예금 계좌(saving_match가 있는 계좌)로 들어간 돈: 다른 통장에서 나간 저축·이체 내역 중 그 글자가 들어간 것 (amount는 −) */
-export function savingDeposits(account, txs) {
+/** 적금·예금 계좌(saving_match가 있는 계좌)로 들어간 돈: 다른 통장에서 나간 저축·이체 내역 중 그 이름(어디서·거래구분·메모·분류 이름)이 들어간 것 (amount는 −).
+ * 넣는 계좌를 골라 저장한 저축(짝이 있는 내역)은 이미 그 계좌에 들어가 있으므로 뺌 */
+export function savingDeposits(account, txs, categories = []) {
   const key = normalizePlace(account.saving_match ?? "");
   if (!key) return [];
-  // 저축으로 분류된 것, 또는 손으로 이체로 바꿔 둔 것(내 다른 계좌와 짝이 없을 때)
-  return txs.filter((t) => t.account_id !== account.id && t.amount < 0 && (t.kind === "saving" || (t.kind === "transfer" && !t.pair_id))
-    && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}`).includes(key));
-}
-
-/** 저축 탭으로 넣은 돈을 저축 분류별로 모음 (계좌에서 나간 저축은 amount가 −라서 −를 더함). 적금 계좌(saving_match)에 이미 잡힌 내역은 뺌 */
-export function savingTotals(txs, accounts = []) {
-  const counted = new Set(accounts.flatMap((a) => savingDeposits(a, txs)));
-  const out = new Map();
-  for (const t of txs) {
-    if (t.kind !== "saving" || counted.has(t)) continue;
-    const k = t.category_id ?? "none";
-    const r = out.get(k) ?? { category_id: t.category_id ?? null, total: 0, count: 0, last: null };
-    r.total -= t.amount; r.count++;
-    if (!r.last || t.occurred_at > r.last) r.last = t.occurred_at;
-    out.set(k, r);
-  }
-  return [...out.values()].filter((r) => r.total !== 0).sort((a, b) => b.total - a.total);
+  const catName = (id) => categories.find((c) => c.id === id)?.name ?? "";
+  return txs.filter((t) => t.account_id !== account.id && t.amount < 0 && !t.pair_id && (t.kind === "saving" || t.kind === "transfer")
+    && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}${catName(t.category_id)}`).includes(key));
 }
 
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
@@ -427,7 +413,7 @@ export function inflowByCat(txs) {
   const out = {};
   for (const t of txs) {
     if (t.kind === "income") out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) + t.amount;
-    else if (t.kind === "saving") out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) - t.amount;
+    else if (t.kind === "saving" && t.amount < 0) out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) - t.amount;
   }
   return out;
 }

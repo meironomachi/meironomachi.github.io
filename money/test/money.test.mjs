@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingTotals, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -332,16 +332,16 @@ test("적금 계좌: 다른 통장의 '저축' 내역 중 이름이 맞는 것�
   assert.equal(accountBalance({ id: "s1", opening_balance: 100000 }, txs), 100000);
 });
 
-test("저축 탭으로 넣은 돈을 저축 분류별로 모으고, 적금 계좌에 잡힌 것은 빼고 셈", () => {
+test("적금 계좌로 넣은 저축(짝): 통장 −, 적금 계좌 +, 저축 합계는 한 번만, 이름 매칭에서도 빠짐", () => {
   const txs = [
-    { account_id: "h1", amount: -500000, kind: "saving", category_id: "c-young", place: "청년미래적금", occurred_at: "2026-10-01T00:00:00Z" },
-    { account_id: "h1", amount: -500000, kind: "saving", category_id: "c-young", place: "청년미래적금", occurred_at: "2026-11-01T00:00:00Z" },
-    { account_id: "k1", amount: -30000, kind: "saving", category_id: "c-box", place: "세이프박스", occurred_at: "2026-10-05T00:00:00Z" },
-    { account_id: "k1", amount: -9000, kind: "expense", category_id: "c-food", occurred_at: "2026-10-05T00:00:00Z" },
+    { account_id: "h1", amount: -500000, kind: "saving", category_id: "c-young", place: "청년미래적금", pair_id: "p1", occurred_at: "2026-11-01T00:00:00+09:00" },
+    { account_id: "s1", amount: 500000, kind: "saving", category_id: "c-young", place: "하나 월급통장", pair_id: "p1", occurred_at: "2026-11-01T00:00:00+09:00" },
+    { account_id: "h1", amount: -300000, kind: "saving", category_id: "c-young", place: "", occurred_at: "2026-10-01T00:00:00+09:00" },
   ];
-  const r = savingTotals(txs);
-  assert.deepEqual(r.map((x) => [x.category_id, x.total, x.count]), [["c-young", 1000000, 2], ["c-box", 30000, 1]]);
-  assert.equal(r[0].last, "2026-11-01T00:00:00Z");
-  // 같은 내역을 적금 계좌가 이미 셈하고 있으면 저축 쪽에서는 빠짐 (두 번 세지 않게)
-  assert.deepEqual(savingTotals(txs, [{ id: "s1", saving_match: "청년미래적금" }]).map((x) => x.category_id), ["c-box"]);
+  assert.equal(monthSummary(txs.slice(0, 2)).saving, 500000);
+  const cats = [{ id: "c-young", name: "청년미래적금" }];
+  const acc = { id: "s1", opening_balance: 0, saving_match: "청년미래적금" };
+  // 짝 있는 +50만은 계좌 내역으로, 짝 없는 −30만은 분류 이름으로 잡힘 → 80만
+  assert.equal(accountBalance(acc, txs, cats), 800000);
+  assert.equal(accountBalance({ id: "s1", opening_balance: 0 }, txs), 500000);
 });

@@ -60,6 +60,7 @@ class Query {
   lt(k, v) { this.filters.push([k, v, "lt"]); return this; }
   not(k, op, v) { this.filters.push([k, v, "notnull"]); return this; }
   in(k, list) { this.filters.push([k, list, "in"]); return this; }
+  neq(k, v) { this.filters.push([k, v, "neq"]); return this; }
   order(k, o = {}) { this.sort = [k, o.ascending !== false]; return this; }
   limit(n) { this.max = n; return this; }
   insert(row) { this.op = "insert"; this.rows = Array.isArray(row) ? row : [row]; return this; }
@@ -70,7 +71,7 @@ class Query {
   run() {
     const rows = db[this.table] ?? (db[this.table] = []);
     const match = (r) => this.filters.every(([k, v, op]) => op === "gte" ? String(r[k]) >= String(v) : op === "lt" ? String(r[k]) < String(v)
-      : op === "notnull" ? r[k] != null : op === "in" ? v.includes(r[k]) : String(r[k]) === String(v));
+      : op === "notnull" ? r[k] != null : op === "in" ? v.includes(r[k]) : op === "neq" ? String(r[k]) !== String(v) : String(r[k]) === String(v));
     let out;
     if (this.op === "insert") {
       for (const r of this.rows) {
