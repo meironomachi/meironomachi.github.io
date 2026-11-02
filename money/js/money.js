@@ -283,11 +283,14 @@ export function classify(t, rules, categories) {
 }
 
 /* ---------- 취소·이체·겹침 ---------- */
+/** 예정 내역(아직 실제로 오가지 않은 돈)은 합계·잔액·짝 찾기에서 뺌 */
+export const isReal = (t) => !t.planned;
 const within = (a, b, ms) => Math.abs(Date.parse(a) - Date.parse(b)) <= ms;
 
 /** 결제 뒤 같은 금액이 '취소·환불·체크카드(기타)'로 들어오면 둘 다 취소로 표시할 짝 [[결제, 취소]] */
 export function findCancelPairs(txs) {
   const used = new Set(), pairs = [];
+  txs = txs.filter(isReal);
   const refunds = txs.filter((t) => t.amount > 0 && /취소|환불|체크카드\s*\(기타\)|승인취소/.test(t.tx_type ?? ""));
   for (const r of refunds) {
     const pay = txs.filter((t) => t.amount === -r.amount && !used.has(t) && t.account_id === r.account_id
@@ -301,6 +304,7 @@ export function findCancelPairs(txs) {
 /** 내 계좌끼리 오간 돈: 다른 계좌에서 같은 금액이 10분 안에 나가고 들어온 짝 [[출금, 입금]] */
 export function findTransferPairs(txs) {
   const used = new Set(), pairs = [];
+  txs = txs.filter(isReal);
   const outs = txs.filter((t) => t.amount < 0 && t.kind !== "cancel").sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
   for (const o of outs) {
     const i = txs.find((t) => t.amount === -o.amount && t.account_id !== o.account_id && t.kind !== "cancel" && !used.has(t) && !used.has(o) && within(t.occurred_at, o.occurred_at, 10 * 60000));
@@ -321,6 +325,7 @@ export function monthSummary(txs) {
   let income = 0, expense = 0, saving = 0;
   const byCat = {};
   for (const t of txs) {
+    if (t.planned) continue;
     if (t.kind === "income") income += t.amount;
     else if (t.kind === "expense") { expense += -t.amount; const k = t.category_id ?? "none"; byCat[k] = (byCat[k] ?? 0) + -t.amount; }
     else if (t.kind === "saving" && t.amount < 0) saving += -t.amount; // 적금 계좌로 들어온 쪽(+)은 빼고 셈
@@ -340,7 +345,7 @@ export const changeRate = (now, before) => (before ? Math.round(((now - before) 
 
 /** 계좌 잔액: 잔액이 적힌 가장 최근 거래 + 그 뒤 손으로 넣은 거래들. 잔액 기록이 없으면 시작 잔액 + 합계 */
 export function accountBalance(account, txs, categories = []) {
-  const mine = txs.filter((t) => t.account_id === account.id).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
+  const mine = txs.filter((t) => t.account_id === account.id && isReal(t)).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
   const lastIdx = mine.map((t) => t.balance_after != null).lastIndexOf(true);
   const own = lastIdx < 0
     ? (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0)
@@ -354,7 +359,7 @@ export function savingDeposits(account, txs, categories = []) {
   const key = normalizePlace(account.saving_match ?? "");
   if (!key) return [];
   const catName = (id) => categories.find((c) => c.id === id)?.name ?? "";
-  return txs.filter((t) => t.account_id !== account.id && t.amount < 0 && !t.pair_id && (t.kind === "saving" || t.kind === "transfer")
+  return txs.filter((t) => isReal(t) && t.account_id !== account.id && t.amount < 0 && !t.pair_id && (t.kind === "saving" || t.kind === "transfer")
     && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}${catName(t.category_id)}`).includes(key));
 }
 
@@ -369,16 +374,18 @@ const addMonths = (d, n) => ymd(+d.slice(0, 4), +d.slice(5, 7) - 1 + n, +d.slice
 export function savingPlan(plan, deposits, today) {
   const months = Number(plan.months) || 36, rate = (Number(plan.rate) || 0) / 100, match = (Number(plan.match) || 0) / 100;
   const maturity = addMonths(plan.start, months);
-  const actual = deposits.filter((d) => d.amount > 0).map((d) => ({ ...d, planned: false })).sort((a, b) => a.date.localeCompare(b.date));
-  // 앞으로 넣을 회차: 1회차는 가입일, 그다음은 매월 1일. 이미 넣은 달과 오늘 이전은 빼고 만기 전까지
-  const paidMonths = new Set(actual.map((d) => d.date.slice(0, 7)));
-  const planned = [];
+  const actual = deposits.filter((d) => d.amount > 0 && !d.planned).map((d) => ({ ...d, planned: false })).sort((a, b) => a.date.localeCompare(b.date));
+  // 앞으로 넣을 회차: 1회차는 가입일, 그다음은 매월 1일. 이미 넣은 달·예정 내역을 적어 둔 달·오늘 이전은 빼고 만기 전까지
+  const marked = deposits.filter((d) => d.amount > 0 && d.planned).map((d) => ({ ...d, planned: true, marked: true }));
+  const paidMonths = new Set([...actual, ...marked].map((d) => d.date.slice(0, 7)));
+  const planned = [...marked];
   for (let n = 0; n < months; n++) {
     const date = n === 0 ? plan.start : ymd(+plan.start.slice(0, 4), +plan.start.slice(5, 7) - 1 + n, 1);
     if (date <= today || date >= maturity || paidMonths.has(date.slice(0, 7))) continue;
     planned.push({ date, amount: Number(plan.monthly) || 0, planned: true });
   }
   const until = (from, to) => Math.max(0, dayNum(to) - dayNum(from)) / 365;
+  planned.sort((a, b) => a.date.localeCompare(b.date));
   const rows = [...actual, ...planned].map((d, i) => {
     const matchDate = ymd(+d.date.slice(0, 4), +d.date.slice(5, 7), 15);
     const matchAmt = d.amount * match;
@@ -407,7 +414,7 @@ export function savingPlan(plan, deposits, today) {
 export function frequentEntries(txs, limit = 6) {
   const count = new Map();
   for (const t of txs) {
-    if (!t.place || t.kind !== "expense") continue;
+    if (!t.place || t.kind !== "expense" || t.planned) continue;
     const k = `${t.place}|${t.category_id ?? ""}`;
     const c = count.get(k) ?? { place: t.place, category_id: t.category_id, amount: -t.amount, n: 0 };
     c.n++; count.set(k, c);
@@ -457,6 +464,7 @@ export function goalStatus(got, goal) {
 export function inflowByCat(txs) {
   const out = {};
   for (const t of txs) {
+    if (t.planned) continue;
     if (t.kind === "income") out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) + t.amount;
     else if (t.kind === "saving" && t.amount < 0) out[t.category_id ?? "none"] = (out[t.category_id ?? "none"] ?? 0) - t.amount;
   }

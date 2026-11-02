@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -372,4 +372,21 @@ test("적금 계산: 지금까지 넣은 것 + 남은 회차 예정, 기여금�
   assert.equal(r.now.principal, 1300000);
   assert.equal(r.now.match, 30000); // 6/30분 기여금은 7/15에 적립, 8/1분은 9/15(아직)
   assert.equal(r.end.principal, 1300000 + 32 * 500000);
+});
+
+test("예정 내역은 합계·잔액·짝 찾기에서 빠지고, 적금 계산에서는 그 달의 예정 회차가 됨", async () => {
+  const { savingPlan } = await import("../js/money.js");
+  const txs = [
+    { account_id: "a", amount: 300000, kind: "income", category_id: "c1", occurred_at: "2026-11-01T00:00:00Z" },
+    { account_id: "a", amount: 2500000, kind: "income", category_id: "c1", occurred_at: "2026-11-25T00:00:00Z", planned: true },
+    { account_id: "a", amount: -50000, kind: "expense", category_id: "c2", occurred_at: "2026-11-26T00:00:00Z", planned: true },
+  ];
+  assert.deepEqual([monthSummary(txs).income, monthSummary(txs).expense], [300000, 0]);
+  assert.equal(accountBalance({ id: "a", opening_balance: 0 }, txs), 300000);
+  assert.equal(inflowByCat(txs).c1, 300000);
+  const plan = { start: "2026-06-30", months: 36, monthly: 500000, rate: 5, match: 6 };
+  const r = savingPlan(plan, [{ date: "2026-06-30", amount: 500000 }, { date: "2026-12-03", amount: 700000, planned: true }], "2026-11-02");
+  const dec = r.rows.filter((x) => x.date.startsWith("2026-12"));
+  assert.deepEqual(dec.map((x) => [x.date, x.amount, x.planned, !!x.marked]), [["2026-12-03", 700000, true, true]]);
+  assert.equal(r.now.principal, 500000);
 });

@@ -401,3 +401,11 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .saving-set form { margin-top: 12px; }
 .saving-table tr.planned td { color: var(--muted-fg); }
 .saving-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+/* 예정 내역 */
+.tag.planned { background: transparent; border: 1px dashed currentColor; color: var(--muted-fg); }
+.tx.is-planned { opacity: .62; }
+.tx.is-planned .tx-amt { text-decoration: none; font-style: italic; }
+.planned-note { margin: 0; color: var(--muted-fg); font-style: italic; }
+.total-balance .planned-note { align-self: center; }
+.planned-card { padding: 16px 20px; margin-bottom: 20px; border-style: dashed; }
+.planned-check { margin: 4px 0; }

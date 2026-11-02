@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021501";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021504";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021501";
+} from "./money.js?v=202611021504";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -185,6 +185,17 @@ function renderLogin() {
   };
 }
 
+/* ---------- 예정 내역 ---------- */
+// 아직 실제로 오가지 않은 돈: 합계·잔액에는 안 넣고, 이 달 화면에 따로 모아 보여 줌. 눌러서 고치거나 확정
+function plannedSection(txs) {
+  const list = txs.filter((t) => t.planned);
+  if (!list.length) return "";
+  const inn = list.filter((t) => t.amount > 0 && t.kind === "income").reduce((s, t) => s + t.amount, 0);
+  const out = list.filter((t) => t.amount < 0).reduce((s, t) => s - t.amount, 0);
+  return `<section class="paper planned-card"><div class="section-head"><h3>예정</h3><span class="muted small">${inn ? `들어올 돈 ${won(inn)}` : ""}${inn && out ? " · " : ""}${out ? `나갈 돈 ${won(out)}` : ""} · 합계·잔액에 아직 안 넣음</span></div>
+    <ul class="tx-list">${list.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at)).map(txRow).join("")}</ul></section>`;
+}
+
 /* ---------- 이번 달 ---------- */
 async function renderMonth(params) {
   const m = params.get("m") || thisMonth();
@@ -202,7 +213,7 @@ async function renderMonth(params) {
   const none = s.byCat.none ?? 0;
   // 수입·저축 목표와 이 달의 고정 항목
   const inflow = inflowByCat(txs), prevInflow = inflowByCat(prev);
-  const incomeNone = txs.filter((t) => t.kind === "income" && !t.category_id).reduce((sum, t) => sum + t.amount, 0);
+  const incomeNone = txs.filter((t) => t.kind === "income" && !t.category_id && !t.planned).reduce((sum, t) => sum + t.amount, 0);
   const incomeRows = base.categories.filter((c) => c.kind === "income")
     .map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))
     .filter((r) => r.amt || r.budget).sort((a, b) => b.amt - a.amt);
@@ -250,6 +261,7 @@ async function renderMonth(params) {
     ${catDetails({ key: "expense", title: "분류별 지출", m, total: s.expense, rows: rows.map((r) => ({ c: r.c, amt: r.spent, before: r.before, budget: r.budget })), none })}
     ${catDetails({ key: "income", title: "분류별 수입", m, total: s.income, none: incomeNone, rows: incomeRows })}
 
+    ${plannedSection(txs)}
     ${txs.length ? `<section class="recent"><div class="section-head"><h3>최근 내역</h3><a class="btn ghost sm" href="#/list?m=${m}">전체 보기</a></div>${txList(txs.slice(0, 6))}</section>` : ""}`);
   bindTxRows();
 }
@@ -315,11 +327,11 @@ document.addEventListener("toggle", (e) => {
 function txRow(t) {
   const c = catOf(t.category_id), a = accOf(t.account_id);
   const title = t.place || c?.name || t.tx_type || kindName(t.kind);
-  const tag = (t.recurring_id ? '<span class="tag fixed">고정</span>' : "") + (t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`);
-  return `<li><button type="button" class="tx" data-tx="${t.id}">
+  const tag = (t.planned ? '<span class="tag planned">예정</span>' : "") + (t.recurring_id ? '<span class="tag fixed">고정</span>' : "") + (t.kind === "expense" || t.kind === "income" ? "" : `<span class="tag ${t.kind}">${kindName(t.kind)}</span>`);
+  return `<li><button type="button" class="tx${t.planned ? " is-planned" : ""}" data-tx="${t.id}">
     <span class="tx-check" aria-hidden="true"></span>
     <span class="tx-cat" style="--c:${c?.color ?? "var(--border)"}">${esc(c?.name ?? "분류 없음")}</span>
-    <span class="tx-main"><b>${esc(title)}</b><span class="muted small">${kstTime(t.occurred_at)} · ${esc(a?.name ?? "")}${t.memo ? ` · ${esc(t.memo)}` : ""}${t.source === "manual" ? " · 직접 입력" : ""}</span></span>
+    <span class="tx-main"><b>${esc(title)}</b><span class="muted small">${t.planned ? `${kstDay(t.occurred_at).slice(5).replace("-", ".")} ` : ""}${kstTime(t.occurred_at)} · ${esc(a?.name ?? "")}${t.memo ? ` · ${esc(t.memo)}` : ""}${t.source === "manual" ? " · 직접 입력" : ""}</span></span>
     <span class="tx-amt ${t.kind}">${tag}${signedWon(t.amount)}</span>
   </button></li>`;
 }
@@ -327,7 +339,7 @@ function txList(txs) {
   const days = [...new Set(txs.map((t) => kstDay(t.occurred_at)))];
   return days.map((d) => {
     const list = txs.filter((t) => kstDay(t.occurred_at) === d);
-    const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0);
+    const out = list.filter((t) => t.kind === "expense" && !t.planned).reduce((s, t) => s - t.amount, 0);
     return `<div class="day"><h4>${dayLabel(d)}${out ? `<span>지출 ${won(out)}</span>` : ""}</h4><ul class="tx-list">${list.map(txRow).join("")}</ul></div>`;
   }).join("");
 }
@@ -367,8 +379,9 @@ async function renderList(params) {
     const q = $("#q").value.trim().toLowerCase(), acc = $("#f-acc").value, cat = $("#f-cat").value, kind = $("#f-kind").value;
     const list = txs.filter((t) => (!q || `${t.place} ${t.memo} ${t.tx_type}`.toLowerCase().includes(q)) && (!acc || t.account_id === acc)
       && (!cat || (cat === "none" ? !t.category_id && t.kind === (kind || "expense") : t.category_id === cat)) && (!kind || t.kind === kind));
-    const out = list.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0), inc = list.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
-    $("#count").textContent = `${list.length}건 · 지출 ${won(out)} · 수입 ${won(inc)}`;
+    const real = list.filter((t) => !t.planned), plannedN = list.length - real.length;
+    const out = real.filter((t) => t.kind === "expense").reduce((s, t) => s - t.amount, 0), inc = real.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
+    $("#count").textContent = `${real.length}건 · 지출 ${won(out)} · 수입 ${won(inc)}${plannedN ? ` · 예정 ${plannedN}건(합계 제외)` : ""}`;
     $("#rows").innerHTML = list.length ? txList(list) : '<p class="empty">내역이 없어요.</p>';
     visible = list;
     $("#rows").classList.toggle("selecting", selecting);
@@ -440,9 +453,10 @@ async function txDialog(tx) {
       <label class="field">어디서 · 누구<input class="input" id="t-place" value="${esc(tx?.place ?? "")}" placeholder="예: 스타벅스, 엄마"></label>
       <label class="field">메모<input class="input" id="t-memo" value="${esc(tx?.memo ?? "")}"></label>
     </div>
+    <label class="check planned-check"><input type="checkbox" id="t-planned" ${tx?.planned ? "checked" : ""} ${tx?.source === "import" ? "disabled" : ""}> 예정 내역 <span class="muted small">(아직 안 오간 돈 · 합계·잔액에 안 넣고 표시만, 나중에 고쳐서 확정)</span></label>
     <label class="check" id="rule-wrap" hidden><input type="checkbox" id="t-rule" checked> <span id="rule-text"></span></label>
     ${tx?.source === "import" ? `<p class="muted small">은행 파일에서 가져온 내역이에요${tx.tx_type ? ` (${esc(tx.tx_type)})` : ""}. 금액·계좌·시각은 파일 기준이라 고칠 수 없어요.</p>` : ""}
-    <div class="actions">${editing ? '<button class="btn ghost danger" type="button" id="t-del">삭제</button><span style="flex:1"></span>' : ""}<button class="btn primary" type="submit" id="t-save">저장</button></div>
+    <div class="actions">${editing ? '<button class="btn ghost danger" type="button" id="t-del">삭제</button><span style="flex:1"></span>' : ""}${tx?.planned ? '<button class="btn outline" type="button" id="t-confirm">확정</button>' : ""}<button class="btn primary" type="submit" id="t-save">저장</button></div>
   </form>`;
   document.body.append(dlg);
   let cat = tx?.category_id ?? null;
@@ -512,6 +526,7 @@ async function txDialog(tx) {
     if (error) { toast("지우지 못했어요.", "error"); return; }
     dlg.close(); toast("지웠어요"); rerender();
   });
+  $("#t-confirm", dlg)?.addEventListener("click", () => { $("#t-planned", dlg).checked = false; $("#tx-form", dlg).requestSubmit(); });
   $("#tx-form", dlg).onsubmit = async (e) => {
     e.preventDefault();
     const n = parseAmount($("#t-amount", dlg).value);
@@ -519,16 +534,17 @@ async function txDialog(tx) {
     const sign = kind === "income" ? 1 : kind === "cancel" ? Math.sign(tx.amount) : -1;
     const place = $("#t-place", dlg).value.trim(), memo = $("#t-memo", dlg).value.trim();
     const at = fromLocalInput($("#t-at", dlg).value), acc = $("#t-acc", dlg).value;
+    const planned = $("#t-planned", dlg).checked;
     $("#t-save", dlg).disabled = true;
     let error;
     if (editing) {
-      const patch = { kind, category_id: cat, place, memo };
+      const patch = { kind, category_id: cat, place, memo, planned };
       // 짝이 있는 내역은 원래 방향(나간 쪽 −, 들어온 쪽 +)을 그대로 둠
       if (!imported) Object.assign(patch, { amount: tx.pair_id ? Math.sign(tx.amount) * n : sign * n, account_id: acc, occurred_at: at });
       ({ error } = await sb.from("money_transactions").update(patch).eq("id", tx.id));
       // 짝(이체·적금 넣기)의 반대쪽도 금액·날짜·분류를 맞춤
       if (!error && tx.pair_id) {
-        const other = { kind, category_id: cat, memo };
+        const other = { kind, category_id: cat, memo, planned };
         if (!imported) Object.assign(other, { amount: tx.amount < 0 ? n : -n, occurred_at: at });
         await sb.from("money_transactions").update(other).eq("pair_id", tx.pair_id).neq("id", tx.id);
       }
@@ -537,8 +553,8 @@ async function txDialog(tx) {
       if (to === acc) { $("#t-save", dlg).disabled = false; toast("보내는 계좌와 받는 계좌가 같아요.", "error"); return; }
       const pair_id = crypto.randomUUID();
       ({ error } = await sb.from("money_transactions").insert([
-        { account_id: acc, occurred_at: at, amount: -n, kind, category_id: cat, place: place || accOf(to)?.name || "", memo, pair_id },
-        { account_id: to, occurred_at: at, amount: n, kind, category_id: cat, place: place || accOf(acc)?.name || "", memo, pair_id },
+        { account_id: acc, occurred_at: at, amount: -n, kind, category_id: cat, place: place || accOf(to)?.name || "", memo, pair_id, planned },
+        { account_id: to, occurred_at: at, amount: n, kind, category_id: cat, place: place || accOf(acc)?.name || "", memo, pair_id, planned },
       ]));
     } else if (kind === "saving" && $("#t-save-to", dlg).value) {
       // 저축 + 넣는 계좌: 통장에서 나간 돈(−)과 적금 계좌로 들어온 돈(+)을 짝으로 저장
@@ -547,12 +563,12 @@ async function txDialog(tx) {
       remember(`money-saving-to-${cat ?? "none"}`, to);
       const pair_id = crypto.randomUUID();
       ({ error } = await sb.from("money_transactions").insert([
-        { account_id: acc, occurred_at: at, amount: -n, kind, category_id: cat, place: place || catOf(cat)?.name || accOf(to)?.name || "", memo, pair_id },
-        { account_id: to, occurred_at: at, amount: n, kind, category_id: cat, place: place || accOf(acc)?.name || "", memo, pair_id },
+        { account_id: acc, occurred_at: at, amount: -n, kind, category_id: cat, place: place || catOf(cat)?.name || accOf(to)?.name || "", memo, pair_id, planned },
+        { account_id: to, occurred_at: at, amount: n, kind, category_id: cat, place: place || accOf(acc)?.name || "", memo, pair_id, planned },
       ]));
     } else {
       if (kind === "saving") remember(`money-saving-to-${cat ?? "none"}`, "");
-      ({ error } = await sb.from("money_transactions").insert({ account_id: acc, occurred_at: at, amount: sign * n, kind, category_id: cat, place, memo }));
+      ({ error } = await sb.from("money_transactions").insert({ account_id: acc, occurred_at: at, amount: sign * n, kind, category_id: cat, place, memo, planned }));
     }
     if (error) { $("#t-save", dlg).disabled = false; toast("저장하지 못했어요.", "error"); return; }
     if (!$("#rule-wrap", dlg).hidden && $("#t-rule", dlg).checked) {
@@ -568,7 +584,7 @@ async function txDialog(tx) {
     }
     remember("money-last-account", acc);
     dlg.close();
-    toast(editing ? "고쳤어요" : `${kindName(kind)} ${won(n)} 넣었어요`);
+    toast(editing ? (tx.planned && !planned ? "확정했어요" : "고쳤어요") : `${planned ? "예정 " : ""}${kindName(kind)} ${won(n)} 넣었어요`);
     rerender();
   };
   dlg.showModal();
@@ -580,10 +596,19 @@ async function renderAccounts() {
   document.title = "계좌 — $TDL";
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id");
+  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id, planned");
   const all = data ?? [];
   const lastImport = (id) => all.filter((t) => t.account_id === id && t.source === "import").map((t) => t.occurred_at).sort().at(-1);
   const sum = base.accounts.reduce((s, a) => s + accountBalance(a, all, base.categories), 0);
+  // 예정 내역: 잔액에는 안 넣고 따로 보여 줌
+  const plannedOf = (id) => all.filter((t) => t.planned && t.account_id === id);
+  const plannedSum = all.filter((t) => t.planned).reduce((s, t) => s + t.amount, 0);
+  const plannedNote = (id) => {
+    const list = plannedOf(id);
+    if (!list.length) return "";
+    const v = list.reduce((s, t) => s + t.amount, 0);
+    return `<p class="planned-note small">예정 ${signedWon(v)} · ${list.length}건 (잔액에 안 넣음)</p>`;
+  };
   // 적금 계좌: 다른 통장에서 들어온 저축 내역 수와 마지막 날짜
   const savingNote = (a) => {
     if (!a.saving_match) return null;
@@ -591,12 +616,13 @@ async function renderAccounts() {
     const last = dep.map((t) => t.occurred_at).sort().at(-1);
     return dep.length ? `적금 · '${a.saving_match}' 입금 ${dep.length}건 반영 (마지막 ${kstDay(last).replaceAll("-", ".")})` : `적금 · '${a.saving_match}' 이름으로 나간 내역이 아직 없어요`;
   };
-  fill(`<p class="total-balance"><span class="muted">모든 계좌</span><b>${won(sum)}</b></p>
+  fill(`<p class="total-balance"><span class="muted">모든 계좌</span><b>${won(sum)}</b>${plannedSum ? `<span class="planned-note small">예정까지 더하면 ${won(sum + plannedSum)}</span>` : ""}</p>
     <ul class="accounts">${base.accounts.map((a) => {
       const li = lastImport(a.id);
       return `<li class="paper" data-id="${a.id}">
         <div class="acc-head"><span class="bank b-${a.bank}">${esc(BANKS.find((b) => b.id === a.bank)?.name ?? "")}</span><b>${esc(a.name)}</b></div>
         <p class="acc-bal">${won(accountBalance(a, all, base.categories))}</p>
+        ${plannedNote(a.id)}
         <p class="muted small">${savingNote(a) ?? (li ? `파일로 ${kstDay(li).replaceAll("-", ".")}까지 가져옴` : a.bank === "cash" ? "직접 입력으로 관리" : "아직 가져온 파일이 없어요")}</p>
         ${isSavingAcc(a) ? `<a class="btn outline sm saving-link" href="#/saving?a=${a.id}">적금 계산 →</a>` : ""}
         <details><summary class="small">고치기</summary>
@@ -649,11 +675,11 @@ async function renderSaving(params) {
   document.title = `${a.name} 적금 계산 — $TDL`;
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("account_id, amount, occurred_at, kind, place, tx_type, memo, pair_id, category_id");
+  const { data } = await sb.from("money_transactions").select("account_id, amount, occurred_at, kind, place, tx_type, memo, pair_id, category_id, planned");
   const all = data ?? [];
   // 이 계좌로 들어온 돈: 계좌의 + 내역(넣는 계좌로 저장한 저축 등) + 이름으로 잡힌 다른 통장의 저축
   const deposits = [
-    ...all.filter((t) => t.account_id === a.id && t.amount > 0 && t.kind !== "cancel").map((t) => ({ date: kstDay(t.occurred_at), amount: t.amount })),
+    ...all.filter((t) => t.account_id === a.id && t.amount > 0 && t.kind !== "cancel").map((t) => ({ date: kstDay(t.occurred_at), amount: t.amount, planned: !!t.planned })),
     ...savingDeposits(a, all, base.categories).map((t) => ({ date: kstDay(t.occurred_at), amount: -t.amount })),
   ];
   const today = kstDay(new Date().toISOString());
@@ -687,7 +713,7 @@ async function renderSaving(params) {
       <div class="section-head"><h3>입금 내역</h3><span class="muted small">흐린 줄은 앞으로 넣을 예정 (월 납입액 기준)</span></div>
       <div class="table-scroll"><table class="import-table">
         <thead><tr><th>회차</th><th>입금일</th><th class="r">입금액</th><th>기여금 적립일</th><th class="r">기여금</th><th class="r">원금이자</th><th class="r">기여금이자</th></tr></thead>
-        <tbody>${r.rows.map((x) => `<tr class="${x.planned ? "planned" : ""}"><td>${x.no}</td><td>${d(x.date)}${x.planned ? " <small>예정</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
+        <tbody>${r.rows.map((x) => `<tr class="${x.planned ? "planned" : ""}"><td>${x.no}</td><td>${d(x.date)}${x.marked ? " <small>예정 내역</small>" : x.planned ? " <small>예정</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
         <tfoot><tr><td colspan="2">합계</td><td class="r">${w(r.end.principal)}</td><td></td><td class="r">${w(r.end.match)}</td><td class="r">${w(r.end.interest)}</td><td class="r">${w(r.end.matchInterest)}</td></tr></tfoot>
       </table></div>
       <p class="muted small">이자는 단리(입금일부터 만기까지 일수 ÷ 365 × 금액 × 금리)로 계산한 예상치예요. 기여금은 입금한 다음 달 15일에 적립되는 것으로 셈해요. 실제 금리·기여금 조건과 세금은 은행 안내를 확인해 주세요.</p>
@@ -835,7 +861,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021501");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021504");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
@@ -1050,7 +1076,8 @@ async function previewImport(box, accountId, items) {
   const keys = new Set(existing.map((t) => t.import_key).filter(Boolean));
   const byKey = new Map(existing.filter((t) => t.import_key).map((t) => [t.import_key, t]));
   const fixes = []; // 이미 있는 내역인데 이번 파일에서 거래 상대·거래구분을 다르게(더 바르게) 읽은 것
-  const manuals = existing.filter((t) => t.source === "manual" && !t.pair_id);
+  // 손으로 넣은 내역(예정으로 적어 둔 적금 넣기 같은 짝도 포함)과 파일 내역이 같으면 하나로 합치고 확정
+  const manuals = existing.filter((t) => t.source === "manual" && (!t.pair_id || t.planned));
   const taken = new Set();
   const fresh = [], merges = [];
   let dup = 0;
@@ -1106,7 +1133,9 @@ async function previewImport(box, accountId, items) {
       if (error) { toast("저장하지 못했어요. 다시 시도해 주세요.", "error"); $("#i-save").disabled = false; $("#i-save").textContent = "다시 저장"; return; }
     }
     for (const { manual, t } of merges) {
-      await sb.from("money_transactions").update({ occurred_at: t.occurred_at, balance_after: t.balance_after, tx_type: t.tx_type, import_key: t.import_key, source: "import", place: manual.place || t.place }).eq("id", manual.id);
+      await sb.from("money_transactions").update({ occurred_at: t.occurred_at, balance_after: t.balance_after, tx_type: t.tx_type, import_key: t.import_key, source: "import", place: manual.place || t.place, planned: false }).eq("id", manual.id);
+      // 예정으로 적어 둔 짝(적금 넣기·이체)의 반대쪽도 확정
+      if (manual.planned && manual.pair_id) await sb.from("money_transactions").update({ planned: false }).eq("pair_id", manual.pair_id);
     }
     // 기존 내역 중 짝이 된 것도 표시를 바꿈
     for (const t of [...cancels.flat(), ...transfers.flat()].filter((x) => !x._new)) {

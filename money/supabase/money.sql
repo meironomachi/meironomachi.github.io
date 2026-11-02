@@ -119,3 +119,6 @@ ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_match text;
 
 -- 적금 계산 설정 {start 가입일, months 기간, monthly 월 납입액, rate 금리(%), match 기여금 비율(%)}
 ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_plan jsonb;
+
+-- 예정 내역: 아직 실제로 오가지 않은 돈. 합계·잔액에 넣지 않고 표시만 함 (고쳐서 확정하거나 은행 파일을 가져오면 자동 확정)
+ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS planned boolean NOT NULL DEFAULT false;
