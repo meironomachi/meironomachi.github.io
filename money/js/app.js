@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021521";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021527";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021521";
+} from "./money.js?v=202611021527";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -688,7 +688,6 @@ async function renderSaving(params) {
   const r = savingPlan(plan, deposits, today);
   const w = (n) => won(Math.round(n));
   const d = (x) => x.replaceAll("-", ".");
-  const pct = Math.min(100, Math.round((r.paidCount / r.months) * 100));
   fill(`<p><a class="btn ghost sm" href="#/accounts">← 계좌</a></p>
     <section class="paper saving-head">
       <div class="section-head"><h3>${esc(a.name)} 적금 계산</h3><span class="muted small">가입 ${d(plan.start)} · 만기 ${d(r.maturity)}</span></div>
@@ -698,8 +697,7 @@ async function renderSaving(params) {
         <div><span>만기 때 (${d(r.maturity)}) – 지금까지 넣은 돈${r.rows.some((x) => x.marked) ? "과 예정 내역" : ""} 기준</span><b>${w(r.end.total)}</b>
           <small>원금 ${w(r.end.principal)} · 기여금 ${w(r.end.match)} · 원금이자 ${w(r.end.interest)} · 기여금이자 ${w(r.end.matchInterest)}</small></div>
       </div>
-      <div class="saving-progress"><span style="width:${pct}%"></span></div>
-      <p class="muted small">${r.months}회 중 ${r.paidCount}회 입금${a.saving_plan ? "" : " · 아래에서 내 가입 조건을 먼저 저장해 주세요"}</p>
+      ${a.saving_plan ? "" : '<p class="muted small">아래에서 내 가입 조건을 먼저 저장해 주세요</p>'}
     </section>
     <details class="paper saving-set" ${a.saving_plan ? "" : "open"}><summary><b>가입 조건</b> <span class="muted small">금리 ${plan.rate}% · 기여금 ${plan.match}%</span></summary>
       <form id="plan-form" class="grid2">
@@ -722,9 +720,9 @@ async function renderSaving(params) {
     <section class="paper saving-table">
       <div class="section-head"><h3>입금 내역</h3><span class="muted small">흐린 줄은 직접 적어 둔 예정 내역 (아직 안 넣음)</span></div>
       <div class="table-scroll"><table class="import-table">
-        <thead><tr><th>회차</th><th>입금일</th><th class="r">입금액</th><th>기여금 적립일</th><th class="r">기여금</th><th class="r">원금이자</th><th class="r">기여금이자</th></tr></thead>
-        <tbody>${r.rows.map((x, i) => `<tr class="dep ${x.planned ? "planned" : ""}" data-i="${i}" title="눌러서 고치거나 지우기"><td>${x.no}</td><td>${d(x.date)}${x.planned ? " <small>예정 내역</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><td colspan="2">합계</td><td class="r">${w(r.end.principal)}</td><td></td><td class="r">${w(r.end.match)}</td><td class="r">${w(r.end.interest)}</td><td class="r">${w(r.end.matchInterest)}</td></tr></tfoot>
+        <thead><tr><th>입금일</th><th class="r">입금액</th><th>기여금 적립일</th><th class="r">기여금</th><th class="r">원금이자</th><th class="r">기여금이자</th><th class="r">합계</th></tr></thead>
+        <tbody>${r.rows.map((x, i) => `<tr class="dep ${x.planned ? "planned" : ""}" data-i="${i}" title="눌러서 고치거나 지우기"><td data-l="입금일">${d(x.date)}${x.planned ? " <small>예정 내역</small>" : ""}</td><td class="r" data-l="입금액">${w(x.amount)}</td><td data-l="기여금 적립일">${d(x.matchDate)}</td><td class="r" data-l="기여금">${w(x.matchAmt)}</td><td class="r" data-l="원금이자">${w(x.interest)}</td><td class="r" data-l="기여금이자">${w(x.matchInterest)}</td><td class="r sum" data-l="합계"><b>${w(x.amount + x.matchAmt + x.interest + x.matchInterest)}</b></td></tr>`).join("")}</tbody>
+        <tfoot><tr><td>합계</td><td class="r" data-l="입금액">${w(r.end.principal)}</td><td class="empty"></td><td class="r" data-l="기여금">${w(r.end.match)}</td><td class="r" data-l="원금이자">${w(r.end.interest)}</td><td class="r" data-l="기여금이자">${w(r.end.matchInterest)}</td><td class="r sum" data-l="합계">${w(r.end.total)}</td></tr></tfoot>
       </table></div>
       <p class="muted small">이자는 단리(입금일부터 만기까지 일수 ÷ 365 × 금액 × 금리)로 계산한 예상치예요. 기여금은 입금한 다음 달 15일에 적립되는 것으로 셈해요. 실제 금리·기여금 조건과 세금은 은행 안내를 확인해 주세요.</p>
     </section>`);
@@ -897,7 +895,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021521");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021527");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

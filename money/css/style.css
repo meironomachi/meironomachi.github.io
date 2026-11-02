@@ -395,8 +395,6 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .saving-cards span { font-size: 13px; color: var(--muted-fg); }
 .saving-cards b { font-size: 26px; font-variant-numeric: tabular-nums; }
 .saving-cards small { font-size: 12.5px; color: var(--muted-fg); }
-.saving-progress { height: 8px; border-radius: 999px; background: var(--muted); overflow: hidden; }
-.saving-progress span { display: block; height: 100%; background: var(--primary); }
 .saving-set summary { cursor: pointer; }
 .saving-set form { margin-top: 12px; }
 .saving-table tr.planned td { color: var(--muted-fg); }
@@ -413,3 +411,15 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .saving-add .check { align-self: end; }
 .saving-table tr.dep { cursor: pointer; }
 .saving-table tr.dep:hover td { background: var(--muted); }
+/* 적금 입금 내역: 좁은 화면에서는 한 줄을 카드처럼 (입금일 · 합계가 맨 위) */
+@media (max-width: 640px) {
+  .saving-table thead { display: none; }
+  .saving-table table, .saving-table tbody, .saving-table tfoot { display: block; }
+  .saving-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+  .saving-table td { border: 0 !important; padding: 0 !important; display: flex; justify-content: space-between; gap: 8px; white-space: normal; }
+  .saving-table td[data-l]::before { content: attr(data-l); color: var(--muted-fg); font-weight: 400; font-size: 12px; }
+  .saving-table td:first-child { grid-column: 1; font-weight: 700; }
+  .saving-table td.sum { grid-column: 2; grid-row: 1; }
+  .saving-table td.empty { display: none; }
+  .saving-table tfoot tr { border-top: 2px solid var(--border); border-bottom: 0; }
+}
