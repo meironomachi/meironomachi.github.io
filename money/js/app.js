@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021509";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021521";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021509";
+} from "./money.js?v=202611021521";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -540,7 +540,8 @@ async function txDialog(tx) {
     if (editing) {
       const patch = { kind, category_id: cat, place, memo, planned };
       // 짝이 있는 내역은 원래 방향(나간 쪽 −, 들어온 쪽 +)을 그대로 둠
-      if (!imported) Object.assign(patch, { amount: tx.pair_id ? Math.sign(tx.amount) * n : sign * n, account_id: acc, occurred_at: at });
+      // 적금 계좌에 직접 넣은 저축(+)도 방향을 유지
+      if (!imported) Object.assign(patch, { amount: tx.pair_id || (kind === "saving" && tx.kind === "saving") ? Math.sign(tx.amount) * n : sign * n, account_id: acc, occurred_at: at });
       ({ error } = await sb.from("money_transactions").update(patch).eq("id", tx.id));
       // 짝(이체·적금 넣기)의 반대쪽도 금액·날짜·분류를 맞춤
       if (!error && tx.pair_id) {
@@ -675,12 +676,12 @@ async function renderSaving(params) {
   document.title = `${a.name} 적금 계산 — $TDL`;
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("account_id, amount, occurred_at, kind, place, tx_type, memo, pair_id, category_id, planned");
+  const { data } = await sb.from("money_transactions").select("*");
   const all = data ?? [];
   // 이 계좌로 들어온 돈: 계좌의 + 내역(넣는 계좌로 저장한 저축 등) + 이름으로 잡힌 다른 통장의 저축
   const deposits = [
-    ...all.filter((t) => t.account_id === a.id && t.amount > 0 && t.kind !== "cancel").map((t) => ({ date: kstDay(t.occurred_at), amount: t.amount, planned: !!t.planned })),
-    ...savingDeposits(a, all, base.categories).map((t) => ({ date: kstDay(t.occurred_at), amount: -t.amount })),
+    ...all.filter((t) => t.account_id === a.id && t.amount > 0 && t.kind !== "cancel").map((t) => ({ date: kstDay(t.occurred_at), amount: t.amount, planned: !!t.planned, tx: t })),
+    ...savingDeposits(a, all, base.categories).map((t) => ({ date: kstDay(t.occurred_at), amount: -t.amount, tx: t })),
   ];
   const today = kstDay(new Date().toISOString());
   const plan = { start: deposits.map((d) => d.date).sort()[0] ?? today, months: 36, rate: 5, match: 6, ...(a.saving_plan ?? {}) };
@@ -708,15 +709,51 @@ async function renderSaving(params) {
         <label class="field">기여금 비율 (%) <span class="muted">일반형 6, 우대형 12</span><input class="input" name="match" inputmode="decimal" value="${plan.match}" required></label>
         <div class="add-as"><button class="btn primary sm" type="submit">저장</button></div>
       </form></details>
+    <form class="paper saving-add" id="dep-add">
+      <div class="section-head"><h3>입금 추가</h3><span class="muted small">은행 파일에 없는 달은 여기서 직접 넣어요</span></div>
+      <div class="grid2">
+        <label class="field">입금일<input class="input" type="date" name="date" value="${today}" required></label>
+        <label class="field">금액<input class="input" name="amount" inputmode="numeric" value="${r.rows.length ? Math.round(r.rows.at(-1).amount).toLocaleString("ko-KR") : ""}" placeholder="500,000" required></label>
+        <label class="field">돈이 나간 통장<select class="input" name="from"><option value="">기록 안 함 (이 적금에만 넣음)</option>${base.accounts.filter((x) => x.id !== a.id).map((x) => `<option value="${x.id}" ${remember(`money-saving-from-${a.id}`) === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+        <label class="check"><input type="checkbox" name="planned"> 예정 내역 <span class="muted small">(아직 안 넣음)</span></label>
+      </div>
+      <div class="actions"><button class="btn primary" type="submit">추가</button></div>
+    </form>
     <section class="paper saving-table">
       <div class="section-head"><h3>입금 내역</h3><span class="muted small">흐린 줄은 직접 적어 둔 예정 내역 (아직 안 넣음)</span></div>
       <div class="table-scroll"><table class="import-table">
         <thead><tr><th>회차</th><th>입금일</th><th class="r">입금액</th><th>기여금 적립일</th><th class="r">기여금</th><th class="r">원금이자</th><th class="r">기여금이자</th></tr></thead>
-        <tbody>${r.rows.map((x) => `<tr class="${x.planned ? "planned" : ""}"><td>${x.no}</td><td>${d(x.date)}${x.planned ? " <small>예정 내역</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
+        <tbody>${r.rows.map((x, i) => `<tr class="dep ${x.planned ? "planned" : ""}" data-i="${i}" title="눌러서 고치거나 지우기"><td>${x.no}</td><td>${d(x.date)}${x.planned ? " <small>예정 내역</small>" : ""}</td><td class="r">${w(x.amount)}</td><td>${d(x.matchDate)}</td><td class="r">${w(x.matchAmt)}</td><td class="r">${w(x.interest)}</td><td class="r">${w(x.matchInterest)}</td></tr>`).join("")}</tbody>
         <tfoot><tr><td colspan="2">합계</td><td class="r">${w(r.end.principal)}</td><td></td><td class="r">${w(r.end.match)}</td><td class="r">${w(r.end.interest)}</td><td class="r">${w(r.end.matchInterest)}</td></tr></tfoot>
       </table></div>
       <p class="muted small">이자는 단리(입금일부터 만기까지 일수 ÷ 365 × 금액 × 금리)로 계산한 예상치예요. 기여금은 입금한 다음 달 15일에 적립되는 것으로 셈해요. 실제 금리·기여금 조건과 세금은 은행 안내를 확인해 주세요.</p>
     </section>`);
+  $$("tr.dep").forEach((tr) => tr.onclick = () => { const t = r.rows[Number(tr.dataset.i)].tx; if (t) txDialog(t); });
+  $("[name=amount]", $("#dep-add")).addEventListener("input", (e) => { const n = parseAmount(e.target.value.replace(/[^\d]/g, "")); e.target.value = n ? n.toLocaleString("ko-KR") : ""; });
+  $("#dep-add").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const n = parseAmount(f.amount.value.replace(/[^\d]/g, ""));
+    if (!n) { toast("금액을 넣어 주세요.", "error"); return; }
+    const at = new Date(Date.parse(`${f.date.value}T09:00:00+09:00`)).toISOString();
+    const planned = f.planned.checked, from = f.from.value;
+    const cat = base.categories.find((c) => c.kind === "saving" && normalizePlace(a.name).includes(normalizePlace(c.name)))?.id
+      ?? base.categories.find((c) => c.kind === "saving")?.id ?? null;
+    remember(`money-saving-from-${a.id}`, from);
+    f.querySelector("[type=submit]").disabled = true;
+    let error;
+    if (from) {
+      const pair_id = crypto.randomUUID();
+      ({ error } = await sb.from("money_transactions").insert([
+        { account_id: from, occurred_at: at, amount: -n, kind: "saving", category_id: cat, place: a.name, memo: "", pair_id, planned },
+        { account_id: a.id, occurred_at: at, amount: n, kind: "saving", category_id: cat, place: accOf(from)?.name ?? "", memo: "", pair_id, planned },
+      ]));
+    } else {
+      ({ error } = await sb.from("money_transactions").insert({ account_id: a.id, occurred_at: at, amount: n, kind: "saving", category_id: cat, place: "직접 입금", memo: "", planned }));
+    }
+    if (error) { f.querySelector("[type=submit]").disabled = false; toast("넣지 못했어요.", "error"); return; }
+    toast(`${planned ? "예정 " : ""}입금 ${won(n)} 넣었어요`); rerender();
+  };
   $("#plan-form").onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target;
@@ -860,7 +897,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021509");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021521");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

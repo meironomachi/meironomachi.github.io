@@ -409,3 +409,7 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .total-balance .planned-note { align-self: center; }
 .planned-card { padding: 16px 20px; margin-bottom: 20px; border-style: dashed; }
 .planned-check { margin: 4px 0; }
+.saving-add { padding: 20px; margin-bottom: 16px; display: grid; gap: 10px; }
+.saving-add .check { align-self: end; }
+.saving-table tr.dep { cursor: pointer; }
+.saving-table tr.dep:hover td { background: var(--muted); }
