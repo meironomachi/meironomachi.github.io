@@ -386,3 +386,4 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
   .shot-table td:nth-child(4), .shot-table td:nth-child(5) { grid-column: 2 / 4; }
   .shot-table .input, .shot-table .s-date, .shot-table .s-time, .shot-table .s-amount { width: 100%; box-sizing: border-box; }
 }
+.acc-edit .field.full { grid-column: 1 / -1; }

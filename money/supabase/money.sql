@@ -113,3 +113,6 @@ CREATE POLICY "own rows" ON public.money_recurring FOR ALL TO authenticated
 ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS recurring_id uuid REFERENCES public.money_recurring(id) ON DELETE SET NULL;
 ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS recurring_month text;
 CREATE UNIQUE INDEX IF NOT EXISTS money_tx_recurring ON public.money_transactions (recurring_id, recurring_month) WHERE recurring_id IS NOT NULL;
+
+-- 적금·예금 계좌: 다른 통장에서 이 이름으로 나간 저축 내역만큼 잔액이 늘어남 (비우면 일반 계좌)
+ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_match text;

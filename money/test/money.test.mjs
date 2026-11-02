@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -315,4 +315,19 @@ test("적요가 거래 상대인 파일(하나은행)과 거래 종류인 파일
     ["2026.10.16 13:26:39", "타행이체", "", "600", "7,700", "김도현"],
   ]);
   assert.deepEqual(other.items.map((t) => [t.place, t.tx_type]), [["맘스터치", "체크카드"], ["김도현", "타행이체"]]);
+});
+
+test("적금 계좌: 다른 통장의 '저축' 내역 중 이름이 맞는 것만큼 잔액이 늘어남", () => {
+  const acc = { id: "s1", opening_balance: 100000, saving_match: "청년미래적금" };
+  const txs = [
+    { account_id: "h1", amount: -500000, kind: "saving", place: "청년 미래 적금", occurred_at: "2026-10-01T00:00:00Z" },
+    { account_id: "h1", amount: -200000, kind: "saving", place: "자유적금", occurred_at: "2026-10-02T00:00:00Z" },
+    { account_id: "h1", amount: -500000, kind: "transfer", place: "청년미래적금", pair_id: "p1", occurred_at: "2026-10-03T00:00:00Z" },
+    { account_id: "h1", amount: -300000, kind: "transfer", place: "청년미래적금", occurred_at: "2026-10-04T00:00:00Z" },
+    { account_id: "h1", amount: -500000, kind: "saving", place: "", tx_type: "청년미래적금", occurred_at: "2026-11-01T00:00:00Z" },
+  ];
+  assert.equal(savingDeposits(acc, txs).length, 3);
+  assert.equal(accountBalance(acc, txs), 1400000);
+  // 이름을 안 적은 계좌는 예전처럼
+  assert.equal(accountBalance({ id: "s1", opening_balance: 100000 }, txs), 100000);
 });

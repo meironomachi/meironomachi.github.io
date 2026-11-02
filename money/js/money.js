@@ -342,8 +342,19 @@ export const changeRate = (now, before) => (before ? Math.round(((now - before) 
 export function accountBalance(account, txs) {
   const mine = txs.filter((t) => t.account_id === account.id).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
   const lastIdx = mine.map((t) => t.balance_after != null).lastIndexOf(true);
-  if (lastIdx < 0) return (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0);
-  return mine[lastIdx].balance_after + mine.slice(lastIdx + 1).reduce((s, t) => s + t.amount, 0);
+  const own = lastIdx < 0
+    ? (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0)
+    : mine[lastIdx].balance_after + mine.slice(lastIdx + 1).reduce((s, t) => s + t.amount, 0);
+  return own + savingDeposits(account, txs).reduce((s, t) => s - t.amount, 0);
+}
+
+/** 적금·예금 계좌(saving_match가 있는 계좌)로 들어간 돈: 다른 통장에서 나간 저축·이체 내역 중 그 글자가 들어간 것 (amount는 −) */
+export function savingDeposits(account, txs) {
+  const key = normalizePlace(account.saving_match ?? "");
+  if (!key) return [];
+  // 저축으로 분류된 것, 또는 손으로 이체로 바꿔 둔 것(내 다른 계좌와 짝이 없을 때)
+  return txs.filter((t) => t.account_id !== account.id && t.amount < 0 && (t.kind === "saving" || (t.kind === "transfer" && !t.pair_id))
+    && normalizePlace(`${t.place ?? ""}${t.tx_type ?? ""}${t.memo ?? ""}`).includes(key));
 }
 
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
