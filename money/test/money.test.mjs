@@ -403,3 +403,19 @@ test("잔액: 같은 시각 거래가 여러 건이면 잔액이 이어지는 �
   assert.equal(accountBalance({ id: "k", opening_balance: 0 }, txs), 89000);
   assert.equal(accountBalance({ id: "k", opening_balance: 0 }, [txs[1], txs[0], txs[2], txs[3]]), 89000);
 });
+
+test("날짜별 지출·수입: 이번 달은 오늘까지, 예정·이체·저축은 뺌", async () => {
+  const { dailyFlow } = await import("../js/money.js");
+  const at = (d) => new Date(Date.parse(`${d}T12:00:00+09:00`)).toISOString();
+  const txs = [
+    { kind: "expense", amount: -5000, occurred_at: at("2026-11-01") },
+    { kind: "expense", amount: -3000, occurred_at: at("2026-11-01") },
+    { kind: "income", amount: 300000, occurred_at: at("2026-11-03") },
+    { kind: "saving", amount: -50000, occurred_at: at("2026-11-02") },
+    { kind: "income", amount: 80000, occurred_at: at("2026-11-03"), planned: true },
+    { kind: "expense", amount: -1, occurred_at: at("2026-10-31") },
+  ];
+  const d = dailyFlow(txs, "2026-11", "2026-11-03");
+  assert.deepEqual(d.map((x) => [x.day.slice(8), x.out, x.in]), [["01", 8000, 0], ["02", 0, 0], ["03", 0, 300000]]);
+  assert.equal(dailyFlow(txs, "2026-10", "2026-11-03").length, 31);
+});

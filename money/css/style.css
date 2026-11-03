@@ -423,3 +423,24 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
   .saving-table td.empty { display: none; }
   .saving-table tfoot tr { border-top: 2px solid var(--border); border-bottom: 0; }
 }
+/* 날짜별 지출·수입 꺾은선그래프 (색: 검증 통과 – 밝은 화면 #e8590c/#3a62d9, 어두운 화면 #e8590c/#5577ee) */
+:root { --line-out: #e8590c; --line-in: #3a62d9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --line-in: #5577ee; } }
+:root[data-theme="dark"] { --line-in: #5577ee; }
+.flow-card { padding: 16px 20px 12px; margin-bottom: 20px; }
+.flow-legend { display: flex; gap: 12px; font-size: 13px; color: var(--muted-fg); }
+.flow-legend .lg::before, .flow-tip .sw { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.flow-legend .lg.out::before, .flow-tip .sw.out { background: var(--line-out); }
+.flow-legend .lg.in::before, .flow-tip .sw.in { background: var(--line-in); }
+.flow-chart { position: relative; margin-top: 8px; touch-action: pan-y; }
+.flow-chart svg { display: block; }
+.flow-chart .grid { stroke: var(--border); stroke-width: 1; }
+.flow-chart .ax { font-size: 11px; fill: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.flow-chart .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.flow-chart .ln.out { stroke: var(--line-out); } .flow-chart .ln.in { stroke: var(--line-in); }
+.flow-chart .end { font-size: 12px; font-weight: 600; fill: var(--fg); }
+.flow-chart .cross { stroke: var(--muted-fg); stroke-width: 1; stroke-dasharray: 3 3; }
+.flow-chart .dot { stroke: var(--card); stroke-width: 2; } .flow-chart .dot.out { fill: var(--line-out); } .flow-chart .dot.in { fill: var(--line-in); }
+.flow-chart .hit { fill: transparent; cursor: crosshair; }
+.flow-tip { position: absolute; top: -4px; display: grid; gap: 2px; padding: 6px 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; pointer-events: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.flow-table summary { cursor: pointer; margin-top: 4px; }

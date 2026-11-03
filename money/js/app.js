@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611030209";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611031634";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
-  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
+  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611030209";
+} from "./money.js?v=202611031634";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -215,6 +215,7 @@ async function renderMonth(params) {
   const [txs, prev] = await Promise.all([loadMonth(m), loadMonth(shiftMonth(m, -1))]);
   shown = txs;
   const s = monthSummary(txs), p = monthSummary(prev);
+  const flow = dailyFlow(txs, m, kstDay(new Date().toISOString()));
   const total = base.budgets.find((b) => !b.category_id);
   const tb = budgetStatus(s.expense, total?.amount);
   const cats = base.categories.filter((c) => c.kind === "expense");
@@ -240,6 +241,8 @@ async function renderMonth(params) {
       <div><span>지출</span><b>${won(s.expense)}</b>${changeRate(s.expense, p.expense) !== null ? `<small class="${s.expense > p.expense ? "up" : "down"}">지난달보다 ${Math.abs(changeRate(s.expense, p.expense))}% ${s.expense > p.expense ? "더" : "덜"} 씀</small>` : ""}</div>
       <div><span>남은 돈</span><b class="${s.net < 0 ? "neg" : ""}">${signedWon(s.net)}</b>${s.saving ? `<small>저축 ${won(s.saving)}</small>` : ""}</div>
     </section>
+
+    ${flowSection(flow)}
 
     <section class="paper budget-card">
       <div class="section-head"><h3>예산</h3><a class="btn ghost sm" href="#/budget">예산 정하기</a></div>
@@ -274,6 +277,71 @@ async function renderMonth(params) {
     ${plannedSection(txs)}
     ${txs.length ? `<section class="recent"><div class="section-head"><h3>최근 내역</h3><a class="btn ghost sm" href="#/list?m=${m}">전체 보기</a></div>${txList(txs.slice(0, 6))}</section>` : ""}`);
   bindTxRows();
+  bindFlow(flow);
+}
+
+/* ---------- 날짜별 지출·수입 꺾은선그래프 ---------- */
+// 축 하나(원), 선 2개(지출·수입). 그래프 칸 너비에 맞춰 그리고, 손가락·마우스를 올리면 그날 금액을 보여 줌
+const shortWon = (n) => (n >= 100000000 ? `${+(n / 100000000).toFixed(1)}억` : n >= 10000 ? `${+(n / 10000).toFixed(n >= 100000 ? 0 : 1)}만` : n.toLocaleString("ko-KR"));
+const dayLabelShort = (d) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
+function flowSection(flow) {
+  if (!flow.length || !flow.some((d) => d.out || d.in)) return "";
+  return `<section class="paper flow-card">
+    <div class="section-head"><h3>날짜별 지출·수입</h3><div class="flow-legend"><span class="lg out">지출</span><span class="lg in">수입</span></div></div>
+    <div class="flow-chart" id="flow-chart" role="img" aria-label="날짜별 지출과 수입 꺾은선그래프"></div>
+    <details class="flow-table"><summary class="muted small">표로 보기</summary>
+      <div class="table-scroll"><table class="import-table"><thead><tr><th>날짜</th><th class="r">지출</th><th class="r">수입</th></tr></thead>
+      <tbody>${flow.filter((d) => d.out || d.in).map((d) => `<tr><td>${dayLabelShort(d.day)}</td><td class="r">${won(d.out)}</td><td class="r">${won(d.in)}</td></tr>`).join("")}</tbody></table></div>
+    </details>
+  </section>`;
+}
+function bindFlow(flow) {
+  const el = $("#flow-chart");
+  if (!el) return;
+  const draw = () => {
+    const W = Math.max(280, el.clientWidth), H = 200, L = 40, R = 40, T = 12, B = 24;
+    const max = Math.max(1, ...flow.map((d) => Math.max(d.out, d.in)));
+    const step = 10 ** Math.floor(Math.log10(max)), top = Math.ceil(max / step) * step;
+    const n = flow.length;
+    const x = (i) => L + (n === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (n - 1));
+    const y = (v) => T + (H - T - B) * (1 - v / top);
+    const path = (k) => flow.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
+    const ticks = [0, top / 2, top];
+    const xs = [...new Set([0, ...[4, 9, 14, 19, 24].filter((i) => i < n - 2), n - 1])];
+    // 선 끝 이름표: 두 선 끝이 가까우면 위아래로 벌림
+    let yo = y(flow[n - 1].out), yi = y(flow[n - 1].in);
+    if (Math.abs(yo - yi) < 16) { const mid = (yo + yi) / 2, up = yo <= yi; yo = mid + (up ? -8 : 8); yi = mid + (up ? 8 : -8); }
+    // 아래 날짜 글자와 겹치지 않게 바닥선 위로 올림
+    const lim = H - B - 6, over = Math.max(yo, yi) - lim;
+    if (over > 0) { yo -= over; yi -= over; }
+    el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      ${ticks.map((v) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v ? shortWon(v) : "0"}</text>`).join("")}
+      ${xs.map((i) => `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${Number(flow[i].day.slice(8))}일</text>`).join("")}
+      <path class="ln out" d="${path("out")}"/><path class="ln in" d="${path("in")}"/>
+      <text class="end out" x="${x(n - 1) + 6}" y="${yo + 4}">지출</text><text class="end in" x="${x(n - 1) + 6}" y="${yi + 4}">수입</text>
+      <g class="hover" visibility="hidden"><line class="cross" y1="${T}" y2="${H - B}"/><circle class="dot out" r="4"/><circle class="dot in" r="4"/></g>
+      <rect class="hit" x="${L - 10}" y="0" width="${W - L - R + 20}" height="${H}"/>
+    </svg><div class="flow-tip" hidden></div>`;
+    const svg = el.querySelector("svg"), hov = svg.querySelector(".hover"), tip = el.querySelector(".flow-tip");
+    const show = (e) => {
+      const px = e.clientX - svg.getBoundingClientRect().left;
+      const i = Math.max(0, Math.min(n - 1, Math.round(((px - L) / (W - L - R)) * (n - 1))));
+      const d = flow[i], cx = x(i);
+      hov.setAttribute("visibility", "visible");
+      hov.querySelector(".cross").setAttribute("x1", cx); hov.querySelector(".cross").setAttribute("x2", cx);
+      hov.querySelector(".dot.out").setAttribute("cx", cx); hov.querySelector(".dot.out").setAttribute("cy", y(d.out));
+      hov.querySelector(".dot.in").setAttribute("cx", cx); hov.querySelector(".dot.in").setAttribute("cy", y(d.in));
+      tip.hidden = false;
+      tip.innerHTML = `<b>${dayLabelShort(d.day)}</b><span><i class="sw out"></i>지출 ${won(d.out)}</span><span><i class="sw in"></i>수입 ${won(d.in)}</span>`;
+      tip.style.left = `${Math.min(W - tip.offsetWidth - 4, Math.max(4, cx - tip.offsetWidth / 2))}px`;
+    };
+    const hide = () => { hov.setAttribute("visibility", "hidden"); tip.hidden = true; };
+    const hit = svg.querySelector(".hit");
+    hit.addEventListener("pointermove", show); hit.addEventListener("pointerdown", show); hit.addEventListener("pointerleave", hide);
+  };
+  draw();
+  let w = el.clientWidth;
+  new ResizeObserver(() => { if (el.isConnected && el.clientWidth !== w) { w = el.clientWidth; draw(); } }).observe(el);
 }
 
 /** 원그래프 (도넛): 큰 분류 5개 + 나머지는 '그 밖' */
@@ -909,7 +977,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611030209");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611031634");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

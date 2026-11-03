@@ -411,6 +411,22 @@ export function savingPlan(plan, deposits, today) {
   return { maturity, rows, now, end, paidCount: paid.length, months };
 }
 
+/** 날짜별 지출·수입 (꺾은선그래프용). 이번 달이면 오늘까지만. 예정 내역·이체·저축·취소는 뺌 */
+export function dailyFlow(txs, month, today) {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const end = today.startsWith(month) ? Number(today.slice(8, 10)) : last;
+  const days = Array.from({ length: end }, (_, i) => ({ day: `${month}-${pad(i + 1)}`, out: 0, in: 0 }));
+  for (const t of txs) {
+    if (t.planned) continue;
+    const d = days[Number(kstDay(t.occurred_at).slice(8, 10)) - 1];
+    if (!d || !kstDay(t.occurred_at).startsWith(month)) continue;
+    if (t.kind === "expense") d.out -= t.amount;
+    else if (t.kind === "income") d.in += t.amount;
+  }
+  return days;
+}
+
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
 export function frequentEntries(txs, limit = 6) {
   const count = new Map();
