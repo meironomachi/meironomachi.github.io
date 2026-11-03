@@ -85,6 +85,41 @@ header.hero{background:linear-gradient(135deg,var(--hero-a),var(--hero-b));color
 
 main.wrap{padding-bottom:80px}
 .part{margin-top:44px}
+/* TODAY 요약 */
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:14px;margin-top:18px}
+.tcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.tcard h3{margin:0 0 2px;font-size:16px}
+.tcard h3 a,.tcard h3>span{display:flex;justify-content:space-between;align-items:center;color:var(--ink);text-decoration:none}
+.tcard h3 a span{color:var(--muted);font-weight:400}
+.tcard h3 a:hover{color:var(--g700)}
+.tcard h3 small{font-size:12px;color:var(--muted);font-weight:500;margin-left:4px}
+.trow{display:flex;justify-content:space-between;gap:10px;margin:0;font-size:14px}
+.trow span{color:var(--muted)}
+.trow b{font-variant-numeric:tabular-nums;text-align:right}
+.trow small{color:var(--muted);font-weight:500}
+.trow.neg b{color:#d4342c}.trow.ok b{color:var(--g700)}
+.trow a{color:var(--g700);font-weight:700;text-decoration:none}
+.tmuted{margin:0;font-size:14px;color:var(--muted)}
+.tlist{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:4px;font-size:14px}
+.tlist li{display:flex;align-items:center;gap:6px;min-width:0}
+.tlist li b{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tlist .tag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--g50);color:var(--g700);white-space:nowrap}
+.tlist .sw{width:9px;height:9px;border-radius:50%;flex:none}
+.todos .ck{flex:none;width:17px;height:17px;border-radius:5px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--on-accent)}
+.todos li.done .ck{background:var(--g600);border-color:var(--g600)}
+.todos li.done .txt{color:var(--muted);text-decoration:line-through}
+.todos .goal{flex:none;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--ink)}
+.todos .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tfoot{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--g700);cursor:pointer;text-decoration:underline}
+.tm-connect summary{cursor:pointer;color:var(--g700);font-weight:700;font-size:14px}
+.tm-connect form{display:grid;gap:8px;margin-top:8px}
+.tm-connect input{font:inherit;font-size:14px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.tm-connect button{font:inherit;font-weight:700;padding:8px;border:0;border-radius:8px;background:var(--g600);color:var(--on-accent);cursor:pointer}
+.tm-connect button:disabled{opacity:.5}
+.tnote{margin:0;font-size:12px;color:var(--muted)}
+.terr{margin:0;font-size:13px;color:#d4342c}
+.terr:empty{display:none}
 .part-head{display:flex;align-items:center;gap:12px;border-bottom:3px solid var(--g600);padding-bottom:8px}
 .part-head h2{letter-spacing:.04em}
 .part-head .no{background:var(--g600);color:var(--on-accent);font-weight:800;border-radius:8px;padding:4px 12px;font-size:14px;white-space:nowrap}
@@ -156,6 +191,12 @@ a.repo:focus-visible{outline-offset:-3px;border-radius:10px}
     <p class="date" id="kst-date"></p>
     <div class="digits" id="kst-digits" role="timer" aria-live="off"></div>
     <p class="src">한국 표준시 (KST)</p>
+  </section>
+
+  <section class="part today" id="today" data-meiro-sb-wait aria-label="오늘 요약">
+    <div class="part-head"><h2>TODAY</h2></div>
+    <p class="part-sub">오늘 쓴 돈, 근무, 기록, 할 일을 한눈에 봅니다.</p>
+    <div class="tgrid"><p class="tmuted">불러오는 중…</p></div>
   </section>
 
   <section class="part" id="list">
@@ -290,6 +331,7 @@ document.getElementById("repos").innerHTML = REPOS.map(r => `
 })();
 </script>
 
+<script type="module" src="/today.js?v=1"></script>
 <script type="module" src="/feedback.js?v=1"></script>
 </body>
 </html>
