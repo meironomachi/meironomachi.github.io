@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611031634";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611031637";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611031634";
+} from "./money.js?v=202611031637";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -284,61 +284,82 @@ async function renderMonth(params) {
 // 축 하나(원), 선 2개(지출·수입). 그래프 칸 너비에 맞춰 그리고, 손가락·마우스를 올리면 그날 금액을 보여 줌
 const shortWon = (n) => (n >= 100000000 ? `${+(n / 100000000).toFixed(1)}억` : n >= 10000 ? `${+(n / 10000).toFixed(n >= 100000 ? 0 : 1)}만` : n.toLocaleString("ko-KR"));
 const dayLabelShort = (d) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
+// 보기: 지출·수입(날마다) / 지출만(날마다, 작은 지출도 크게) / 누적(그날까지 더한 값)
+const FLOW_MODES = [
+  { id: "both", name: "지출·수입", title: "날짜별 지출·수입", series: [["out", "지출"], ["in", "수입"]] },
+  { id: "out", name: "지출만", title: "날짜별 지출", series: [["out", "지출"]] },
+  { id: "cum", name: "누적", title: "이 달 누적 지출·수입", series: [["out", "지출"], ["in", "수입"]], cumulative: true },
+];
 function flowSection(flow) {
   if (!flow.length || !flow.some((d) => d.out || d.in)) return "";
+  let co = 0, ci = 0;
+  const rows = flow.map((d) => ({ ...d, co: (co += d.out), ci: (ci += d.in) })).filter((d) => d.out || d.in);
   return `<section class="paper flow-card">
-    <div class="section-head"><h3>날짜별 지출·수입</h3><div class="flow-legend"><span class="lg out">지출</span><span class="lg in">수입</span></div></div>
-    <div class="flow-chart" id="flow-chart" role="img" aria-label="날짜별 지출과 수입 꺾은선그래프"></div>
+    <div class="section-head"><h3 id="flow-title">날짜별 지출·수입</h3></div>
+    <div class="seg flow-seg" role="tablist">${FLOW_MODES.map((m) => `<button type="button" role="tab" data-flow="${m.id}">${m.name}</button>`).join("")}</div>
+    <div class="flow-legend" id="flow-legend"></div>
+    <div class="flow-chart" id="flow-chart" role="img"></div>
     <details class="flow-table"><summary class="muted small">표로 보기</summary>
-      <div class="table-scroll"><table class="import-table"><thead><tr><th>날짜</th><th class="r">지출</th><th class="r">수입</th></tr></thead>
-      <tbody>${flow.filter((d) => d.out || d.in).map((d) => `<tr><td>${dayLabelShort(d.day)}</td><td class="r">${won(d.out)}</td><td class="r">${won(d.in)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="table-scroll"><table class="import-table"><thead><tr><th>날짜</th><th class="r">지출</th><th class="r">수입</th><th class="r">누적 지출</th><th class="r">누적 수입</th></tr></thead>
+      <tbody>${rows.map((d) => `<tr><td>${dayLabelShort(d.day)}</td><td class="r">${won(d.out)}</td><td class="r">${won(d.in)}</td><td class="r">${won(d.co)}</td><td class="r">${won(d.ci)}</td></tr>`).join("")}</tbody></table></div>
     </details>
   </section>`;
 }
 function bindFlow(flow) {
   const el = $("#flow-chart");
   if (!el) return;
+  let mode = FLOW_MODES.find((m) => m.id === remember("money-flow-mode")) ?? FLOW_MODES[0];
   const draw = () => {
-    const W = Math.max(280, el.clientWidth), H = 200, L = 40, R = 40, T = 12, B = 24;
-    const max = Math.max(1, ...flow.map((d) => Math.max(d.out, d.in)));
+    const data = mode.cumulative ? (() => { let o = 0, i = 0; return flow.map((d) => ({ ...d, out: (o += d.out), in: (i += d.in) })); })() : flow;
+    const series = mode.series;
+    $("#flow-title").textContent = mode.title;
+    $$("[data-flow]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.flow === mode.id)));
+    // 선이 하나면 제목이 곧 이름이라 범례를 빼고, 둘이면 범례 + 선 끝 이름표
+    $("#flow-legend").innerHTML = series.length > 1 ? series.map(([k, name]) => `<span class="lg ${k}">${name}</span>`).join("") : "";
+    el.setAttribute("aria-label", `${mode.title} 꺾은선그래프`);
+    const W = Math.max(280, el.clientWidth), H = 200, L = 40, R = series.length > 1 ? 40 : 16, T = 12, B = 24;
+    const max = Math.max(1, ...data.map((d) => Math.max(...series.map(([k]) => d[k]))));
     const step = 10 ** Math.floor(Math.log10(max)), top = Math.ceil(max / step) * step;
-    const n = flow.length;
+    const n = data.length;
     const x = (i) => L + (n === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (n - 1));
     const y = (v) => T + (H - T - B) * (1 - v / top);
-    const path = (k) => flow.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
+    const path = (k) => data.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
     const ticks = [0, top / 2, top];
     const xs = [...new Set([0, ...[4, 9, 14, 19, 24].filter((i) => i < n - 2), n - 1])];
-    // 선 끝 이름표: 두 선 끝이 가까우면 위아래로 벌림
-    let yo = y(flow[n - 1].out), yi = y(flow[n - 1].in);
-    if (Math.abs(yo - yi) < 16) { const mid = (yo + yi) / 2, up = yo <= yi; yo = mid + (up ? -8 : 8); yi = mid + (up ? 8 : -8); }
-    // 아래 날짜 글자와 겹치지 않게 바닥선 위로 올림
-    const lim = H - B - 6, over = Math.max(yo, yi) - lim;
-    if (over > 0) { yo -= over; yi -= over; }
+    let ends = "";
+    if (series.length > 1) {
+      // 두 선 끝이 가까우면 위아래로 벌리고, 아래 날짜 글자와 겹치지 않게 바닥선 위로 올림
+      let [yo, yi] = series.map(([k]) => y(data[n - 1][k]));
+      if (Math.abs(yo - yi) < 16) { const mid = (yo + yi) / 2, up = yo <= yi; yo = mid + (up ? -8 : 8); yi = mid + (up ? 8 : -8); }
+      const over = Math.max(yo, yi) - (H - B - 6);
+      if (over > 0) { yo -= over; yi -= over; }
+      ends = `<text class="end" x="${x(n - 1) + 6}" y="${yo + 4}">${series[0][1]}</text><text class="end" x="${x(n - 1) + 6}" y="${yi + 4}">${series[1][1]}</text>`;
+    }
     el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
       ${ticks.map((v) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v ? shortWon(v) : "0"}</text>`).join("")}
-      ${xs.map((i) => `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${Number(flow[i].day.slice(8))}일</text>`).join("")}
-      <path class="ln out" d="${path("out")}"/><path class="ln in" d="${path("in")}"/>
-      <text class="end out" x="${x(n - 1) + 6}" y="${yo + 4}">지출</text><text class="end in" x="${x(n - 1) + 6}" y="${yi + 4}">수입</text>
-      <g class="hover" visibility="hidden"><line class="cross" y1="${T}" y2="${H - B}"/><circle class="dot out" r="4"/><circle class="dot in" r="4"/></g>
+      ${xs.map((i) => `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${Number(data[i].day.slice(8))}일</text>`).join("")}
+      ${series.map(([k]) => `<path class="ln ${k}" d="${path(k)}"/>`).join("")}
+      ${ends}
+      <g class="hover" visibility="hidden"><line class="cross" y1="${T}" y2="${H - B}"/>${series.map(([k]) => `<circle class="dot ${k}" r="4"/>`).join("")}</g>
       <rect class="hit" x="${L - 10}" y="0" width="${W - L - R + 20}" height="${H}"/>
     </svg><div class="flow-tip" hidden></div>`;
     const svg = el.querySelector("svg"), hov = svg.querySelector(".hover"), tip = el.querySelector(".flow-tip");
     const show = (e) => {
       const px = e.clientX - svg.getBoundingClientRect().left;
       const i = Math.max(0, Math.min(n - 1, Math.round(((px - L) / (W - L - R)) * (n - 1))));
-      const d = flow[i], cx = x(i);
+      const d = data[i], cx = x(i);
       hov.setAttribute("visibility", "visible");
       hov.querySelector(".cross").setAttribute("x1", cx); hov.querySelector(".cross").setAttribute("x2", cx);
-      hov.querySelector(".dot.out").setAttribute("cx", cx); hov.querySelector(".dot.out").setAttribute("cy", y(d.out));
-      hov.querySelector(".dot.in").setAttribute("cx", cx); hov.querySelector(".dot.in").setAttribute("cy", y(d.in));
+      for (const [k] of series) { const c = hov.querySelector(`.dot.${k}`); c.setAttribute("cx", cx); c.setAttribute("cy", y(d[k])); }
       tip.hidden = false;
-      tip.innerHTML = `<b>${dayLabelShort(d.day)}</b><span><i class="sw out"></i>지출 ${won(d.out)}</span><span><i class="sw in"></i>수입 ${won(d.in)}</span>`;
+      tip.innerHTML = `<b>${dayLabelShort(d.day)}${mode.cumulative ? "까지" : ""}</b>${series.map(([k, name]) => `<span><i class="sw ${k}"></i>${name} ${won(d[k])}</span>`).join("")}`;
       tip.style.left = `${Math.min(W - tip.offsetWidth - 4, Math.max(4, cx - tip.offsetWidth / 2))}px`;
     };
     const hide = () => { hov.setAttribute("visibility", "hidden"); tip.hidden = true; };
     const hit = svg.querySelector(".hit");
     hit.addEventListener("pointermove", show); hit.addEventListener("pointerdown", show); hit.addEventListener("pointerleave", hide);
   };
+  $$("[data-flow]").forEach((btn) => btn.onclick = () => { mode = FLOW_MODES.find((m) => m.id === btn.dataset.flow); remember("money-flow-mode", mode.id); draw(); });
   draw();
   let w = el.clientWidth;
   new ResizeObserver(() => { if (el.isConnected && el.clientWidth !== w) { w = el.clientWidth; draw(); } }).observe(el);
@@ -977,7 +998,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611031634");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611031637");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

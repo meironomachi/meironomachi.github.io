@@ -428,7 +428,10 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --line-in: #5577ee; } }
 :root[data-theme="dark"] { --line-in: #5577ee; }
 .flow-card { padding: 16px 20px 12px; margin-bottom: 20px; }
-.flow-legend { display: flex; gap: 12px; font-size: 13px; color: var(--muted-fg); }
+.flow-legend { display: flex; gap: 12px; font-size: 13px; color: var(--muted-fg); margin-top: 6px; }
+.flow-legend:empty { display: none; }
+.flow-seg { max-width: 320px; margin-top: 8px; }
+.flow-seg button { padding: 5px 10px; font-size: 13px; }
 .flow-legend .lg::before, .flow-tip .sw { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
 .flow-legend .lg.out::before, .flow-tip .sw.out { background: var(--line-out); }
 .flow-legend .lg.in::before, .flow-tip .sw.in { background: var(--line-in); }
