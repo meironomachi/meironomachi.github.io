@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611021527";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611030158";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611021527";
+} from "./money.js?v=202611030158";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -152,16 +152,26 @@ async function loadBase() {
 async function materializeRecurring() {
   if (!base.recurring.length) return;
   const today = kstDay(new Date().toISOString());
-  const { data } = await sb.from("money_transactions").select("recurring_id, recurring_month").not("recurring_id", "is", null);
+  const data = await selectAll(() => sb.from("money_transactions").select("recurring_id, recurring_month").not("recurring_id", "is", null));
   const made = new Set((data ?? []).map((t) => `${t.recurring_id}|${t.recurring_month}`));
   const rows = base.recurring.flatMap((r) => recurringDueMonths(r, today).filter((m) => !made.has(`${r.id}|${m}`)).map((m) => recurringTx(r, m)));
   if (rows.length) await sb.from("money_transactions").insert(rows);
 }
+// Supabase는 한 번에 최대 1,000줄만 돌려줌 → 다 받을 때까지 나눠서 읽음
+async function selectAll(build, size = 1000) {
+  const out = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await build().order("id").range(from, from + size - 1);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < size) return out;
+  }
+}
+
 async function loadMonth(m) {
   const [from, to] = monthRange(m);
-  const { data, error } = await sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to).order("occurred_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const data = await selectAll(() => sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to));
+  return data.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
 }
 
 /* ---------- 로그인 ---------- */
@@ -485,7 +495,7 @@ async function txDialog(tx) {
   };
   // 같은 곳의 지난 내역 (분류 규칙을 정하면 함께 바꿈)
   let samePlace = [];
-  const { data: all } = await sb.from("money_transactions").select("id, place, kind, category_id, pair_id");
+  const all = await selectAll(() => sb.from("money_transactions").select("id, place, kind, category_id, pair_id"));
   const sameAs = (place) => (all ?? []).filter((t) => t.id !== tx?.id && !t.pair_id && t.kind !== "cancel" && normalizePlace(t.place) === normalizePlace(place));
   const drawRule = () => {
     const place = $("#t-place", dlg).value.trim();
@@ -597,8 +607,7 @@ async function renderAccounts() {
   document.title = "계좌 — $TDL";
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id, planned");
-  const all = data ?? [];
+  const all = await selectAll(() => sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id, planned"));
   const lastImport = (id) => all.filter((t) => t.account_id === id && t.source === "import").map((t) => t.occurred_at).sort().at(-1);
   const sum = base.accounts.reduce((s, a) => s + accountBalance(a, all, base.categories), 0);
   // 예정 내역: 잔액에는 안 넣고 따로 보여 줌
@@ -676,8 +685,7 @@ async function renderSaving(params) {
   document.title = `${a.name} 적금 계산 — $TDL`;
   app.innerHTML = shell("/accounts", loading());
   bindShell();
-  const { data } = await sb.from("money_transactions").select("*");
-  const all = data ?? [];
+  const all = await selectAll(() => sb.from("money_transactions").select("*"));
   // 이 계좌로 들어온 돈: 계좌의 + 내역(넣는 계좌로 저장한 저축 등) + 이름으로 잡힌 다른 통장의 저축
   const deposits = [
     ...all.filter((t) => t.account_id === a.id && t.amount > 0 && t.kind !== "cancel").map((t) => ({ date: kstDay(t.occurred_at), amount: t.amount, planned: !!t.planned, tx: t })),
@@ -895,7 +903,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611021527");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611030158");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
@@ -1105,7 +1113,7 @@ function reviewShots(box, accountId, rows) {
 async function previewImport(box, accountId, items) {
   const times = items.map((t) => Date.parse(t.occurred_at));
   const from = new Date(Math.min(...times) - 2 * 86400000).toISOString(), to = new Date(Math.max(...times) + 2 * 86400000).toISOString();
-  const { data } = await sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to);
+  const data = await selectAll(() => sb.from("money_transactions").select("*").gte("occurred_at", from).lt("occurred_at", to));
   const existing = data ?? [];
   const keys = new Set(existing.map((t) => t.import_key).filter(Boolean));
   const byKey = new Map(existing.filter((t) => t.import_key).map((t) => [t.import_key, t]));

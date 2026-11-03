@@ -390,3 +390,16 @@ test("예정 내역은 합계·잔액·짝 찾기에서 빠지고, 적금 계산
   assert.deepEqual(dec.map((x) => [x.date, x.amount, x.planned, !!x.marked]), [["2026-12-03", 700000, true, true]]);
   assert.equal(r.now.principal, 500000);
 });
+
+test("잔액: 같은 시각 거래가 여러 건이면 잔액이 이어지는 순서로 마지막을 찾음", () => {
+  const at = "2026-11-01T01:00:00.000Z";
+  // 화면·DB 순서가 뒤섞여 있어도: 100,000 → (−3,000) 97,000 → (−7,000) 90,000
+  const txs = [
+    { account_id: "k", amount: -7000, balance_after: 90000, occurred_at: at },
+    { account_id: "k", amount: -3000, balance_after: 97000, occurred_at: at },
+    { account_id: "k", amount: 20000, balance_after: 100000, occurred_at: "2026-10-31T01:00:00.000Z" },
+    { account_id: "k", amount: -1000, balance_after: null, occurred_at: "2026-11-02T01:00:00.000Z" },
+  ];
+  assert.equal(accountBalance({ id: "k", opening_balance: 0 }, txs), 89000);
+  assert.equal(accountBalance({ id: "k", opening_balance: 0 }, [txs[1], txs[0], txs[2], txs[3]]), 89000);
+});

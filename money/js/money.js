@@ -345,11 +345,19 @@ export const changeRate = (now, before) => (before ? Math.round(((now - before) 
 
 /** 계좌 잔액: 잔액이 적힌 가장 최근 거래 + 그 뒤 손으로 넣은 거래들. 잔액 기록이 없으면 시작 잔액 + 합계 */
 export function accountBalance(account, txs, categories = []) {
-  const mine = txs.filter((t) => t.account_id === account.id && isReal(t)).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
-  const lastIdx = mine.map((t) => t.balance_after != null).lastIndexOf(true);
-  const own = lastIdx < 0
-    ? (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0)
-    : mine[lastIdx].balance_after + mine.slice(lastIdx + 1).reduce((s, t) => s + t.amount, 0);
+  const mine = txs.filter((t) => t.account_id === account.id && isReal(t));
+  const withBal = mine.filter((t) => t.balance_after != null);
+  let own;
+  if (!withBal.length) own = (account.opening_balance ?? 0) + mine.reduce((s, t) => s + t.amount, 0);
+  else {
+    // 은행 파일의 '거래 후 잔액'이 있는 가장 늦은 거래부터 이어서 셈.
+    // 같은 시각(초가 없는 캡처·PDF 등)에 여러 건이면, 다른 거래의 '거래 전 잔액'이 되지 않는 쪽이 마지막
+    const lastT = Math.max(...withBal.map((t) => Date.parse(t.occurred_at)));
+    const group = withBal.filter((t) => Date.parse(t.occurred_at) === lastT);
+    const end = group.find((x) => !group.some((y) => y !== x && y.balance_after - y.amount === x.balance_after)) ?? group.at(-1);
+    own = end.balance_after + mine.filter((t) => Date.parse(t.occurred_at) > lastT || (Date.parse(t.occurred_at) === lastT && t.balance_after == null))
+      .reduce((s, t) => s + t.amount, 0);
+  }
   return own + savingDeposits(account, txs, categories).reduce((s, t) => s - t.amount, 0);
 }
 

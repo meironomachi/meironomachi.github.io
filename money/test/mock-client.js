@@ -63,6 +63,7 @@ class Query {
   neq(k, v) { this.filters.push([k, v, "neq"]); return this; }
   order(k, o = {}) { this.sort = [k, o.ascending !== false]; return this; }
   limit(n) { this.max = n; return this; }
+  range(a, b) { this.rng = [a, b]; return this; }
   insert(row) { this.op = "insert"; this.rows = Array.isArray(row) ? row : [row]; return this; }
   update(patch) { this.op = "update"; this.patch = patch; return this; }
   delete() { this.op = "delete"; return this; }
@@ -85,6 +86,7 @@ class Query {
       out = rows.filter(match);
       if (this.sort) { const [k, asc] = this.sort; out = [...out].sort((a, b) => String(a[k]).localeCompare(String(b[k]), undefined, { numeric: true }) * (asc ? 1 : -1)); }
       if (this.max) out = out.slice(0, this.max);
+      if (this.rng) out = out.slice(this.rng[0], this.rng[1] + 1);
     }
     out = structuredClone(out);
     if (this.one) return { data: out[0] ?? null, error: null };
