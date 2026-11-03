@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611030158";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611030209";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611030158";
+} from "./money.js?v=202611030209";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -610,6 +610,7 @@ async function renderAccounts() {
   const all = await selectAll(() => sb.from("money_transactions").select("account_id, amount, balance_after, occurred_at, source, kind, place, tx_type, memo, pair_id, category_id, planned"));
   const lastImport = (id) => all.filter((t) => t.account_id === id && t.source === "import").map((t) => t.occurred_at).sort().at(-1);
   const sum = base.accounts.reduce((s, a) => s + accountBalance(a, all, base.categories), 0);
+  const hasFileBal = (id) => all.some((t) => t.account_id === id && t.balance_after != null && !t.planned);
   // 예정 내역: 잔액에는 안 넣고 따로 보여 줌
   const plannedOf = (id) => all.filter((t) => t.planned && t.account_id === id);
   const plannedSum = all.filter((t) => t.planned).reduce((s, t) => s + t.amount, 0);
@@ -639,6 +640,7 @@ async function renderAccounts() {
           <form class="acc-edit grid2">
             <label class="field">이름<input class="input" name="name" value="${esc(a.name)}" required></label>
             <label class="field">시작 잔액 <span class="muted">(파일 잔액이 없을 때)</span><input class="input" name="opening" inputmode="numeric" value="${a.opening_balance ?? 0}"></label>
+            ${hasFileBal(a.id) ? "" : `<label class="field">지금 실제 잔액 <span class="muted">(적으면 시작 잔액을 알아서 맞춤)</span><input class="input" name="real" inputmode="numeric" placeholder="은행 앱의 지금 잔액"></label>`}
             <label class="field full">적금·예금 입금 이름 <span class="muted">(이 이름의 저축 분류·내역이 이 계좌로 들어온 돈으로 잡혀요. 비우면 일반 계좌)</span><input class="input" name="match" value="${esc(a.saving_match ?? "")}" placeholder="예: 청년미래적금"></label>
             <div class="add-as"><button class="btn primary sm" type="submit">저장</button><button class="btn ghost sm danger" type="button" data-del>계좌 삭제</button></div>
           </form></details>
@@ -658,8 +660,12 @@ async function renderAccounts() {
     $(".acc-edit", li).onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target;
-      await sb.from("money_accounts").update({ name: f.name.value.trim(), opening_balance: parseAmount(f.opening.value) ?? 0, saving_match: f.match.value.trim() || null }).eq("id", a.id);
-      toast("저장했어요"); rerender();
+      let opening = parseAmount(f.opening.value) ?? 0;
+      // 실제 잔액을 적으면: 지금 계산된 잔액과의 차이만큼 시작 잔액을 옮겨 맞춤 (기록 전부터 있던 돈)
+      const real = f.real?.value.trim() ? parseAmount(f.real.value.replace(/[^\d-]/g, "")) : null;
+      if (real != null) opening = (a.opening_balance ?? 0) + (real - accountBalance(a, all, base.categories));
+      await sb.from("money_accounts").update({ name: f.name.value.trim(), opening_balance: opening, saving_match: f.match.value.trim() || null }).eq("id", a.id);
+      toast(real != null ? `잔액을 ${won(real)}으로 맞췄어요` : "저장했어요"); rerender();
     };
     $("[data-del]", li).onclick = async () => {
       if (!confirm(`'${a.name}' 계좌를 지울까요? 이 계좌의 내역도 모두 지워져요.`)) return;
@@ -903,7 +909,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611030158");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611030209");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
