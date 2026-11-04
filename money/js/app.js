@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611040541";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611040545";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
-  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, frequentEntries,
+  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611040541";
+} from "./money.js?v=202611040545";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -42,6 +42,7 @@ const ICON = {
   bank: '<path d="m3 10 9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/>',
   budget: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  debt: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
@@ -89,6 +90,7 @@ const TABS = [
   { path: "/list", label: "내역", icon: "list" },
   { path: "/accounts", label: "계좌", icon: "bank" },
   { path: "/budget", label: "예산·분류", icon: "budget" },
+  { path: "/debts", label: "부채", icon: "debt" },
   { path: "/import", label: "가져오기", icon: "upload" },
 ];
 function shell(current, inner) {
@@ -870,6 +872,132 @@ async function renderSaving(params) {
   };
 }
 
+/* ---------- 부채 (빌린 돈과 상환 기록) ---------- */
+async function renderDebts() {
+  document.title = "부채 — $TDL";
+  app.innerHTML = shell("/debts", loading());
+  bindShell();
+  const [d, p] = await Promise.all([
+    sb.from("money_debts").select("*").order("sort").order("created_at"),
+    sb.from("money_debt_payments").select("*").order("paid_on"),
+  ]);
+  if (d.error || p.error) { fill('<div class="paper notice"><h2>부채 표가 아직 없어요</h2><p>money.sql의 부채 부분을 실행해 주세요.</p></div>'); return; }
+  const debts = d.data ?? [], pays = p.data ?? [];
+  const today = kstDay(new Date().toISOString());
+  const st = new Map(debts.map((x) => [x.id, debtStatus(x, pays, today)]));
+  const open = debts.filter((x) => !x.closed), closed = debts.filter((x) => x.closed);
+  const totalLeft = open.reduce((s, x) => s + st.get(x.id).remaining, 0);
+  const monthPaid = debts.reduce((s, x) => s + st.get(x.id).thisMonth, 0);
+  const dd = (x) => x.replaceAll("-", ".");
+  const dday = (due) => { const n = Math.round((Date.parse(due) - Date.parse(today)) / 86400000); return n > 0 ? `D-${n}` : n === 0 ? "D-day" : `${-n}일 지남`; };
+  const accOptions = (sel = "") => `<option value="">기록 안 함</option>${base.accounts.map((a) => `<option value="${a.id}" ${a.id === sel ? "selected" : ""}>${esc(a.name)}</option>`).join("")}`;
+  const lastAcc = remember("money-debt-account") ?? "";
+  const card = (x) => {
+    const r = st.get(x.id);
+    return `<li class="paper debt" data-id="${x.id}">
+      <div class="acc-head"><b>${esc(x.name)}</b>${x.lender ? `<span class="muted small">${esc(x.lender)}</span>` : ""}${x.closed ? '<span class="tag">다 갚음</span>' : ""}</div>
+      <p class="acc-bal">${won(r.remaining)} <small class="muted">남음</small></p>
+      <div class="meter debt-meter"><span style="width:${Math.round(r.ratio * 100)}%"></span></div>
+      <p class="muted small">원금 ${won(x.principal)} 중 ${won(r.paidPrincipal)} 갚음 (${Math.round(r.ratio * 100)}%)${r.paidInterest ? ` · 이자 ${won(r.paidInterest)}` : ""}${x.rate ? ` · 연 ${x.rate}%` : ""}</p>
+      <p class="muted small">${x.due_on ? `만기 ${dd(x.due_on)} (${dday(x.due_on)})` : "만기 없음"}${r.payoffMonth && !x.closed ? ` · 지금 속도면 ${r.payoffMonth.replace("-", "년 ")}월에 다 갚아요` : ""}${r.last ? ` · 마지막 상환 ${dd(r.last.paid_on)}` : ""}</p>
+      ${x.closed ? "" : `<form class="pay-add grid2">
+        <label class="field">상환일<input class="input" type="date" name="date" value="${today}" required></label>
+        <label class="field">상환액<input class="input money" name="amount" inputmode="numeric" placeholder="0" required></label>
+        <label class="field">그중 이자 <span class="muted">(없으면 비움)</span><input class="input money" name="interest" inputmode="numeric" placeholder="0"></label>
+        <label class="field">돈이 나간 계좌<select class="input" name="acc">${accOptions(lastAcc)}</select></label>
+        <div class="add-as"><button class="btn primary sm" type="submit">상환 기록</button></div>
+      </form>`}
+      <details><summary class="small">상환 기록 ${r.payments.length}건 · 고치기</summary>
+        ${r.payments.length ? `<ul class="pay-list">${[...r.payments].reverse().map((q) => `<li><span>${dd(q.paid_on)}</span><b>${won(q.amount)}</b>${q.interest ? `<small class="muted">이자 ${won(q.interest)}</small>` : ""}${q.tx_id ? '<small class="muted">· 계좌 반영</small>' : ""}<button class="btn ghost sm danger" type="button" data-pay-del="${q.id}">지우기</button></li>`).join("")}</ul>` : '<p class="muted small">아직 상환 기록이 없어요.</p>'}
+        <form class="debt-edit grid2">
+          <label class="field">이름<input class="input" name="name" value="${esc(x.name)}" required></label>
+          <label class="field">빌린 곳<input class="input" name="lender" value="${esc(x.lender)}"></label>
+          <label class="field">원금<input class="input money" name="principal" inputmode="numeric" value="${Number(x.principal).toLocaleString("ko-KR")}" required></label>
+          <label class="field">연 이율 (%)<input class="input" name="rate" inputmode="decimal" value="${x.rate ?? ""}"></label>
+          <label class="field">빌린 날<input class="input" type="date" name="started" value="${x.started_on ?? ""}"></label>
+          <label class="field">만기<input class="input" type="date" name="due" value="${x.due_on ?? ""}"></label>
+          <label class="field full">메모<input class="input" name="memo" value="${esc(x.memo)}"></label>
+          <div class="add-as"><button class="btn primary sm" type="submit">저장</button><button class="btn outline sm" type="button" data-close>${x.closed ? "다시 갚는 중으로" : "다 갚음으로 표시"}</button><button class="btn ghost sm danger" type="button" data-debt-del>부채 삭제</button></div>
+        </form>
+      </details>
+    </li>`;
+  };
+  fill(`<p class="total-balance"><span class="muted">남은 부채</span><b>${won(totalLeft)}</b>${monthPaid ? `<span class="planned-note small">이번 달 상환 ${won(monthPaid)}</span>` : ""}</p>
+    ${open.length ? `<ul class="accounts debts">${open.map(card).join("")}</ul>` : '<p class="empty">갚고 있는 부채가 없어요.</p>'}
+    ${closed.length ? `<details class="closed-debts"><summary class="small">다 갚은 부채 ${closed.length}건</summary><ul class="accounts debts">${closed.map(card).join("")}</ul></details>` : ""}
+    <form class="paper acc-add" id="debt-add">
+      <h3>부채 추가</h3>
+      <div class="grid2">
+        <label class="field">이름<input class="input" name="name" placeholder="예: 학자금대출, 친구에게 빌린 돈" required></label>
+        <label class="field">빌린 곳<input class="input" name="lender" placeholder="예: 한국장학재단"></label>
+        <label class="field">원금<input class="input money" name="principal" inputmode="numeric" placeholder="0" required></label>
+        <label class="field">연 이율 (%) <span class="muted">(선택)</span><input class="input" name="rate" inputmode="decimal"></label>
+        <label class="field">빌린 날 <span class="muted">(선택)</span><input class="input" type="date" name="started"></label>
+        <label class="field">만기 <span class="muted">(선택)</span><input class="input" type="date" name="due"></label>
+      </div>
+      <p class="muted small">상환을 기록할 때 돈이 나간 계좌를 고르면 그 계좌 잔액에서도 빠져요. 상환은 지출 합계에는 안 들어가요(내 계좌 사이 이체처럼 셈).</p>
+      <div><button class="btn outline" type="submit">추가</button></div>
+    </form>`);
+  const num = (v) => parseAmount(String(v ?? "").replace(/[^\d]/g, ""));
+  $$("input.money").forEach((el) => el.addEventListener("input", () => { const n = num(el.value); el.value = n ? n.toLocaleString("ko-KR") : ""; }));
+  const fields = (f) => ({ name: f.name.value.trim(), lender: f.lender.value.trim(), principal: num(f.principal.value), rate: f.rate.value.trim() ? Number(f.rate.value) : null, started_on: f.started.value || null, due_on: f.due.value || null });
+  $("#debt-add").onsubmit = async (e) => {
+    e.preventDefault();
+    const row = fields(e.target);
+    if (!row.principal) { toast("원금을 넣어 주세요.", "error"); return; }
+    const { error } = await sb.from("money_debts").insert({ ...row, sort: debts.length });
+    if (error) { toast("추가하지 못했어요.", "error"); return; }
+    toast("부채를 추가했어요"); rerender();
+  };
+  $$("li.debt").forEach((li) => {
+    const x = debts.find((y) => y.id === li.dataset.id);
+    const pf = $(".pay-add", li);
+    if (pf) pf.onsubmit = async (e) => {
+      e.preventDefault();
+      const amount = num(pf.amount.value), interest = num(pf.interest.value) ?? 0, acc = pf.acc.value;
+      if (!amount) { toast("상환액을 넣어 주세요.", "error"); return; }
+      if (interest > amount) { toast("이자가 상환액보다 클 수 없어요.", "error"); return; }
+      pf.querySelector("[type=submit]").disabled = true;
+      remember("money-debt-account", acc);
+      let tx_id = null;
+      if (acc) {
+        // 계좌에서 나간 돈: 지출 합계에는 안 넣고 잔액에서만 빠지도록 이체로 기록
+        const { data, error } = await sb.from("money_transactions").insert({ account_id: acc, occurred_at: new Date(Date.parse(`${pf.date.value}T09:00:00+09:00`)).toISOString(), amount: -amount, kind: "transfer", place: `부채 상환 · ${x.name}`, memo: interest ? `이자 ${won(interest)} 포함` : "" }).select("id").single();
+        if (error) { pf.querySelector("[type=submit]").disabled = false; toast("계좌에 넣지 못했어요.", "error"); return; }
+        tx_id = data?.id ?? null;
+      }
+      const { error } = await sb.from("money_debt_payments").insert({ debt_id: x.id, paid_on: pf.date.value, amount, interest, tx_id });
+      if (error) { pf.querySelector("[type=submit]").disabled = false; toast("기록하지 못했어요.", "error"); return; }
+      const left = st.get(x.id).remaining - (amount - interest);
+      if (left <= 0) await sb.from("money_debts").update({ closed: true }).eq("id", x.id);
+      toast(left <= 0 ? `'${x.name}' 다 갚았어요!` : `상환 ${won(amount)} 기록했어요`); rerender();
+    };
+    $$("[data-pay-del]", li).forEach((b) => b.onclick = async () => {
+      const q = pays.find((y) => y.id === b.dataset.payDel);
+      if (!confirm(`${dd(q.paid_on)} 상환 ${won(q.amount)}을 지울까요?${q.tx_id ? "\n계좌에 넣은 내역도 함께 지워져요." : ""}`)) return;
+      await sb.from("money_debt_payments").delete().eq("id", q.id);
+      if (q.tx_id) await sb.from("money_transactions").delete().eq("id", q.tx_id);
+      if (x.closed && st.get(x.id).remaining + (q.amount - q.interest) > 0) await sb.from("money_debts").update({ closed: false }).eq("id", x.id);
+      toast("지웠어요"); rerender();
+    });
+    $(".debt-edit", li).onsubmit = async (e) => {
+      e.preventDefault();
+      const row = { ...fields(e.target), memo: e.target.memo.value.trim() };
+      if (!row.principal) { toast("원금을 넣어 주세요.", "error"); return; }
+      const { error } = await sb.from("money_debts").update(row).eq("id", x.id);
+      if (error) { toast("저장하지 못했어요.", "error"); return; }
+      toast("저장했어요"); rerender();
+    };
+    $("[data-close]", li).onclick = async () => { await sb.from("money_debts").update({ closed: !x.closed }).eq("id", x.id); rerender(); };
+    $("[data-debt-del]", li).onclick = async () => {
+      if (!confirm(`'${x.name}' 부채를 지울까요? 상환 기록도 모두 지워져요. (계좌에 넣은 상환 내역은 남아요)`)) return;
+      const { error } = await sb.from("money_debts").delete().eq("id", x.id);
+      if (error) { toast("지우지 못했어요.", "error"); return; }
+      toast("지웠어요"); rerender();
+    };
+  });
+}
+
 /* ---------- 예산·분류 ---------- */
 async function renderBudget(params = new URLSearchParams()) {
   document.title = "예산·분류 — $TDL";
@@ -1001,7 +1129,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611040541");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611040545");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
@@ -1309,6 +1437,7 @@ async function route() {
     if (path === "/budget") return await renderBudget(params);
     if (path === "/import") return await renderImport();
     if (path === "/saving") return await renderSaving(params);
+    if (path === "/debts") return await renderDebts();
     return await renderMonth(params);
   } catch (err) {
     console.error(err); // 원인 확인용 (화면에는 안내만)

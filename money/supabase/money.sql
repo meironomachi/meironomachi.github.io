@@ -126,3 +126,24 @@ ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS planned boolean N
 -- 은행 종류 추가: SC제일은행(sc), 카카오페이 머니(kakaopay)
 ALTER TABLE public.money_accounts DROP CONSTRAINT IF EXISTS money_accounts_bank_check;
 ALTER TABLE public.money_accounts ADD CONSTRAINT money_accounts_bank_check CHECK (bank IN ('kakao', 'hana', 'nh', 'sc', 'kakaopay', 'cash', 'etc'));
+
+-- 부채(빌린 돈)와 상환 기록 – 상환을 계좌에 반영하면 tx_id로 그 내역(이체로 기록)과 이어짐
+CREATE TABLE IF NOT EXISTS public.money_debts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  name text NOT NULL, lender text NOT NULL DEFAULT '',
+  principal bigint NOT NULL CHECK (principal > 0),
+  started_on date, due_on date, rate numeric, memo text NOT NULL DEFAULT '',
+  closed boolean NOT NULL DEFAULT false, sort integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.money_debt_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  debt_id uuid NOT NULL REFERENCES public.money_debts(id) ON DELETE CASCADE,
+  paid_on date NOT NULL, amount bigint NOT NULL CHECK (amount > 0),
+  interest bigint NOT NULL DEFAULT 0 CHECK (interest >= 0),
+  tx_id uuid REFERENCES public.money_transactions(id) ON DELETE SET NULL,
+  memo text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now()
+);
+-- 권한은 위 가계부 표와 같음 (승인된 본인만), 상환은 내 부채에만 (Supabase 마이그레이션 money_debts 참고)

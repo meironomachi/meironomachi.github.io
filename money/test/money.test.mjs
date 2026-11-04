@@ -419,3 +419,20 @@ test("날짜별 지출·수입: 이번 달은 오늘까지, 예정·이체·저�
   assert.deepEqual(d.map((x) => [x.day.slice(8), x.out, x.in]), [["01", 8000, 0], ["02", 0, 0], ["03", 0, 300000]]);
   assert.equal(dailyFlow(txs, "2026-10", "2026-11-03").length, 31);
 });
+
+test("부채: 갚은 원금은 상환액에서 이자를 뺀 것, 최근 3개월 평균으로 다 갚는 달 추정", async () => {
+  const { debtStatus } = await import("../js/money.js");
+  const debt = { id: "d1", principal: 1000000 };
+  const pays = [
+    { debt_id: "d1", paid_on: "2026-08-10", amount: 110000, interest: 10000 },
+    { debt_id: "d1", paid_on: "2026-09-10", amount: 110000, interest: 10000 },
+    { debt_id: "d1", paid_on: "2026-10-10", amount: 110000, interest: 10000 },
+    { debt_id: "d1", paid_on: "2026-11-02", amount: 50000, interest: 0 },
+    { debt_id: "x", paid_on: "2026-11-02", amount: 999, interest: 0 },
+  ];
+  const r = debtStatus(debt, pays, "2026-11-04");
+  assert.deepEqual([r.paidPrincipal, r.paidInterest, r.remaining, r.thisMonth], [350000, 30000, 650000, 50000]);
+  assert.equal(r.ratio, 0.35);
+  assert.equal(r.payoffMonth, "2027-06"); // 650,000 ÷ 100,000/월 → 7개월 뒤
+  assert.equal(debtStatus(debt, [], "2026-11-04").payoffMonth, null);
+});

@@ -450,3 +450,15 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .flow-chart .hit { fill: transparent; cursor: crosshair; }
 .flow-tip { position: absolute; top: -4px; display: grid; gap: 2px; padding: 6px 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; pointer-events: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .flow-table summary { cursor: pointer; margin-top: 4px; }
+/* 부채 */
+.debt .acc-head .tag { margin-left: auto; }
+.debt-meter { height: 8px; border-radius: 999px; background: var(--muted); overflow: hidden; margin: 2px 0 4px; }
+.debt-meter span { display: block; height: 100%; background: var(--primary); }
+.debt .pay-add { margin: 8px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pay-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.pay-list li { display: flex; align-items: center; gap: 8px; }
+.pay-list li b { font-variant-numeric: tabular-nums; }
+.pay-list li button { margin-left: auto; }
+.debt-edit { margin-top: 10px; }
+.debt-edit .field.full { grid-column: 1 / -1; }
+.closed-debts { margin-bottom: 20px; }

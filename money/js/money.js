@@ -429,6 +429,26 @@ export function dailyFlow(txs, month, today) {
   return days;
 }
 
+/* ---------- 부채 ---------- */
+/** 부채 하나의 상환 상태: 갚은 원금(상환액 − 이자), 낸 이자, 남은 원금, 진행률, 최근 3개월 평균으로 본 다 갚는 예상 달 */
+export function debtStatus(debt, payments, today) {
+  const mine = payments.filter((p) => p.debt_id === debt.id).sort((a, b) => a.paid_on.localeCompare(b.paid_on));
+  const paidPrincipal = mine.reduce((s, p) => s + p.amount - (p.interest ?? 0), 0);
+  const paidInterest = mine.reduce((s, p) => s + (p.interest ?? 0), 0);
+  const remaining = Math.max(0, debt.principal - paidPrincipal);
+  // 최근 3개월(이번 달 빼고) 평균 원금 상환액으로 남은 개월 수 추정
+  const months = [1, 2, 3].map((k) => shiftMonth(today.slice(0, 7), -k));
+  const recent = mine.filter((p) => months.includes(p.paid_on.slice(0, 7))).reduce((s, p) => s + p.amount - (p.interest ?? 0), 0) / 3;
+  const monthsLeft = remaining && recent > 0 ? Math.ceil(remaining / recent) : null;
+  return {
+    payments: mine, paidPrincipal, paidInterest, remaining,
+    ratio: Math.min(1, paidPrincipal / debt.principal),
+    last: mine.at(-1) ?? null,
+    payoffMonth: monthsLeft !== null ? shiftMonth(today.slice(0, 7), monthsLeft) : null,
+    thisMonth: mine.filter((p) => p.paid_on.startsWith(today.slice(0, 7))).reduce((s, p) => s + p.amount, 0),
+  };
+}
+
 /** 자주 쓰는 내역 (빠른 입력 버튼): 최근 손으로 넣은 곳·분류 조합 중 많이 쓴 순 */
 export function frequentEntries(txs, limit = 6) {
   const count = new Map();
