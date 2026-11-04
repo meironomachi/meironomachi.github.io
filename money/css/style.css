@@ -280,6 +280,9 @@ dialog.tx-dialog { width: min(480px, calc(100vw - 24px)); max-height: calc(100dv
 .bank.b-kakao { background: #fee500; color: #3c1e1e; }
 .bank.b-hana { background: #008485; color: #fff; }
 .bank.b-nh { background: #00a94f; color: #fff; }
+.bank.b-sc { background: #0473ea; color: #fff; }
+.bank.b-kakaopay { background: #1e1e1e; color: #ffeb00; }
+.acc-head .acc-del { margin-left: auto; padding: 2px 8px; }
 .acc-bal { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .accounts details summary { cursor: pointer; color: var(--muted-fg); margin-top: 6px; }
 .acc-edit { margin-top: 10px; }

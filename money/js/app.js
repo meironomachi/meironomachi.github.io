@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611031637";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611040541";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611031637";
+} from "./money.js?v=202611040541";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -720,7 +720,7 @@ async function renderAccounts() {
     <ul class="accounts">${base.accounts.map((a) => {
       const li = lastImport(a.id);
       return `<li class="paper" data-id="${a.id}">
-        <div class="acc-head"><span class="bank b-${a.bank}">${esc(BANKS.find((b) => b.id === a.bank)?.name ?? "")}</span><b>${esc(a.name)}</b></div>
+        <div class="acc-head"><span class="bank b-${a.bank}">${esc(BANKS.find((b) => b.id === a.bank)?.name ?? "")}</span><b>${esc(a.name)}</b><button class="btn ghost sm danger acc-del" type="button" data-del aria-label="${esc(a.name)} 계좌 삭제">삭제</button></div>
         <p class="acc-bal">${won(accountBalance(a, all, base.categories))}</p>
         ${plannedNote(a.id)}
         <p class="muted small">${savingNote(a) ?? (li ? `파일로 ${kstDay(li).replaceAll("-", ".")}까지 가져옴` : a.bank === "cash" ? "직접 입력으로 관리" : "아직 가져온 파일이 없어요")}</p>
@@ -728,10 +728,11 @@ async function renderAccounts() {
         <details><summary class="small">고치기</summary>
           <form class="acc-edit grid2">
             <label class="field">이름<input class="input" name="name" value="${esc(a.name)}" required></label>
+            <label class="field">은행<select class="input" name="bank">${BANKS.map((b) => `<option value="${b.id}" ${b.id === a.bank ? "selected" : ""}>${b.name}</option>`).join("")}</select></label>
             <label class="field">시작 잔액 <span class="muted">(파일 잔액이 없을 때)</span><input class="input" name="opening" inputmode="numeric" value="${a.opening_balance ?? 0}"></label>
             ${hasFileBal(a.id) ? "" : `<label class="field">지금 실제 잔액 <span class="muted">(적으면 시작 잔액을 알아서 맞춤)</span><input class="input" name="real" inputmode="numeric" placeholder="은행 앱의 지금 잔액"></label>`}
             <label class="field full">적금·예금 입금 이름 <span class="muted">(이 이름의 저축 분류·내역이 이 계좌로 들어온 돈으로 잡혀요. 비우면 일반 계좌)</span><input class="input" name="match" value="${esc(a.saving_match ?? "")}" placeholder="예: 청년미래적금"></label>
-            <div class="add-as"><button class="btn primary sm" type="submit">저장</button><button class="btn ghost sm danger" type="button" data-del>계좌 삭제</button></div>
+            <div class="add-as"><button class="btn primary sm" type="submit">저장</button></div>
           </form></details>
       </li>`;
     }).join("")}</ul>
@@ -753,13 +754,15 @@ async function renderAccounts() {
       // 실제 잔액을 적으면: 지금 계산된 잔액과의 차이만큼 시작 잔액을 옮겨 맞춤 (기록 전부터 있던 돈)
       const real = f.real?.value.trim() ? parseAmount(f.real.value.replace(/[^\d-]/g, "")) : null;
       if (real != null) opening = (a.opening_balance ?? 0) + (real - accountBalance(a, all, base.categories));
-      await sb.from("money_accounts").update({ name: f.name.value.trim(), opening_balance: opening, saving_match: f.match.value.trim() || null }).eq("id", a.id);
+      await sb.from("money_accounts").update({ name: f.name.value.trim(), bank: f.bank.value, opening_balance: opening, saving_match: f.match.value.trim() || null }).eq("id", a.id);
       toast(real != null ? `잔액을 ${won(real)}으로 맞췄어요` : "저장했어요"); rerender();
     };
     $("[data-del]", li).onclick = async () => {
-      if (!confirm(`'${a.name}' 계좌를 지울까요? 이 계좌의 내역도 모두 지워져요.`)) return;
-      await sb.from("money_accounts").delete().eq("id", a.id);
-      toast("지웠어요"); rerender();
+      const n = all.filter((t) => t.account_id === a.id).length;
+      if (!confirm(`'${a.name}' 계좌를 지울까요?${n ? `\n이 계좌의 내역 ${n}건도 모두 지워지고 되돌릴 수 없어요.` : ""}`)) return;
+      const { error } = await sb.from("money_accounts").delete().eq("id", a.id);
+      if (error) { toast("지우지 못했어요. 다시 해 주세요.", "error"); return; }
+      toast(`'${a.name}' 계좌를 지웠어요`); rerender();
     };
   });
   $("#acc-add").onsubmit = async (e) => {
@@ -998,7 +1001,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611031637");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611040541");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

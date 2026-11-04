@@ -22,6 +22,8 @@ export const BANKS = [
   { id: "kakao", name: "카카오뱅크" },
   { id: "hana", name: "하나은행" },
   { id: "nh", name: "농협은행" },
+  { id: "sc", name: "SC제일은행" },
+  { id: "kakaopay", name: "카카오페이" },
   { id: "cash", name: "현금" },
   { id: "etc", name: "기타" },
 ];

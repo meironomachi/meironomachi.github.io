@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.money_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL DEFAULT auth.uid(),
   name text NOT NULL,
-  bank text NOT NULL DEFAULT 'etc' CHECK (bank IN ('kakao', 'hana', 'nh', 'cash', 'etc')),
+  bank text NOT NULL DEFAULT 'etc' CHECK (bank IN ('kakao', 'hana', 'nh', 'sc', 'kakaopay', 'cash', 'etc')),
   opening_balance bigint NOT NULL DEFAULT 0,
   sort integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -122,3 +122,7 @@ ALTER TABLE public.money_accounts ADD COLUMN IF NOT EXISTS saving_plan jsonb;
 
 -- 예정 내역: 아직 실제로 오가지 않은 돈. 합계·잔액에 넣지 않고 표시만 함 (고쳐서 확정하거나 은행 파일을 가져오면 자동 확정)
 ALTER TABLE public.money_transactions ADD COLUMN IF NOT EXISTS planned boolean NOT NULL DEFAULT false;
+
+-- 은행 종류 추가: SC제일은행(sc), 카카오페이 머니(kakaopay)
+ALTER TABLE public.money_accounts DROP CONSTRAINT IF EXISTS money_accounts_bank_check;
+ALTER TABLE public.money_accounts ADD CONSTRAINT money_accounts_bank_check CHECK (bank IN ('kakao', 'hana', 'nh', 'sc', 'kakaopay', 'cash', 'etc'));
