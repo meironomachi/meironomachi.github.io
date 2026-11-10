@@ -219,6 +219,10 @@ main.compare{padding:56px 0 24px}
 .pledges b{font-size:15px}
 .pledges span{font-size:14px;line-height:1.6;color:var(--muted)}
 .debate-note{margin:12px 2px 0;font-size:12.5px;color:var(--muted)}
+.rally-lead{margin:0 2px 14px;font-size:14.5px;line-height:1.7}
+.speech .empty-note{margin:0;padding:14px 16px 16px;font-size:14px;color:var(--muted)}
+.speech .src-link{display:block;padding:0 16px 14px;font-size:12.5px;color:var(--muted)}
+.speech .quote{margin:0;padding:14px 16px 0;font-size:15px;font-weight:700;line-height:1.55}
 .debate-note a{color:inherit}
 .table-wrap{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:16px}
 table{width:100%;border-collapse:collapse;min-width:760px}
@@ -252,7 +256,7 @@ footer.site a{color:inherit}
     <div class="mast">
       <div class="tag"><b>선거 특보</b><span>비공식</span><span>MEIRO.KR</span></div>
       <h1><span class="y">2026</span><span>민주노총 직선 5기</span><span>임원 선거</span></h1>
-      <p>위원장 · 수석부위원장 · 사무총장 후보조 네 팀의 표어와 공약을 한 장씩 펼쳐 봐요.</p>
+      <p>위원장 · 수석부위원장 · 사무총장 후보조 네 팀의 표어와 공약을 한 장씩 펼쳐 봐요. 투표는 11월 19일부터 일주일간이에요.</p>
     </div>
     <div class="front-head">
       <h2>후보조 4팀 · 눌러서 펼쳐 보기</h2>
@@ -281,6 +285,25 @@ footer.site a{color:inherit}
     </div>
     <div class="debate" id="debate" role="tabpanel" aria-labelledby="debate-title"></div>
     <p class="debate-note">토론회 영상의 발언을 요약한 내용이라 원래 표현과 다를 수 있어요. 정확한 발언은 <a href="https://www.youtube.com/live/LfiKQqpTt-M" target="_blank" rel="noopener">토론회 영상</a>과 각 선본 자료로 확인해 주세요.</p>
+  </section>
+
+  <section aria-labelledby="rally-title">
+    <div class="sec-head">
+      <div><h2 id="rally-title">합동토론회 · 지역 합동유세</h2><p>11월에 열린 후보 합동토론회와 지역본부 합동유세 생중계를 자리별로 정리했어요. <a class="video-link" id="rally-video" href="#" target="_blank" rel="noopener">▶ 영상 보기</a></p></div>
+      <div class="tools" role="tablist" aria-label="행사" id="rally-tabs"></div>
+    </div>
+    <p class="rally-lead" id="rally-lead"></p>
+    <div class="debate" id="rally" role="tabpanel" aria-labelledby="rally-title"></div>
+    <p class="debate-note">생중계 영상을 Google Gemini가 요약한 내용을 옮긴 것이라 실제 발언과 다르거나 빠진 부분이 있을 수 있어요. 지역 유세는 위원장 후보가 아닌 같은 선본의 다른 후보가 발언한 경우도 있어요. 정확한 발언은 영상으로 확인해 주세요.</p>
+  </section>
+
+  <section aria-labelledby="interview-title">
+    <div class="sec-head">
+      <div><h2 id="interview-title">위원장 후보 연쇄인터뷰</h2><p>&lt;매일노동뉴스&gt;가 네 후보에게 같은 질문을 던진 인터뷰를 쟁점별로 나란히 봐요. 기호 순으로 나흘간 실려요.</p></div>
+      <div class="tools" role="tablist" aria-label="쟁점" id="iv-tabs"></div>
+    </div>
+    <div class="debate" id="interview" role="tabpanel" aria-labelledby="interview-title"></div>
+    <p class="debate-note" id="iv-src"></p>
   </section>
 
   <section aria-labelledby="compare-title">
@@ -517,13 +540,100 @@ document.querySelectorAll("[data-topic]").forEach((b) => b.onclick = () => {
   drawDebate();
 });
 
+// 합동토론회·지역 합동유세 (생중계 영상을 Google Gemini가 요약한 내용을 옮김)
+const RALLIES = [
+  { id: "debate1", name: "1차 합동토론회", date: "11.3", video: "https://www.youtube.com/live/BYNcjIjYlLY",
+    lead: "네 후보조가 처음 모여 상호 토론과 질의응답을 한 자리. 가장 큰 쟁점은 사회적 교섭(노사정 대화) 참여 여부, AI 산업전환 대응, 노동자 정치세력화였어요. 현 집행부(2번)의 사회적 대화 추진에 나머지 후보들이 반대·비판했어요.",
+    by: {
+      1: ["정부의 노동 탄압 속에서 사회적 대화는 양보를 강요받는 들러리가 될 뿐이라며 강하게 반대", "AI 산업전환 대응: 정의로운 전환과 노동기본권 확대를 위한 '3+3 전략입법' 투쟁"],
+      2: ["투쟁만으로는 한계가 있고, 노동시간 단축 같은 AI 전환기 의제를 주도하려면 교섭이 반드시 필요하다고 방어", "AI 산업전환 대응: 사회적 교섭으로 선제적 노동시간 단축과 고용 유지"],
+      3: ["사회적 대화는 들러리가 될 뿐이라며 1번과 함께 반대", "AI 산업전환 대응: AI 공유부 배당제 신설, 주 4일제(하루 7시간) 도입"],
+      4: ["AI 산업전환 대응: 신기술 도입 때 노조 사전 동의를 의무화하는 법제화와 단협 체결"],
+    } },
+  { id: "jeju", name: "제주 합동유세", date: "11.6", video: "https://www.youtube.com/live/JytwkBdJ6Go",
+    lead: "제주지역본부장 후보 유세에 이어 총연맹 임원 후보들이 제주 조합원들에게 핵심 공약을 호소했어요.",
+    by: {
+      1: ["(박옥주 사무총장 후보) 초광역특구법 등은 재벌 특혜와 노동권 후퇴만 가져온다며, 대화의 환상에서 벗어나 대정부 직접 투쟁(노정 교섭)으로 권리를 쟁취해야 한다고 호소"],
+      2: ["(정재범 수석부위원장 후보) AI 위기를 기다리지 말고 사회적 교섭이라는 판을 만들어 노동시간 단축과 재벌 초과이윤 분배를 정부에 당당히 요구해야 한다고 강조"],
+      3: ["민주당에 기대는 정치를 끝내고 '민주노총당'을 직접 창당해야 한다고 주장", "실질적인 파업 투쟁력을 높이려고 16개 산별을 50개 업종 산별로 세분화하겠다고 밝힘"],
+      4: ["현 집행부의 준비 없는 조급한 사회적 교섭 추진을 비판", "교섭전략위원회를 꾸려 현장과 함께 치밀하게 준비하는 '공세적 교섭'을 하겠다고 다짐"],
+    } },
+  { id: "gyeongnam", name: "경남 합동유세", date: "11.9", video: "https://www.youtube.com/live/Xtp_um-Gpbo",
+    lead: "경남 지역 간부·조합원 앞에서 조직 내부 불통과 절차적 민주주의 회복이 주요 화두가 됐어요. 현장 공통질의로 '당선 직후 최우선 과제'를 물었어요.",
+    by: {
+      1: ["현 집행부가 사회적 교섭 안건을 직권 상정하거나 모바일 대의원대회로 밀어붙이려 한다며 숙의를 무시하는 패권적 행태라고 비판", "당선 직후 과제: 정년 연장, 노조법 시행령 무력화 저지 등 당면 현안 해결 투쟁 조직"],
+      2: ["당선 직후 과제: 임시 모바일 대의원대회를 바로 열어 사회적 교섭 참여 여부를 확정하고 교섭 테이블 구축"],
+      3: ["당선 직후 과제: '민주노총당'과 '업종 산별' 의제를 들고 현장 대장정을 돌며 조합원과 깊이 토론"],
+      4: ["1번과 함께 현 집행부의 의사결정 방식을 비판", "당선 직후 과제: 대립과 갈등으로 무너진 민주노총 공조직 토론과 의사결정 시스템을 빠르게 복원"],
+    } },
+  { id: "chungbuk", name: "충북 합동유세", date: "", video: "https://www.youtube.com/live/CPwwCT84Pl0",
+    lead: "전국 순회 합동유세의 하나로 충북 조합원들 앞에서 열린 유세예요. 영상의 자막·음성을 읽지 못해 요약이 없어요. 영상으로 확인해 주세요.",
+    by: {} },
+];
+
+// 위원장 후보 연쇄인터뷰 (매일노동뉴스, 기호 순 나흘간) — 기사 내용을 쟁점별로 짧게 요약
+const IV_TOPICS = [
+  ["social", "사회적 대화·경사노위"], ["mega", "메가특구법"], ["decide", "의사결정 구조"], ["subcon", "원청교섭(노조법)"],
+  ["politics", "정치 세력화"], ["future", "노동운동의 방향"], ["pledge", "대표 공약"], ["last", "마지막 말"],
+];
+const INTERVIEWS = {
+  1: { no: "①", date: "2026.11.9", url: "https://www.labortoday.co.kr/news/articleView.html?idxno=237619",
+    title: "“뒤통수 맞고도 대화? 정부 일대일로 상대하겠다”",
+    social: ["사회적 대화 참여 여부는 쟁점이 아니라 이미 필요할 때 하고 있는 대화를 어떻게 하고 무엇을 얻어낼지가 쟁점이라고 봄", "경사노위 참여는 반대: 노동 쟁점을 다 빨아들이고, 정부와 풀 사안에 사용자단체가 끼어 논의가 늦어진다고 지적(공공기관 노동이사제 사례)", "메가특구법 대화 도중 초광역특구법 발의로 '뒤통수'를 맞았다며, 대안을 갖춘 노정교섭으로 정부를 일대일로 상대하겠다고 함"],
+    mega: ["지금의 메가특구 프로젝트는 자본에 특혜를 주고 노동자·주민·환경에 피해를 준다며 반대, 원점 재검토 요구", "반도체업종 취업유발계수는 10억 원당 2.87명이라 고용 확대 주장은 근거가 약하다고 지적", "메가특구법의 기업 특례 조항은 298개, 기업 책임 조항은 0개 — 관련 법안 모두 폐기하고 다시 논의해야 한다고 함"],
+    decide: ["대의원대회 유회는 구조 문제가 아니라 전 집행부의 독단과 패권적 운영, 스스로 만든 원칙을 어긴 탓이라고 봄", "다만 개선책으로 지역·업종별 대의원 사전토론 공식화, 영역별 대대 상임위, 3년마다 정책대대 제도화를 제안"],
+    subcon: ["노란봉투법은 노동계 20년 투쟁의 결과인데, 정부가 시행령·지침으로 원청이 책임을 피할 길을 열어 준다고 비판", "전 집행부가 집단적 힘으로 시행령·지침을 백지화했어야 했지만 민주당과의 관계 때문에 싸우지 못했다고 지적"],
+    politics: ["'민주노총당'은 불가능하다고 봄 — 민주노총 안에 여러 세력이 있고 진보정당도 이미 나뉘어 있음", "노동당·녹색당·정의당과 평소에 공동활동을 하며 신뢰를 쌓아 2030년 대선을 준비하자고 함", "투쟁력을 되살려야 정치적 개입력도 생긴다(2002년 민영화 저지, 2016년 노동개악 저지 공동파업 사례)"],
+    future: ["조합원은 이긴 경험이, 비조합원은 노조가 내 일이라는 체감이 부족해 '교섭 효능감'이 낮다고 진단", "프랑스처럼 조직률은 10%대라도 단협 적용률이 90%대가 되도록 산별교섭으로 단협 효력을 넓혀야 한다고 함", "재벌 초과이윤·잉여금을 사회적으로 환수해 적정임금을 보장하자 — 그래서 3+3 전략입법"],
+    pledge: ["3+3 전략입법: 근로기준법(모든 일하는 사람 보호, 노동조건 후퇴 없는 노동시간 단축)·노조법(교섭 상대를 정부까지)·조세특례제한법(초과이윤·사내유보금 환수) 개정 + 적정임금법·공공성확대특별법·정의로운전환특별법 제정", "플랫폼 노동자 50만 명 전략조직화: 숫자는 의지의 표현이라며, 전략조직위원회를 새로 만들어 추진"],
+    last: ["AI로 사회와 산업이 바뀌는 시기, 노동자의 권리와 공공성을 지키는 것이 과제 — 조직된 투쟁이 힘"] },
+  2: { no: "②", date: "2026.11.10", url: "https://www.labortoday.co.kr/news/articleView.html?idxno=237646",
+    title: "“원칙은 확고하게, 방법은 유연하게”",
+    social: ["전제로 내건 합의제·산별 참여·명칭 변경이 반영되면 경사노위에 참여할 필요가 있다는 입장", "합의제는 정부가 일방통행하지 않겠다는 약속이고, 산별 참여는 업종별·초기업 교섭으로 가는 교두보라고 봄", "메가특구법 원포인트 대화에 참여해 노동특례 없는 법안도 발의됐다며, 전략·전술은 조건에 따라 바꿀 수 있다고 함"],
+    mega: ["국내 투자와 신산업 육성 자체는 반대할 이유가 없지만, 충분한 검토 없이 기업에 특혜부터 주는 방식이 문제", "화이트칼라 이그젬션은 공장이 지어지고 일을 시작해야 적용될 일이라 빨라야 4년 뒤 문제 — 서두를 이유가 없다고 함", "반도체 클러스터 용수(영산강·섬진강), 국내 필요보다 큰 AI 데이터센터 등 신중한 검토가 필요하다고 지적"],
+    decide: ["의사결정 구조 개선이 필요하다고 봄 — 오프라인으로만 결정하면 일부가 퇴장해도 유회됨", "토론은 오프라인으로 충실히 하고, 쟁점 결정은 온라인 투표로 하자고 제안"],
+    subcon: ["내부 준비 부족을 인정: 하청 노조를 크게 조직하지 못했고 총파업도 제대로 못 했으며 파업 일정도 맞추지 못함", "더 큰 문제는 책임을 피하는 사용자 태도와 이를 거드는 정부 시행령·지침이라고 지적"],
+    politics: ["진보정당 단결을 위해 민주노총이 어떤 역할을 할지부터 합의해야 다음 단계로 갈 수 있다고 함", "지난 대선 방침은 '진보정당과 연합한 후보도 지지 범위에 넣자'는 것이었다고 설명, 세력 범위를 좁히는 것을 안타까워함", "조합원 열 명 중 여덟이 민주당을 찍는 현실을 인정하고, 선거가 없는 내년에 긴 호흡으로 논의하자고 함"],
+    future: ["가치는 지키되 방식은 바꿔야 한다 — 노동운동의 '87년 체제'(전투적 노선)에서 변화가 필요하고 사회적 교섭이 중요해질 것", "은퇴자·연금생활자 노조, 단협 효력 확장, 노사정 대화로 '국내 생산 70% 유지' 같은 산업정책 협약을 제안", "월 1회 '위원장 라이브', 세대별 미디어 광고 등 홍보 방식도 바꾸겠다고 함"],
+    pledge: ["공세적 의제 선점: 'AI 도입과 노동자의 삶 중 무엇이 중요한가'처럼 노동이 질문을 던져 논의 틀을 바꾸고, 바뀐 판에서 필요하면 투쟁", "노조 1+1 · 한 노조당 한 사업장 책임제: 큰 노조가 부품사·중소병원 같은 한 곳을 맡아 조직화를 돕는 방식"],
+    last: ["사회적 대화 문제는 논의 흐름을 아는 자신이 아니면 정리하기 어렵다며, 연속성을 갖고 끝까지 정리하겠다고 함"] },
+};
+
+let rally = RALLIES[0].id, ivTopic = IV_TOPICS[0][0];
+function speechCard(n, inner) {
+  const s = by(n);
+  return `<article class="speech" data-n="${n}" aria-label="기호 ${n}번 ${esc(s.people[0][0])} 후보조">
+    <header><span class="sn">${n}</span><b>${esc(s.people[0][0])}</b><span class="role-sm">위원장 후보</span></header>${inner}</article>`;
+}
+function drawRally() {
+  const r = RALLIES.find((x) => x.id === rally);
+  $("#rally-tabs").innerHTML = RALLIES.map((x) => `<button class="tool" type="button" role="tab" data-rally="${x.id}" aria-selected="${x.id === rally}" aria-pressed="${x.id === rally}">${esc(x.name)}${x.date ? ` <small>${x.date}</small>` : ""}</button>`).join("");
+  $("#rally-video").href = r.video;
+  $("#rally-lead").textContent = r.lead;
+  $("#rally").innerHTML = Object.keys(r.by).length
+    ? order.map((n) => speechCard(n, r.by[n]?.length ? `<ul class="points">${r.by[n].map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : '<p class="empty-note">요약된 발언이 없어요.</p>')).join("")
+    : "";
+  document.querySelectorAll("[data-rally]").forEach((b) => b.onclick = () => { rally = b.dataset.rally; drawRally(); });
+}
+function drawInterview() {
+  $("#iv-tabs").innerHTML = IV_TOPICS.map(([id, name]) => `<button class="tool" type="button" role="tab" data-iv="${id}" aria-selected="${id === ivTopic}" aria-pressed="${id === ivTopic}">${name}</button>`).join("");
+  $("#interview").innerHTML = order.map((n) => {
+    const iv = INTERVIEWS[n];
+    if (!iv) return speechCard(n, '<p class="empty-note">인터뷰가 아직 실리지 않았어요. 기호 순으로 이어서 실릴 예정이에요.</p>');
+    return speechCard(n, `${ivTopic === "social" ? `<p class="quote">${esc(iv.title)}</p>` : ""}<ul class="points">${iv[ivTopic].map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <a class="src-link" href="${iv.url}" target="_blank" rel="noopener">매일노동뉴스 연쇄인터뷰 ${iv.no} · ${iv.date} →</a>`);
+  }).join("");
+  $("#iv-src").innerHTML = `&lt;매일노동뉴스&gt; 위원장 후보 연쇄인터뷰를 meiro.kr이 쟁점별로 줄여 옮긴 것이라 원래 표현과 다를 수 있어요. 전문은 기사로 확인해 주세요: ${Object.values(INTERVIEWS).map((iv) => `<a href="${iv.url}" target="_blank" rel="noopener">${iv.no}</a>`).join(" · ")}`;
+  document.querySelectorAll("[data-iv]").forEach((b) => b.onclick = () => { ivTopic = b.dataset.iv; drawInterview(); });
+}
+
 function drawCompare() {
   $("#compare").innerHTML = `<thead><tr><th scope="col">직책</th>${order.map((n) => `<th scope="col" data-n="${n}"><span class="tn">${n}</span>기호 ${n}번</th>`).join("")}</tr></thead>
     <tbody><tr class="slogan-row"><th scope="row">슬로건</th>${order.map((n) => `<td data-n="${n}"><q>${esc(by(n).slogan)}</q></td>`).join("")}</tr>
     ${ROLES.map((r, i) => `<tr><th scope="row">${r}</th>${order.map((n) => `<td data-n="${n}"><b>${esc(by(n).people[i][0])}</b><span>${esc(by(n).people[i][1])}</span></td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
-function drawAll() { drawFront(); drawSlates(); drawDebate(); drawCompare(); }
+function drawAll() { drawFront(); drawSlates(); drawDebate(); drawRally(); drawInterview(); drawCompare(); }
 document.querySelectorAll("[data-order]").forEach((b) => b.onclick = () => {
   order = b.dataset.order === "shuffle"
     ? (() => { const a = SLATES.map((s) => s.n); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; })()
