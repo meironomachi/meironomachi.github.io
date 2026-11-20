@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611040545";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611201848";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
-  monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
+  monthSummary, budgetStatus, changeRate, spendRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611040545";
+} from "./money.js?v=202611201848";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -239,9 +239,9 @@ async function renderMonth(params) {
 
   fill(`${monthNav("/", m)}
     <section class="stats3">
-      <div><span>수입</span><b class="in">${won(s.income)}</b></div>
+      <div><span>수입</span><b class="in">${won(s.income)}</b>${changeRate(s.income, p.income) !== null ? `<small class="${s.income >= p.income ? "good" : ""}">지난달보다 ${Math.abs(changeRate(s.income, p.income))}% ${s.income >= p.income ? "더" : "덜"} 들어옴</small>` : ""}</div>
       <div><span>지출</span><b>${won(s.expense)}</b>${changeRate(s.expense, p.expense) !== null ? `<small class="${s.expense > p.expense ? "up" : "down"}">지난달보다 ${Math.abs(changeRate(s.expense, p.expense))}% ${s.expense > p.expense ? "더" : "덜"} 씀</small>` : ""}</div>
-      <div><span>남은 돈</span><b class="${s.net < 0 ? "neg" : ""}">${signedWon(s.net)}</b>${s.saving ? `<small>저축 ${won(s.saving)}</small>` : ""}</div>
+      <div><span>남은 돈</span><b class="${s.net < 0 ? "neg" : ""}">${signedWon(s.net)}</b>${spendRate(s.expense, s.income) !== null ? `<small class="${spendRate(s.expense, s.income) > 100 ? "up" : ""}">수입의 ${spendRate(s.expense, s.income)}%를 씀</small>` : ""}${s.saving ? `<small>저축 ${won(s.saving)}</small>` : ""}</div>
     </section>
 
     ${flowSection(flow)}
@@ -1129,7 +1129,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611040545");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611201848");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

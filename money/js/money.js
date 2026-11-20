@@ -344,6 +344,8 @@ export function budgetStatus(spent, budget) {
 
 /** 지난달 대비 변화율 (%) — 지난달이 0이면 null */
 export const changeRate = (now, before) => (before ? Math.round(((now - before) / before) * 100) : null);
+/** 수입 대비 지출 비율(%). 수입이 없으면 null (0으로 나눌 수 없음) */
+export const spendRate = (expense, income) => (income > 0 ? Math.round((expense / income) * 100) : null);
 
 /** 계좌 잔액: 잔액이 적힌 가장 최근 거래 + 그 뒤 손으로 넣은 거래들. 잔액 기록이 없으면 시작 잔액 + 합계 */
 export function accountBalance(account, txs, categories = []) {

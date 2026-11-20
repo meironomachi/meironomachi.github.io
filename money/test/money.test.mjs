@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -102,6 +102,15 @@ test("예산 상태, 지난달 대비, 계좌 잔액, 자주 쓰는 내역", () 
   assert.equal(budgetStatus(120000, 100000).state, "over");
   assert.equal(changeRate(112, 100), 12);
   assert.equal(changeRate(5, 0), null);
+});
+
+test("수입 대비 지출 비율", () => {
+  assert.equal(spendRate(720000, 1000000), 72);     // 수입의 72%를 씀
+  assert.equal(spendRate(1200000, 1000000), 120);   // 수입보다 더 씀
+  assert.equal(spendRate(0, 1000000), 0);
+  assert.equal(spendRate(500000, 0), null);         // 수입이 없으면 비율을 낼 수 없음
+  assert.equal(spendRate(0, 0), null);
+  assert.equal(spendRate(333333, 1000000), 33);     // 반올림
   const acc = { id: "k", opening_balance: 0 };
   assert.equal(accountBalance(acc, [
     { account_id: "k", amount: -9900, balance_after: 41909, occurred_at: "2026-10-01T00:00:00Z" },

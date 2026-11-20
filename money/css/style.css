@@ -185,6 +185,7 @@ main.wrap { padding-bottom: 120px; }
 .stats3 b.neg { color: var(--danger); }
 .stats3 small { font-size: 12px; color: var(--muted-fg); }
 .stats3 small.up { color: var(--warn); }
+.stats3 small.good { color: var(--income); }
 @media (max-width: 560px) { .stats3 { grid-template-columns: 1fr 1fr; } .stats3 > div:last-child { grid-column: 1 / -1; } .stats3 b { font-size: 20px; } }
 
 /* 예산 */
