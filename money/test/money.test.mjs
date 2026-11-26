@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, budgetFor, budgetAmount, debtTotal, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -444,4 +444,50 @@ test("부채: 갚은 원금은 상환액에서 이자를 뺀 것, 최근 3개월
   assert.equal(r.ratio, 0.35);
   assert.equal(r.payoffMonth, "2027-06"); // 650,000 ÷ 100,000/월 → 7개월 뒤
   assert.equal(debtStatus(debt, [], "2026-11-04").payoffMonth, null);
+});
+
+test("월별 예산: 그 달 것이 있으면 그것, 없으면 기본", () => {
+  const budgets = [
+    { id: "a", category_id: null, month: null, amount: 800000 },      // 기본 전체
+    { id: "b", category_id: null, month: "2026-12", amount: 1200000 },// 12월만 (명절)
+    { id: "c", category_id: "food", month: null, amount: 300000 },
+  ];
+  assert.equal(budgetAmount(budgets, null, "2026-11"), 800000);   // 기본으로
+  assert.equal(budgetAmount(budgets, null, "2026-12"), 1200000);  // 그 달 것으로
+  assert.equal(budgetAmount(budgets, "food", "2026-12"), 300000); // 분류는 기본만 있음
+  assert.equal(budgetAmount(budgets, "cafe", "2026-12"), undefined);
+  // 기본이 없고 그 달 것만 있어도 된다
+  assert.equal(budgetAmount([{ category_id: null, month: "2026-12", amount: 500 }], null, "2026-12"), 500);
+  assert.equal(budgetAmount([{ category_id: null, month: "2026-12", amount: 500 }], null, "2026-11"), undefined);
+});
+
+test("월별 예산: month 칸이 없던 예전 자료도 기본으로 읽힌다", () => {
+  const old = [{ id: "a", category_id: null, amount: 700000 }];   // month 칸 자체가 없음
+  assert.equal(budgetAmount(old, null, "2026-11"), 700000);
+});
+
+test("갚아야 할 빚 합계", () => {
+  const debts = [
+    { id: "d1", name: "학자금", principal: 10000000, due_on: "2030-03-01" },
+    { id: "d2", name: "전세", principal: 50000000, due_on: "2028-05-01" },
+    { id: "d3", name: "다 갚음", principal: 1000000, closed: true },
+  ];
+  const pays = [
+    { debt_id: "d1", paid_on: "2026-11-05", amount: 300000, interest: 50000 },
+    { debt_id: "d2", paid_on: "2026-10-05", amount: 1000000, interest: 0 },
+    { debt_id: "d3", paid_on: "2026-01-05", amount: 1000000, interest: 0 },
+  ];
+  const r = debtTotal(debts, pays, "2026-11-20");
+  assert.equal(r.count, 2);                        // 다 갚은 것은 빼고
+  assert.equal(r.remaining, 9750000 + 49000000);   // 원금에서 이자 뺀 상환액만큼 줄어듦
+  assert.equal(r.thisMonth, 300000);               // 이번 달에 낸 돈 (이자 포함)
+  assert.equal(r.nextDue, "2028-05-01");           // 가장 가까운 갚는 날
+  assert.equal(r.each[0].debt.name, "전세");        // 많이 남은 것부터
+});
+
+test("갚아야 할 빚이 없으면 0", () => {
+  const r = debtTotal([], [], "2026-11-20");
+  assert.equal(r.count, 0);
+  assert.equal(r.remaining, 0);
+  assert.equal(r.nextDue, null);
 });

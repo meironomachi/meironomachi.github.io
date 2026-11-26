@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611201848";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611261235";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
-  monthSummary, budgetStatus, changeRate, spendRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
+  monthSummary, budgetStatus, budgetAmount, debtTotal, changeRate, spendRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611201848";
+} from "./money.js?v=202611261235";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -214,24 +214,33 @@ async function renderMonth(params) {
   document.title = `${monthLabel(m)} — $TDL`;
   app.innerHTML = shell("/", loading());
   bindShell();
-  const [txs, prev] = await Promise.all([loadMonth(m), loadMonth(shiftMonth(m, -1))]);
+  const [txs, prev, dRes, pRes] = await Promise.all([
+    loadMonth(m), loadMonth(shiftMonth(m, -1)),
+    sb.from("money_debts").select("*").order("sort"),
+    sb.from("money_debt_payments").select("*"),
+  ]);
+  // 부채는 달과 상관없이 '지금 남은 것'이라, 이번 달을 볼 때만 보여 준다
+  const debt = debtTotal(dRes.data ?? [], pRes.data ?? [], kstDay(new Date().toISOString()));
   shown = txs;
   const s = monthSummary(txs), p = monthSummary(prev);
   const flow = dailyFlow(txs, m, kstDay(new Date().toISOString()));
-  const total = base.budgets.find((b) => !b.category_id);
-  const tb = budgetStatus(s.expense, total?.amount);
+  // 그 달 예산이 따로 있으면 그것, 없으면 기본 예산
+  const bud = (id) => budgetAmount(base.budgets, id, m);
+  const totalAmt = bud(null);
+  const budgetIsMonthly = base.budgets.some((b) => b.month === m);
+  const tb = budgetStatus(s.expense, totalAmt);
   const cats = base.categories.filter((c) => c.kind === "expense");
-  const rows = [...cats.map((c) => ({ c, spent: s.byCat[c.id] ?? 0, before: p.byCat[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))]
+  const rows = [...cats.map((c) => ({ c, spent: s.byCat[c.id] ?? 0, before: p.byCat[c.id] ?? 0, budget: bud(c.id) }))]
     .filter((r) => r.spent || r.budget).sort((a, b) => b.spent - a.spent);
   const none = s.byCat.none ?? 0;
   // 수입·저축 목표와 이 달의 고정 항목
   const inflow = inflowByCat(txs), prevInflow = inflowByCat(prev);
   const incomeNone = txs.filter((t) => t.kind === "income" && !t.category_id && !t.planned).reduce((sum, t) => sum + t.amount, 0);
   const incomeRows = base.categories.filter((c) => c.kind === "income")
-    .map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: base.budgets.find((b) => b.category_id === c.id)?.amount }))
+    .map((c) => ({ c, amt: inflow[c.id] ?? 0, before: prevInflow[c.id] ?? 0, budget: bud(c.id) }))
     .filter((r) => r.amt || r.budget).sort((a, b) => b.amt - a.amt);
   const goals = base.categories.filter((c) => c.kind === "income" || c.kind === "saving")
-    .map((c) => ({ c, got: inflow[c.id] ?? 0, goal: base.budgets.find((b) => b.category_id === c.id)?.amount })).filter((g) => g.goal);
+    .map((c) => ({ c, got: inflow[c.id] ?? 0, goal: bud(c.id) })).filter((g) => g.goal);
   const fixed = base.recurring.filter((r) => recurringActive(r, m)).map((r) => ({ r, tx: txs.find((t) => t.recurring_id === r.id) }))
     .sort((a, b) => recurringDay(a.r, m).localeCompare(recurringDay(b.r, m)));
   const ft = recurringTotals(base.recurring, m);
@@ -247,13 +256,24 @@ async function renderMonth(params) {
     ${flowSection(flow)}
 
     <section class="paper budget-card">
-      <div class="section-head"><h3>예산</h3><a class="btn ghost sm" href="#/budget">예산 정하기</a></div>
-      ${total ? `<div class="budget-total">
-          <div class="bt-line"><b>${won(s.expense)}</b><span class="muted"> / ${won(total.amount)}</span><span class="bt-left ${tb.state}">${tb.state === "over" ? `${won(s.expense - total.amount)} 넘음` : `${won(total.amount - s.expense)} 남음`}</span></div>
+      <div class="section-head"><h3>예산${budgetIsMonthly ? ` <span class="pill sm">${m.replace("-", ".")}만</span>` : ""}</h3><a class="btn ghost sm" href="#/budget?m=${m}">예산 정하기</a></div>
+      ${totalAmt ? `<div class="budget-total">
+          <div class="bt-line"><b>${won(s.expense)}</b><span class="muted"> / ${won(totalAmt)}</span><span class="bt-left ${tb.state}">${tb.state === "over" ? `${won(s.expense - totalAmt)} 넘음` : `${won(totalAmt - s.expense)} 남음`}</span></div>
           <div class="meter ${tb.state}"><span style="width:${Math.min(100, tb.ratio * 100)}%"></span></div>
-          ${daysLeft > 0 && tb.state !== "over" ? `<p class="muted small">남은 ${daysLeft}일 동안 하루 ${won(Math.floor((total.amount - s.expense) / daysLeft))}씩 쓸 수 있어요</p>` : ""}
+          ${daysLeft > 0 && tb.state !== "over" ? `<p class="muted small">남은 ${daysLeft}일 동안 하루 ${won(Math.floor((totalAmt - s.expense) / daysLeft))}씩 쓸 수 있어요</p>` : ""}
         </div>` : '<p class="empty-hint">한 달 예산을 정하면 얼마나 남았는지 보여 드려요.</p>'}
     </section>
+
+    ${debt.count && m === thisMonth() ? `<section class="paper budget-card debt-card">
+      <div class="section-head"><h3>갚아야 할 빚</h3><a class="btn ghost sm" href="#/debts">부채</a></div>
+      <div class="budget-total">
+        <div class="bt-line"><b>${won(debt.remaining)}</b><span class="muted"> / 빌린 ${won(debt.principal)}</span>
+          <span class="bt-left ok">${Math.round((1 - debt.remaining / debt.principal) * 100)}% 갚음</span></div>
+        <div class="meter ok"><span style="width:${Math.round((1 - debt.remaining / debt.principal) * 100)}%"></span></div>
+        <p class="muted small">${debt.count}건${debt.thisMonth ? ` · 이번 달 ${won(debt.thisMonth)} 갚음` : " · 이번 달은 아직 갚은 내역이 없어요"}${debt.nextDue ? ` · 가장 가까운 갚는 날 ${debt.nextDue.replace(/-/g, ".")}` : ""}</p>
+      </div>
+      <ul class="debt-mini">${debt.each.slice(0, 3).map((x) => `<li><span>${esc(x.debt.name)}</span><b>${won(x.st.remaining)}</b></li>`).join("")}</ul>
+    </section>` : ""}
 
     ${goals.length ? `<section class="paper budget-card"><div class="section-head"><h3>수입·저축 목표</h3><a class="btn ghost sm" href="#/budget">목표 정하기</a></div>
       <ul class="goal-rows">${goals.map((g) => { const st = goalStatus(g.got, g.goal); return `<li>
@@ -1003,17 +1023,29 @@ async function renderBudget(params = new URLSearchParams()) {
   document.title = "예산·분류 — $TDL";
   app.innerHTML = shell("/budget", loading());
   bindShell();
-  const budgetOf = (id) => base.budgets.find((b) => (b.category_id ?? null) === id)?.amount ?? "";
+  // 어느 달 예산을 고치는지. m 이 없으면 '기본'(모든 달에 적용)
+  const bm = params.get("m") || "";
+  const rowOf = (id) => base.budgets.find((b) => (b.category_id ?? null) === id && (b.month ?? "") === bm);
+  // 그 달 것이 아직 없으면 기본 금액을 밑칸에 흐리게 보여 준다
+  const baseOf = (id) => base.budgets.find((b) => (b.category_id ?? null) === id && !b.month)?.amount;
+  const budgetOf = (id) => rowOf(id)?.amount ?? "";
   const fmt = (v) => (v ? Number(v).toLocaleString("ko-KR") : "");
+  const ph = (id) => (bm && baseOf(id) ? `기본 ${fmt(baseOf(id))}` : "");
+  const months = [-1, 0, 1, 2, 3].map((k) => shiftMonth(thisMonth(), k));
   fill(`<form class="paper budget-form" id="budget-form">
-      <div class="section-head"><h3>한 달 예산</h3><span class="muted small">매달 같은 금액이 적용돼요. 비워 두면 예산 없음</span></div>
-      <label class="budget-row total"><span>전체 지출</span><span class="money-input"><input class="input" inputmode="numeric" data-b="" value="${fmt(budgetOf(null))}" placeholder="예: 800,000"><span>원</span></span></label>
+      <div class="section-head"><h3>${bm ? `${bm.replace("-", ".")} 예산` : "한 달 예산"}</h3>
+        <span class="muted small">${bm ? "이 달에만 적용돼요. 비우면 기본 예산을 따라가요" : "매달 같은 금액이 적용돼요. 비워 두면 예산 없음"}</span></div>
+      <div class="budget-months">
+        <a class="${bm ? "" : "on"}" href="#/budget">기본</a>
+        ${months.map((x) => `<a class="${bm === x ? "on" : ""}" href="#/budget?m=${x}">${x.replace("-", ".")}${base.budgets.some((b) => b.month === x) ? " ·" : ""}</a>`).join("")}
+      </div>
+      <label class="budget-row total"><span>전체 지출</span><span class="money-input"><input class="input" inputmode="numeric" data-b="" value="${fmt(budgetOf(null))}" placeholder="${ph(null) || "예: 800,000"}"><span>원</span></span></label>
       ${base.categories.filter((c) => c.kind === "expense").map((c) => `<label class="budget-row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>
-        <span class="money-input"><input class="input" inputmode="numeric" data-b="${c.id}" value="${fmt(budgetOf(c.id))}"><span>원</span></span></label>`).join("")}
+        <span class="money-input"><input class="input" inputmode="numeric" data-b="${c.id}" value="${fmt(budgetOf(c.id))}" placeholder="${ph(c.id)}"><span>원</span></span></label>`).join("")}
       <p class="muted small" id="b-sum"></p>
       ${["income", "saving"].map((k) => `<div class="section-head goal-head"><h3>${k === "income" ? "한 달 수입 목표" : "한 달 저축 목표"}</h3><span class="muted small">채울수록 막대가 차요</span></div>
         ${base.categories.filter((c) => c.kind === k).map((c) => `<label class="budget-row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>
-          <span class="money-input"><input class="input" inputmode="numeric" data-g="${c.id}" value="${fmt(budgetOf(c.id))}"><span>원</span></span></label>`).join("") || '<p class="empty-hint">아래 분류에서 먼저 분류를 만들어 주세요.</p>'}`).join("")}
+          <span class="money-input"><input class="input" inputmode="numeric" data-g="${c.id}" value="${fmt(budgetOf(c.id))}" placeholder="${ph(c.id)}"><span>원</span></span></label>`).join("") || '<p class="empty-hint">아래 분류에서 먼저 분류를 만들어 주세요.</p>'}`).join("")}
       <div class="actions"><button class="btn primary" type="submit">예산·목표 저장</button></div>
     </form>
 
@@ -1054,6 +1086,8 @@ async function renderBudget(params = new URLSearchParams()) {
   $$("[data-b]").forEach((i) => i.addEventListener("input", () => { const n = parseAmount(i.value.replace(/[^\d]/g, "")); i.value = n ? n.toLocaleString("ko-KR") : ""; sumDraw(); }));
   sumDraw();
   if (params.get("to") === "fixed") $("#fixed").scrollIntoView();
+  if (bm) $(".budget-form").insertAdjacentHTML("beforeend",
+    `<p class="muted small">이 달 예산을 지우고 싶으면 칸을 비우고 저장하세요. 기본 예산으로 돌아가요.</p>`);
   $$("[data-g]").forEach((i) => i.addEventListener("input", () => { const n = parseAmount(i.value.replace(/[^\d]/g, "")); i.value = n ? n.toLocaleString("ko-KR") : ""; }));
   // 고정 항목: 종류에 맞는 분류만
   const fa = $("#fixed-add");
@@ -1080,12 +1114,13 @@ async function renderBudget(params = new URLSearchParams()) {
     e.preventDefault();
     for (const i of [...$$("[data-b]"), ...$$("[data-g]")]) {
       const id = (i.dataset.b ?? i.dataset.g) || null, n = parseAmount(i.value) ?? 0;
-      const old = base.budgets.find((b) => (b.category_id ?? null) === id);
+      const old = rowOf(id);
       if (old && !n) await sb.from("money_budgets").delete().eq("id", old.id);
       else if (old && n !== Number(old.amount)) await sb.from("money_budgets").update({ amount: n }).eq("id", old.id);
-      else if (!old && n) await sb.from("money_budgets").insert({ category_id: id, amount: n });
+      else if (!old && n) await sb.from("money_budgets").insert({ category_id: id, amount: n, month: bm || null });
     }
-    toast("예산·목표를 저장했어요"); go("#/", true);
+    toast(bm ? `${bm.replace("-", ".")} 예산을 저장했어요` : "예산·목표를 저장했어요");
+    go(bm ? `#/?m=${bm}` : "#/", true);
   };
   $$(".cats-manage li[data-id]").forEach((li) => {
     const id = li.dataset.id, c = catOf(id);
@@ -1129,7 +1164,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611201848");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611261235");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);

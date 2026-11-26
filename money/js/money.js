@@ -342,6 +342,37 @@ export function budgetStatus(spent, budget) {
   return { ratio, state: ratio > 1 ? "over" : ratio >= 0.8 ? "warn" : "ok" };
 }
 
+/** 그 달에 쓸 예산 한 줄을 고른다.
+ *
+ * 예산에는 '기본'(month 가 비어 있음)과 '그 달만'(month = "2026-11") 두 가지가 있다.
+ * 그 달 것이 있으면 그것을, 없으면 기본을 쓴다. 기본만 쓰던 때와 똑같이 돌아간다.
+ */
+export function budgetFor(budgets, categoryId, month) {
+  const id = categoryId ?? null;
+  const mine = (budgets ?? []).filter((b) => (b.category_id ?? null) === id);
+  return mine.find((b) => b.month === month) ?? mine.find((b) => !b.month) ?? null;
+}
+
+/** 그 달 예산 금액만. 없으면 undefined (budgetStatus 가 '예산 없음'으로 봄) */
+export const budgetAmount = (budgets, categoryId, month) =>
+  budgetFor(budgets, categoryId, month)?.amount;
+
+/** 아직 갚아야 할 빚을 모두 더한다. 다 갚음으로 표시한 것은 뺀다. */
+export function debtTotal(debts, payments, today) {
+  const open = (debts ?? []).filter((d) => !d.closed);
+  const each = open.map((d) => ({ debt: d, st: debtStatus(d, payments ?? [], today) }));
+  const remaining = each.reduce((s, x) => s + x.st.remaining, 0);
+  const thisMonth = each.reduce((s, x) => s + x.st.thisMonth, 0);
+  // 가장 가까운 갚는 날 (적어 둔 것만)
+  const dues = open.map((d) => d.due_on).filter(Boolean).sort();
+  return {
+    count: open.length, remaining, thisMonth,
+    principal: open.reduce((s, d) => s + Number(d.principal), 0),
+    nextDue: dues[0] ?? null,
+    each: each.sort((a, b) => b.st.remaining - a.st.remaining),
+  };
+}
+
 /** 지난달 대비 변화율 (%) — 지난달이 0이면 null */
 export const changeRate = (now, before) => (before ? Math.round(((now - before) / before) * 100) : null);
 /** 수입 대비 지출 비율(%). 수입이 없으면 null (0으로 나눌 수 없음) */

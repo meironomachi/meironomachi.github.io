@@ -66,7 +66,13 @@ CREATE TABLE IF NOT EXISTS public.money_budgets (
   amount bigint NOT NULL CHECK (amount > 0),
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS money_budget_one ON public.money_budgets (user_id, coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid));
+-- 달마다 다른 예산을 둘 수 있다. month 가 비어 있으면 '기본'이라 모든 달에 적용되고,
+-- '2026-12' 처럼 적힌 것이 있으면 그 달만 그 금액을 쓴다.
+ALTER TABLE public.money_budgets ADD COLUMN IF NOT EXISTS month text
+  CHECK (month IS NULL OR month ~ '^[0-9]{4}-[0-9]{2}$');
+DROP INDEX IF EXISTS public.money_budget_one;
+CREATE UNIQUE INDEX IF NOT EXISTS money_budget_one ON public.money_budgets
+  (user_id, coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid), coalesce(month, ''));
 
 -- 권한: 승인된 본인만
 DO $$

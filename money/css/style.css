@@ -463,3 +463,19 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .debt-edit { margin-top: 10px; }
 .debt-edit .field.full { grid-column: 1 / -1; }
 .closed-debts { margin-bottom: 20px; }
+
+/* 예산 달 고르기 */
+.budget-months { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.budget-months a { border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px;
+  font-size: 13px; color: var(--muted-fg); text-decoration: none; background: var(--card); }
+.budget-months a:hover { border-color: var(--primary); color: var(--primary); }
+.budget-months a.on { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 600; }
+
+/* '2026.12만' 처럼 제목 옆에 붙는 작은 딱지 */
+.pill.sm { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg); font-size: 12px; font-weight: 600; vertical-align: middle; }
+
+/* 이번 달 화면의 빚 요약 */
+.debt-mini { list-style: none; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); }
+.debt-mini li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 14px; }
+.debt-mini li span { color: var(--muted-fg); }
