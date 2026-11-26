@@ -1,0 +1,2885 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>한국 정당·정책 스펙트럼 탐색기 (7대 영역 · 13개 정당)</title>
+  <style>
+    :root {
+      --bg-page: #f1f5f9;
+      --bg-card: #ffffff;
+      --bg-subtle: #f8fafc;
+      --bg-muted: #e2e8f0;
+      --text-main: #0f172a;
+      --text-sub: #334155;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --border-light: #e2e8f0;
+      --navy: #1e293b;
+      --indigo: #312e81;
+      --indigo-soft: #eef2ff;
+      --con-red: #b91c1c;
+      --prog-blue: #1d4ed8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.6;
+      word-break: keep-all;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background-color: #ffffff;
+      border-bottom: 1px solid var(--border-light);
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .brand-area {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background-color: var(--navy);
+      color: #ffffff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--text-main);
+      display: block;
+      line-height: 1.2;
+    }
+
+    .brand-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .notice-bar {
+      background-color: #e2e8f0;
+      border-bottom: 1px solid var(--border);
+      padding: 0.45rem 1rem;
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--text-sub);
+    }
+
+    main {
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem;
+      flex: 1;
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    @media (min-width: 640px) {
+      .card {
+        padding: 2rem;
+      }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* 상단 컴팩트 안내 & 모드 바 */
+    .intro-banner {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid var(--border);
+    }
+
+    .intro-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .intro-title {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 0.35rem;
+    }
+
+    .intro-desc {
+      font-size: 0.86rem;
+      color: var(--text-sub);
+      max-width: 640px;
+    }
+
+    .mode-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.55rem 0.95rem;
+      border-radius: 10px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background-color: #ffffff;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+      user-select: none;
+    }
+
+    .btn:hover:not(:disabled) {
+      background-color: var(--bg-subtle);
+      border-color: #94a3b8;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background-color: var(--navy);
+      border-color: var(--navy);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--indigo);
+      border-color: var(--indigo);
+    }
+
+    .btn-indigo {
+      background-color: var(--indigo);
+      border-color: var(--indigo);
+      color: #ffffff;
+    }
+
+    .btn-indigo:hover:not(:disabled) {
+      background-color: #1e1b4b;
+    }
+
+    .btn-active-mode {
+      background-color: var(--navy);
+      border-color: var(--navy);
+      color: #ffffff;
+    }
+
+    /* 영역 이동 탭 */
+    .axis-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding-bottom: 0.85rem;
+      margin-bottom: 1.1rem;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .axis-tab {
+      padding: 0.38rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      border: 1px solid var(--border-light);
+      background-color: var(--bg-subtle);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .axis-tab:hover {
+      border-color: #94a3b8;
+      color: var(--text-main);
+    }
+
+    .axis-tab.active {
+      background-color: var(--navy);
+      border-color: var(--navy);
+      color: #ffffff;
+    }
+
+    .axis-tab.done {
+      background-color: var(--indigo-soft);
+      border-color: #c7d2fe;
+      color: var(--indigo);
+    }
+
+    /* 진행률 바 */
+    .progress-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .badge-navy {
+      background-color: var(--navy);
+      color: #ffffff;
+    }
+
+    .badge-indigo {
+      background-color: var(--indigo-soft);
+      color: var(--indigo);
+      border: 1px solid #c7d2fe;
+    }
+
+    .badge-gray {
+      background-color: var(--bg-subtle);
+      color: var(--text-sub);
+      border: 1px solid var(--border-light);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background-color: var(--bg-muted);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 1.35rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: var(--indigo);
+      border-radius: 999px;
+      transition: width 0.2s ease;
+    }
+
+    /* 문항 영역 */
+    .q-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .q-number {
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--indigo);
+    }
+
+    .weight-btn {
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background-color: var(--bg-subtle);
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .weight-btn.weighted {
+      background-color: var(--indigo);
+      border-color: var(--indigo);
+      color: #ffffff;
+    }
+
+    .q-text {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.55;
+      margin-bottom: 0.85rem;
+    }
+
+    @media (min-width: 640px) {
+      .q-text {
+        font-size: 1.24rem;
+      }
+    }
+
+    .tip-btn {
+      background: none;
+      border: none;
+      color: var(--indigo);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 0.65rem;
+      padding: 0.2rem 0;
+    }
+
+    .tip-btn:hover {
+      text-decoration: underline;
+    }
+
+    .tip-box {
+      background-color: var(--bg-subtle);
+      border-left: 3px solid var(--indigo);
+      border-top: 1px solid var(--border-light);
+      border-right: 1px solid var(--border-light);
+      border-bottom: 1px solid var(--border-light);
+      border-radius: 0 8px 8px 0;
+      padding: 0.75rem 1rem;
+      font-size: 0.83rem;
+      color: var(--text-sub);
+      margin-bottom: 1.2rem;
+    }
+
+    /* 5단계 선택지 */
+    .options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      margin-bottom: 1.4rem;
+    }
+
+    .option-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.1rem;
+      border-radius: 12px;
+      border: 1.5px solid var(--border);
+      background-color: #ffffff;
+      color: var(--text-main);
+      font-size: 0.94rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.12s ease;
+    }
+
+    .option-item:hover {
+      background-color: var(--bg-subtle);
+      border-color: #64748b;
+    }
+
+    .option-item.selected {
+      background-color: var(--navy);
+      border-color: var(--navy);
+      color: #ffffff;
+    }
+
+    .option-left {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .option-key {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background-color: var(--bg-muted);
+      color: var(--text-sub);
+      font-size: 0.76rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .option-item.selected .option-key {
+      background-color: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+    }
+
+    .option-sub {
+      font-size: 0.76rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .option-item.selected .option-sub {
+      color: #cbd5e1;
+    }
+
+    .quiz-nav-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.6rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-light);
+    }
+
+    /* 결과 화면 스타일 */
+    .ideology-numbers {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      margin: 1rem 0 0.7rem;
+    }
+
+    .ideology-pct {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .ideology-pct.con {
+      color: var(--con-red);
+    }
+
+    .ideology-pct.prog {
+      color: var(--prog-blue);
+    }
+
+    .ideology-bar {
+      position: relative;
+      width: 100%;
+      height: 22px;
+      background-color: var(--bg-muted);
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .ideology-con-fill {
+      height: 100%;
+      background-color: #dc2626;
+      transition: width 0.35s ease;
+    }
+
+    .ideology-prog-fill {
+      height: 100%;
+      background-color: #2563eb;
+      transition: width 0.35s ease;
+    }
+
+    .ideology-midline {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background-color: #ffffff;
+      transform: translateX(-50%);
+    }
+
+    /* 정당 SVG 로고 배지 */
+    .party-emblem {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, 0.14);
+    }
+
+    .party-emblem.sm {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+    }
+
+    .close-party-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.15rem;
+      background-color: #ffffff;
+      margin-bottom: 0.9rem;
+    }
+
+    .close-party-card.highlight {
+      border: 2px solid var(--navy);
+      background-color: var(--bg-subtle);
+    }
+
+    .close-party-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .close-party-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+    }
+
+    .point-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.65rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border-light);
+      margin-top: 0.75rem;
+    }
+
+    @media (min-width: 640px) {
+      .point-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .tag-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 0.22rem 0.55rem;
+      border-radius: 6px;
+      background-color: #ffffff;
+      border: 1px solid var(--border-light);
+      color: var(--text-sub);
+      margin: 0.15rem 0.25rem 0.15rem 0;
+    }
+
+    /* 레이더 차트 레이아웃 */
+    .radar-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    @media (min-width: 768px) {
+      .radar-grid {
+        grid-template-columns: 1.05fr 0.95fr;
+      }
+    }
+
+    .canvas-box {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    canvas#radar-canvas {
+      width: 100%;
+      max-width: 420px;
+      height: auto;
+      display: block;
+    }
+
+    .axis-mini-card {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* 정당 직접 비교기 */
+    .comparator-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.85rem;
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 1rem;
+      margin: 1rem 0;
+    }
+
+    @media (min-width: 640px) {
+      .comparator-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.35rem;
+    }
+
+    .select-wrap select {
+      width: 100%;
+      padding: 0.55rem 0.7rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background-color: #ffffff;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .h2h-box {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .h2h-cols {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    @media (min-width: 640px) {
+      .h2h-cols {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .h2h-subcard {
+      background-color: #ffffff;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 0.8rem;
+      font-size: 0.82rem;
+      color: var(--text-sub);
+    }
+
+    /* 스펙트럼 막대 */
+    .spectrum-card {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 0.95rem 1.1rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .spectrum-bar-area {
+      position: relative;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      margin: 0.45rem 0;
+    }
+
+    .spectrum-track {
+      width: 100%;
+      height: 8px;
+      background-color: #cbd5e1;
+      border-radius: 999px;
+      position: relative;
+    }
+
+    .spectrum-mid {
+      position: absolute;
+      left: 50%;
+      top: -4px;
+      bottom: -4px;
+      width: 2px;
+      background-color: #64748b;
+      transform: translateX(-50%);
+    }
+
+    .dot-user {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background-color: #0f172a;
+      border: 2px solid #ffffff;
+      z-index: 3;
+    }
+
+    .dot-pa {
+      position: absolute;
+      top: 1px;
+      transform: translateX(-50%) rotate(45deg);
+      width: 10px;
+      height: 10px;
+      background-color: #3730a3;
+      border: 1px solid #ffffff;
+      z-index: 2;
+    }
+
+    .dot-pb {
+      position: absolute;
+      bottom: 1px;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 10px solid #475569;
+      z-index: 2;
+    }
+
+    /* 13개 정당 강령 디렉토리 */
+    .dict-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    @media (min-width: 640px) {
+      .dict-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .dict-item {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 1rem;
+      font-size: 0.82rem;
+    }
+
+    /* 모달 */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(15, 23, 42, 0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 60;
+    }
+
+    .modal-box {
+      background-color: #ffffff;
+      border-radius: 16px;
+      max-width: 520px;
+      width: 100%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-head {
+      padding: 0.9rem 1.2rem;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body {
+      padding: 1rem;
+      background-color: #e2e8f0;
+      overflow-y: auto;
+      display: flex;
+      justify-content: center;
+    }
+
+    .modal-body img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    .modal-foot {
+      padding: 0.85rem 1.2rem;
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: var(--navy);
+      color: #ffffff;
+      padding: 0.65rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 70;
+    }
+
+    #toast.show {
+      opacity: 1;
+    }
+
+    footer {
+      background-color: #ffffff;
+      border-top: 1px solid var(--border-light);
+      padding: 1.1rem;
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 상단 헤더 -->
+  <header>
+    <div class="header-inner">
+      <div class="brand-area">
+        <div class="brand-icon">7축</div>
+        <div>
+          <span class="brand-title">한국 정당·정책 스펙트럼 탐색기</span>
+          <span class="brand-sub">원내·원외 13개 정당 · 민족·통일·대미관계 포함 7대 영역 분석</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.45rem; align-items: center;">
+        <button type="button" id="btn-top-quiz" class="btn btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.78rem;">설문 화면</button>
+        <button type="button" id="btn-top-result" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.78rem;">결과 보기</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="notice-bar">
+    본 도구는 각 정당이 중앙선거관리위원회에 제출한 공식 강령·선언문·정책 자료집의 방향을 비교하는 학습·참고용 시뮬레이션입니다.
+  </div>
+
+  <main>
+
+    <!-- 상단 컴팩트 안내 & 모드 전환 바 (항상 표시) -->
+    <section class="card intro-banner">
+      <div class="intro-top">
+        <div>
+          <h1 class="intro-title">7대 정책 영역 기반 한국 정당·정책 스펙트럼 탐색기</h1>
+          <p class="intro-desc">
+            경제·조세·노동·기후·사회 제도와 더불어 <strong>민족·통일·자주·대미관계</strong> 축까지 총 7대 영역의 세부 쟁점을 통해 13개 원내·원외 정당(가나다순)의 공식 강령 좌표와 나의 정책 지향을 비교합니다. 아래 문항에 바로 응답해 보세요.
+          </p>
+        </div>
+        <div class="mode-switcher">
+          <button type="button" id="btn-mode-quick" class="btn btn-active-mode">핵심 요약 (21문항)</button>
+          <button type="button" id="btn-mode-deep" class="btn">심층 정밀 (42문항)</button>
+          <button type="button" id="btn-reset-all" class="btn">응답 초기화</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 설문 화면 (초기 즉시 활성화) ================= -->
+    <section id="view-quiz" class="card">
+      <!-- 7대 영역 빠른 이동 탭 -->
+      <div id="axis-tabs" class="axis-tabs" role="tablist" aria-label="7대 정책 영역 이동 탭"></div>
+
+      <!-- 진행률 헤더 -->
+      <div class="progress-header">
+        <span id="quiz-axis-badge" class="badge badge-navy">영역 1 · 경제·시장·규제</span>
+        <span id="quiz-progress-text" style="font-size: 0.85rem; font-weight: 800; color: var(--text-sub);">1 / 21 (응답 0개)</span>
+      </div>
+
+      <div class="progress-track">
+        <div id="quiz-progress-fill" class="progress-fill" style="width: 4.76%;"></div>
+      </div>
+
+      <!-- 문항 헤더 & 중요도 2배 토글 -->
+      <div class="q-meta-row">
+        <span id="quiz-q-num" class="q-number">Q1.</span>
+        <button type="button" id="btn-weight-toggle" class="weight-btn" aria-pressed="false">
+          ☆ 중요한 쟁점 (가중치 2배)
+        </button>
+      </div>
+
+      <!-- 문항 본문 -->
+      <div id="quiz-q-text" class="q-text"></div>
+
+      <!-- 정당 간 분기점 해설 토글 -->
+      <div>
+        <button type="button" id="btn-tip-toggle" class="tip-btn" aria-expanded="false">
+          ⓘ 이 쟁점이 정당 간 분기점이 되는 이유 보기
+        </button>
+        <div id="quiz-tip-box" class="tip-box hidden"></div>
+      </div>
+
+      <!-- 5단계 리커트 척도 선택지 -->
+      <div id="quiz-options" class="options-list" role="radiogroup" aria-label="동의 정도 선택"></div>
+
+      <!-- 하단 네비게이션 -->
+      <div class="quiz-nav-bar">
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" id="btn-prev" class="btn">← 이전 문항</button>
+          <button type="button" id="btn-next" class="btn">다음 문항 →</button>
+        </div>
+        <button type="button" id="btn-finish-now" class="btn btn-indigo">
+          결과 바로 보기 (현재 응답 기준) →
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 결과 화면 ================= -->
+    <section id="view-result" class="hidden">
+
+      <!-- 1) 보수-진보 종합 성향 스펙트럼 균형 게이지 -->
+      <div class="card">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+          <div style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+            <span class="badge badge-navy">7대 영역 종합 성향 분포</span>
+            <span id="ideology-label-badge" class="badge badge-indigo">중도·균형형</span>
+          </div>
+          <span id="result-meta-badge" class="badge badge-gray">핵심 21문항 기준</span>
+        </div>
+
+        <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 0.35rem;">나의 정책 스펙트럼 균형 지표</h2>
+        <p style="font-size: 0.86rem; color: var(--text-sub);">
+          민족·통일·대미관계 축을 포함한 7대 영역 응답과 중요도 2배 가중치를 종합한 참고 비율입니다.
+        </p>
+
+        <div class="ideology-numbers">
+          <div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-sub);">◀ 보수적 정책 지향 (시장자유·한미동맹·전통)</div>
+            <div id="con-pct-val" class="ideology-pct con">50%</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-sub);">진보적 정책 지향 (공공개입·자주평화·개혁) ▶</div>
+            <div id="prog-pct-val" class="ideology-pct prog">50%</div>
+          </div>
+        </div>
+
+        <div class="ideology-bar" role="img" aria-label="보수적 정책 지향 대 진보적 정책 지향 비율">
+          <div id="bar-con-fill" class="ideology-con-fill" style="width: 50%;"></div>
+          <div id="bar-prog-fill" class="ideology-prog-fill" style="width: 50%;"></div>
+          <div class="ideology-midline"></div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem;">
+          <button type="button" id="btn-export-png-top" class="btn btn-primary">결과 카드 이미지 저장 (PNG)</button>
+          <button type="button" id="btn-copy-text-top" class="btn">요약 텍스트 복사</button>
+          <button type="button" id="btn-back-to-quiz" class="btn">설문으로 돌아가기</button>
+        </div>
+      </div>
+
+      <!-- 2) 공식 강령 기준 정책 방향 유사 영역이 많은 정당 (상위 3곳 참고) -->
+      <div class="card">
+        <div style="margin-bottom: 0.5rem;">
+          <span class="badge badge-indigo">공식 강령 좌표 거리 근접 참고</span>
+        </div>
+        <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 0.35rem;">
+          공식 강령 기준 정책 방향 유사 영역이 많은 정당 (근접 참고 3곳)
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 1rem;">
+          ※ 본 결과는 각 정당의 공식 강령·정책 자료집에 기반한 교육·참고용 비교이며, 정당 내부에서도 세부 입장은 다양할 수 있습니다.
+        </p>
+
+        <div id="close-parties-list"></div>
+      </div>
+
+      <!-- 3) 7대 정책 영역 레이더 차트 & 영역별 좌표 요약 -->
+      <div class="card">
+        <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 0.35rem;">나의 7대 정책 영역 좌표 프로파일</h2>
+        <p style="font-size: 0.85rem; color: var(--text-sub);">
+          중심(0)에서 바깥쪽(+100)으로 갈수록 진보·개혁·자주·탈핵 방향을, 안쪽(-100)으로 갈수록 보수·시장자유·한미동맹·원전활용 방향을 나타냅니다.
+        </p>
+
+        <div class="radar-grid">
+          <div class="canvas-box">
+            <canvas id="radar-canvas" width="440" height="400"></canvas>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.65rem; font-size: 0.78rem; font-weight: 700;">
+              <span>● 나의 좌표 (실선)</span>
+              <span id="radar-legend-a" style="color: var(--indigo);">◆ 비교 정당 A</span>
+              <span id="radar-legend-b" style="color: var(--text-muted);">▲ 비교 정당 B</span>
+            </div>
+          </div>
+
+          <div id="axis-mini-summary"></div>
+        </div>
+      </div>
+
+      <!-- 4) 13개 정당 직접 비교기 (레이더 오버레이 + 7축 스펙트럼 + 민족·통일·대미관계 노선 대조) -->
+      <div class="card">
+        <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 0.35rem;">13개 정당 공식 강령 직접 비교기</h2>
+        <p style="font-size: 0.85rem; color: var(--text-sub);">
+          비교할 두 정당을 선택하면 위 7각형 레이더 차트와 아래 7개 영역 스펙트럼에 각 정당의 공식 강령 좌표가 겹쳐 표시됩니다.
+        </p>
+
+        <div class="comparator-row">
+          <div>
+            <label for="select-party-a" style="font-size: 0.78rem; font-weight: 700; color: var(--text-sub);">비교 정당 A (◆ 다이아몬드)</label>
+            <div class="select-wrap">
+              <div id="logo-slot-a"></div>
+              <select id="select-party-a"></select>
+            </div>
+          </div>
+          <div>
+            <label for="select-party-b" style="font-size: 0.78rem; font-weight: 700; color: var(--text-sub);">비교 정당 B (▲ 삼각형)</label>
+            <div class="select-wrap">
+              <div id="logo-slot-b"></div>
+              <select id="select-party-b"></select>
+            </div>
+          </div>
+        </div>
+
+        <div id="h2h-detail-box" class="h2h-box"></div>
+        <div id="spectrum-bars-list"></div>
+      </div>
+
+      <!-- 5) 전체 13개 정당 공식 강령 요약 사전 (가나다순) -->
+      <div class="card">
+        <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 0.35rem;">전체 13개 정당 공식 강령 핵심 기조 (가나다순)</h2>
+        <p style="font-size: 0.85rem; color: var(--text-sub);">
+          중앙선거관리위원회 공개 강령 및 정책 자료를 바탕으로 13개 정당의 핵심 정책 방향과 민족·대미 기조를 가나다순으로 정리했습니다.
+        </p>
+        <div id="party-dictionary-grid" class="dict-grid"></div>
+      </div>
+
+      <!-- 하단 액션 -->
+      <div style="display: flex; flex-wrap: wrap; gap: 0.65rem;">
+        <button type="button" id="btn-export-png-bottom" class="btn btn-primary">결과 카드 이미지 저장 (PNG)</button>
+        <button type="button" id="btn-copy-text-bottom" class="btn">요약 텍스트 복사</button>
+        <button type="button" id="btn-restart-bottom" class="btn">처음부터 다시 응답하기</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PNG 이미지 미리보기 & 저장 모달 -->
+  <div id="png-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="png-modal-title">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong id="png-modal-title" style="font-size: 0.92rem;">결과 카드 이미지 미리보기 (PNG)</strong>
+        <button type="button" id="btn-modal-x" class="btn" style="padding: 0.25rem 0.6rem;">✕</button>
+      </div>
+      <div class="modal-body">
+        <img id="png-preview-img" alt="한국 정당 정책 스펙트럼 탐색기 결과 카드 이미지" />
+      </div>
+      <div class="modal-foot">
+        <button type="button" id="btn-modal-close" class="btn">닫기</button>
+        <button type="button" id="btn-modal-save" class="btn btn-primary">PNG 파일 다시 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite">알림 메시지</div>
+
+  <footer>
+    ※ 본 테스트는 각 정당의 공식 강령·선언문·정책 자료집에 기반한 교육·참고용 시뮬레이션이며, 특정 정당에 대한 지지·반대를 유도하지 않습니다.
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================================
+       * 1. 7대 정책 영역 데이터
+       * ========================================================================= */
+      var AXES = [
+        {
+          id: 'economy',
+          shortName: '경제·시장',
+          name: '영역 1 · 경제·시장·규제',
+          leftLabel: '자유시장·감세·규제완화',
+          rightLabel: '공공개입·재벌개혁·국가주도',
+          leftDesc: '기업 자율성, 감세, 규제 완화와 민간 주도 시장 경쟁을 중시하는 경향입니다.',
+          rightDesc: '재벌·독과점 규제, 토지·필수재의 공공성 강화 및 국가의 적극적 시장 개입을 중시하는 경향입니다.',
+          neutralDesc: '시장의 효율성과 공정거래 규제 사이의 균형을 추구하는 경향입니다.'
+        },
+        {
+          id: 'welfare',
+          shortName: '조세·복지',
+          name: '영역 2 · 조세·복지·분배',
+          leftLabel: '선별적 복지·재정건전성',
+          rightLabel: '보편적 복지·기본소득·부유세',
+          leftDesc: '재정건전성과 감세를 유지하며 취약계층에 집중 지원하는 선별적 복지를 중시하는 경향입니다.',
+          rightDesc: '누진적 증세·부유세와 재정 확대를 통한 보편적 복지 및 기본소득 도입을 중시하는 경향입니다.',
+          neutralDesc: '재정 여력을 고려하며 보편적 지원과 선별적 지원을 병행하려는 경향입니다.'
+        },
+        {
+          id: 'labor',
+          shortName: '노동·산업',
+          name: '영역 3 · 노동·일자리·산업',
+          leftLabel: '노동유연성·기업경쟁력',
+          rightLabel: '노조권리강화·비정규직철폐·단축',
+          leftDesc: '근로시간·고용 형태의 유연화와 산업 경쟁력 유지를 우선시하는 경향입니다.',
+          rightDesc: '노조 교섭권 강화, 비정규직 철폐 및 주4일제 등 노동시간 단축을 우선시하는 경향입니다.',
+          neutralDesc: '고용 안정성과 산업 현장의 유연성을 조화시키려는 경향입니다.'
+        },
+        {
+          id: 'nation',
+          shortName: '민족·통일·대미',
+          name: '영역 4 · 민족·통일·자주·대미관계',
+          leftLabel: '한미동맹 최우선·체제경쟁통일',
+          rightLabel: '민족자주·평화협정·주한미군 재검토',
+          leftDesc: '굳건한 한미동맹과 대미 안보 협력을 최우선으로 하며, 자유민주주의 체제 중심 통일을 중시하는 경향입니다.',
+          rightDesc: '외세 의존 탈피와 민족자주 원칙, 한반도 평화협정 체결, 불평등한 한미관계 및 주한미군 지위 재검토를 중시하는 경향입니다.',
+          neutralDesc: '한미동맹의 틀을 유지하되 한반도 평화 체제와 자율적 외교 공간을 병행 모색하는 경향입니다.'
+        },
+        {
+          id: 'diplomacy',
+          shortName: '외교·안보',
+          name: '영역 5 · 외교·안보·국제질서',
+          leftLabel: '대북압박·억제력강화·가치외교',
+          rightLabel: '대북대화·제재완화·실용균형외교',
+          leftDesc: '강력한 군사 억제력과 원칙 있는 대북 압박, 자유진영 중심의 가치 외교를 중시하는 경향입니다.',
+          rightDesc: '남북 대화·교류 재개와 제재 완화 모색, 주변국과의 다자 균형·반전 평화 외교를 중시하는 경향입니다.',
+          neutralDesc: '억제력 확보와 대화·실리 외교를 상황에 맞게 병행해야 한다는 경향입니다.'
+        },
+        {
+          id: 'climate',
+          shortName: '기후·에너지',
+          name: '영역 6 · 기후·에너지·성장',
+          leftLabel: '원전활용·산업성장·점진전환',
+          rightLabel: '탈핵·재생에너지·탈성장·기후정의',
+          leftDesc: '원전 적극 활용과 산업 경쟁력·에너지 안보 중심의 현실적 감축을 중시하는 경향입니다.',
+          rightDesc: '탈핵·탈석탄과 재생에너지 급속 전환, 생태적 한계 내 탈성장 및 기후정의를 중시하는 경향입니다.',
+          neutralDesc: '원전과 재생에너지의 현실적 믹스(조화)를 통한 단계적 탄소 감축을 중시하는 경향입니다.'
+        },
+        {
+          id: 'social',
+          shortName: '사회·가치·제도',
+          name: '영역 7 · 사회·가치·제도',
+          leftLabel: '전통적가치·치안·현행제도유지',
+          rightLabel: '차별금지법·성평등·소수자인권·개편',
+          leftDesc: '전통적 공동체·가족 가치, 엄격한 법질서·치안 유지 및 현행 정치 제도의 안정을 중시하는 경향입니다.',
+          rightDesc: '포괄적 차별금지법 제정, 성평등·소수자 인권 보장 및 권력구조·선거제도 개편을 중시하는 경향입니다.',
+          neutralDesc: '사회적 합의를 바탕으로 점진적인 제도 개선과 기존 질서의 조화를 추구하는 경향입니다.'
+        }
+      ];
+
+      /* =========================================================================
+       * 2. 42개 세부 정책 문항 (영역별 6문항, 핵심 모드 core: true 3문항씩)
+       * ========================================================================= */
+      var QUESTIONS = [
+        // 영역 1: 경제·시장·규제
+        { id: 1, axis: 'economy', dir: -1, core: true, text: '기업의 국내 투자와 혁신을 촉진하기 위해 법인세율을 인하하고 신산업·수도권 규제를 대폭 완화해야 한다.', tip: '자유시장 지향 정당은 감세와 규제 완화를 성장 동력으로 보는 반면, 진보 정당들은 불평등 심화를 우려해 반대합니다.' },
+        { id: 2, axis: 'economy', dir: 1, core: true, text: '재벌 대기업의 경제력 집중과 순환출자·일감 몰아주기를 강력히 규제하고 공정경제 법제를 강화해야 한다.', tip: '진보·개혁 정당들은 재벌 개혁과 공정경제 확립을 중시하지만, 시장자유 정당들은 과도한 규제가 글로벌 경쟁력을 저해한다고 봅니다.' },
+        { id: 3, axis: 'economy', dir: 1, core: true, text: '전기·가스·철도·의료·돌봄 등 필수 공공서비스는 민영화를 금지하고 국가의 직접 소유와 공공 통제를 확대해야 한다.', tip: '노동당·진보당·정의당·사회민주당은 기간산업 국공유화와 공공성을 강조하는 반면, 보수 정당들은 민간 효율성을 선호합니다.' },
+        { id: 4, axis: 'economy', dir: -1, core: false, text: '부동산 시장 안정을 위해서는 재건축·재개발 규제를 풀고 다주택자 중과세를 폐지해 민간 주택 공급을 활성화해야 한다.', tip: '민간 공급 활성화를 중시하는 보수 노선과 공공임대·보유세 강화를 중시하는 진보 노선이 갈리는 쟁점입니다.' },
+        { id: 5, axis: 'economy', dir: 1, core: false, text: '토지 불로소득을 환수하기 위해 종합부동산세 등 보유세를 강화하고, 공공임대주택 확대와 임대차 규제를 강화해야 한다.', tip: '주거를 투기 자산이 아닌 기본권으로 보는 진보·개혁 진영과 조세 부담 완화를 중시하는 보수 진영의 핵심 쟁점입니다.' },
+        { id: 6, axis: 'economy', dir: -1, core: false, text: '기업의 안정적 경영권 방어 수단(차등의결권 등)을 도입하고 상속세율을 인하해 가업 승계와 투자를 장려해야 한다.', tip: '경영권 안정과 자본 축적 유인을 중시하는 시장자유 노선과 부의 세습 방지를 중시하는 분배 노선이 대립합니다.' },
+
+        // 영역 2: 조세·복지·분배
+        { id: 7, axis: 'welfare', dir: -1, core: true, text: '국가채무 증가를 억제하기 위해 법적 재정준칙을 엄격히 적용하고, 복지는 저소득 취약계층에 집중하는 선별 복지로 가야 한다.', tip: '국민의힘과 개혁신당은 재정 건전성과 선별 복지를 강조하는 반면, 민주당계와 진보 정당들은 보편 복지를 강조합니다.' },
+        { id: 8, axis: 'welfare', dir: 1, core: true, text: '자산 불평등 해소를 위해 초고소득층과 거대 자산가에 대한 부유세 등 누진적 증세를 단행하고 보편적 복지국가를 구축해야 한다.', tip: '진보당·정의당·노동당·사회민주당 등은 부유세·증세를 통한 보편 복지 또는 무상 복지를 핵심 강령으로 제시합니다.' },
+        { id: 9, axis: 'welfare', dir: 1, core: true, text: '자산이나 근로 여부와 관계없이 모든 시민에게 정기적으로 지급하는 보편적 기본소득 제도를 단계적으로 도입해야 한다.', tip: '기본소득당과 녹색당은 기본소득을 핵심 대안으로 보지만, 보수 정당은 재정 부담을 우려하고 일부 노동진보 노선은 공공서비스 확충을 우선합니다.' },
+        { id: 10, axis: 'welfare', dir: -1, core: false, text: '건강보험 재정 안정을 위해 급여 항목을 엄격히 관리하고, 민간 실손보험과 비급여 의료 시장의 선택권을 존중해야 한다.', tip: '의료 서비스에서 재정 효율과 민간 보완을 중시하는 입장과 건강보험 보장성 강화·무상의료를 지향하는 입장이 나뉩니다.' },
+        { id: 11, axis: 'welfare', dir: 1, core: false, text: '지역 공공병원과 공공의대를 대폭 확충하고, 모든 국민이 병원비 걱정 없이 치료받을 수 있도록 건강보험 보장성을 높여야 한다.', tip: '의료 공공성 강화는 진보 정당들과 민주당계 정당들이 공통으로 강조하는 핵심 복지 의제입니다.' },
+        { id: 12, axis: 'welfare', dir: -1, core: false, text: '연금 개혁은 미래 세대의 부채 부담을 줄이기 위해 재정 안정(보험료율 인상·수급 연령 조정 등)을 소득보장보다 우선해야 한다.', tip: '개혁신당과 국민의힘은 재정 안정 중심 구조개혁을 강조하는 반면, 진보 정당은 노후 소득보장 강화를 중시합니다.' },
+
+        // 영역 3: 노동·일자리·산업
+        { id: 13, axis: 'labor', dir: -1, core: true, text: '산업 경쟁력을 높이기 위해 주 52시간 근로제 예외 확대와 직무·성과급제 도입 등 노동시장 유연성을 확대해야 한다.', tip: '보수·자유시장 정당은 근로시간 및 임금 체계 유연화를 강조하지만, 진보 정당들은 장시간 노동 회귀라며 반대합니다.' },
+        { id: 14, axis: 'labor', dir: 1, core: true, text: '하청·특수고용 노동자의 교섭권을 보장하고 파업 노동자에 대한 기업의 과도한 손해배상 청구를 제한(노란봉투법)해야 한다.', tip: '노동3권 보장과 원청 책임 강화는 진보·개혁 정당들이 지지하는 반면, 보수 정당들은 경영 위축을 우려해 반대합니다.' },
+        { id: 15, axis: 'labor', dir: 1, core: true, text: '임금 삭감 없는 주 4일제(또는 주 4.5일제)를 법제화해 장시간 노동 구조를 개혁하고 일자리 나누기를 추진해야 한다.', tip: '정의당·노동당·진보당·사회민주당·녹색당 등 진보 정당들은 주 4일제 도입을 핵심 노동 공약으로 제시합니다.' },
+        { id: 16, axis: 'labor', dir: -1, core: false, text: '최저임금의 급격한 인상은 영세 자영업자와 중소기업의 고용 여력을 악화시키므로 업종별·지역별 차등 적용을 허용해야 한다.', tip: '최저임금 차등 적용은 시장자유 노선에서 주장하는 정책이며, 진보 정당들은 저임금 노동자 차별 심화를 이유로 반대합니다.' },
+        { id: 17, axis: 'labor', dir: 1, core: false, text: '상시·지속 업무의 비정규직 채용을 법으로 금지하고, 동일가치노동 동일임금 원칙을 전면 제도화해야 한다.', tip: '노동당·진보당·정의당은 비정규직 철폐와 직접고용 원칙을 노동 개혁의 핵심 과제로 삼고 있습니다.' },
+        { id: 18, axis: 'labor', dir: -1, core: false, text: '중대재해처벌법의 사업주 형사처벌 조항은 중소기업 경영을 위축시키므로 처벌 위주에서 자율 예방 지원 중심으로 완화해야 한다.', tip: '기업 경영 리스크 완화를 중시하는 보수 노선과 노동자의 생명·안전권 보장을 위해 엄정한 처벌을 유지해야 한다는 진보 노선이 맞섭니다.' },
+
+        // 영역 4: 민족·통일·자주·대미관계 (진보 진영 내부 분기 및 보수·중도 구분 핵심 축)
+        { id: 19, axis: 'nation', dir: 1, core: true, text: '한반도 문제의 근본적 해결을 위해서는 외세 의존에서 벗어나 우리 민족끼리 힘을 합쳐 자주적으로 평화통일을 이루는 민족자주 원칙이 가장 중요하다.', tip: '진보 진영 내부의 핵심 분기점입니다. 진보당은 외세 배격과 민족자주·통일 운동을 중시하는 반면, 정의당·노동당·녹색당·사회민주당은 민족주의적 통일론보다 보편적 인권과 반전·평화 연대를 우선합니다.' },
+        { id: 20, axis: 'nation', dir: 1, core: true, text: '주한미군의 주둔 지위와 방위비 분담금 협정(SMA), 전시작전통제권(전작권) 등 불평등한 한미관계 전반을 전면 재검토하고 한반도의 영세중립화·자주화를 모색해야 한다.', tip: '진보당·노동당·녹색당 일부는 한미동맹의 종속성과 군사주의를 비판하며 주한미군 및 불평등 협정 재검토를 주장하는 반면, 보수 정당은 한미동맹을 안보의 핵심 축으로 봅니다.' },
+        { id: 21, axis: 'nation', dir: -1, core: true, text: '대한민국의 안보와 번영은 굳건한 한미동맹과 주한미군 주둔을 토대로 유지되므로, 한미일 안보 협력을 더욱 공고히 하고 자유민주주의 체제 중심 통일을 지향해야 한다.', tip: '국민의힘·자유통일당·우리공화당·자유민주당·개혁신당은 한미동맹 강화와 자유민주주의 체제 통일을 확고한 원칙으로 삼고 있습니다.' },
+        { id: 22, axis: 'nation', dir: 1, core: false, text: '정전협정을 조속히 한반도 평화협정으로 전환하고, 한미 연합군사훈련 중단과 단계적 군축을 통해 한반도 비핵·평화 체제를 구축해야 한다.', tip: '평화협정 체결 및 한미 연합훈련 중단·군축은 진보당·정의당·녹색당·노동당 등 진보 정당들이 한반도 군사적 긴장 완화를 위해 강조하는 의제입니다.' },
+        { id: 23, axis: 'nation', dir: -1, core: false, text: '일제강점기 과거사·독도·위안부 문제 등 역사 현안은 원칙을 지키되, 미래 지향적인 한미일 안보·경제 공조를 위해서는 한일 관계를 조속히 개선·협력해야 한다.', tip: '안보·경제 실리를 위한 한일 협력 강화를 중시하는 보수·개혁보수 노선과 역사 정의·주권 원칙을 우선하는 민주당계·진보 노선이 갈리는 지점입니다.' },
+        { id: 24, axis: 'nation', dir: 1, core: false, text: '남북 관계는 단순한 외교 관계가 아닌 통일을 지향하는 특수관계이므로, 국가보안법을 폐지하고 민간 차원의 자유로운 남북 교류와 왕래를 보장해야 한다.', tip: '국가보안법 폐지와 남북 자유 왕래는 진보 정당들의 오랜 강령인 반면, 보수·강경보수 정당들은 자유민주주의 체제 수호를 위해 국가보안법 유지를 주장합니다.' },
+
+        // 영역 5: 외교·안보·국제질서
+        { id: 25, axis: 'diplomacy', dir: -1, core: true, text: '북한의 핵·미사일 위협에 맞서 강력한 군사적 억제력과 첨단 국방력을 확충하고, 북한의 실질적 비핵화 이전에는 대북 제재를 유지·강화해야 한다.', tip: '보수 정당들은 강력한 억제력과 제재 유지를 우선시하는 반면, 진보 정당들은 대화와 제재 완화를 강조합니다.' },
+        { id: 26, axis: 'diplomacy', dir: 1, core: true, text: '군사적 충돌 위기를 낮추기 위해 조건 없는 남북 대화 채널을 복원하고, 인도적 지원 및 경제 협력 재개를 통해 평화 공존을 추진해야 한다.', tip: '민주당·조국혁신당과 진보 정당들은 남북 대화 복원과 교류 협력을 한반도 리스크 관리의 핵심 해법으로 봅니다.' },
+        { id: 27, axis: 'diplomacy', dir: 1, core: true, text: '미·중 전략 경쟁 속에서 특정 진영에 일방적으로 편중되기보다, 수출·공급망 국익과 평화를 지키기 위해 주변국과 균형 있는 실용 외교를 펼쳐야 한다.', tip: '가치 외교와 한미일 연대를 우선하는 보수 노선과 달리, 민주당·조국혁신당 및 진보 정당들은 균형·실용 외교를 중시합니다.' },
+        { id: 28, axis: 'diplomacy', dir: -1, core: false, text: '대외 정책에서는 자유·민주주의·인권 등 보편적 가치를 공유하는 국가들과의 연대를 최우선으로 삼고, 북한 인권 문제를 국제사회와 함께 적극 제기해야 한다.', tip: '가치 외교와 북한 인권 문제 제기는 국민의힘·개혁신당·자유통일당 등이 강조하는 핵심 외교 기조입니다.' },
+        { id: 29, axis: 'diplomacy', dir: 1, core: false, text: '과도한 국방비 증액과 무기 수출 확대를 자제하고, 그 예산을 복지와 기후위기 대응으로 전환하는 반전·평화 및 군축 외교를 지향해야 한다.', tip: '녹색당·노동당·정의당 등은 방위산업 육성 및 군비 경쟁을 비판하며 군축과 비폭력 평화주의를 강조합니다.' },
+        { id: 30, axis: 'diplomacy', dir: -1, core: false, text: '북한의 핵 위협이 고도화되는 상황에서 한국도 독자적 핵잠재력 확보나 전술핵 재배치·핵공유 등 강력한 자강 안보 옵션을 적극 검토해야 한다.', tip: '강경보수·보수 진영 일부의 핵 자강론과 한반도 비핵화·군축을 지향하는 진보 노선이 극명하게 대비됩니다.' },
+
+        // 영역 6: 기후·에너지·성장
+        { id: 31, axis: 'climate', dir: -1, core: true, text: '반도체·AI 등 첨단 산업의 막대한 전력 수요와 탄소 감축을 동시에 달성하려면 신규 원전 건설과 원전 가동 확대가 필수적이다.', tip: '국민의힘과 개혁신당 등은 원전을 경제적이고 안정적인 핵심 전원으로 보지만, 진보 정당들은 탈핵을 주장합니다.' },
+        { id: 32, axis: 'climate', dir: 1, core: true, text: '노후 원전 수명 연장과 신규 원전 건설을 중단하고, 태양광·풍력 등 재생에너지 중심의 에너지 전환을 빠르게 추진해야 한다.', tip: '탈핵과 재생에너지 확대는 녹색당·정의당·노동당·진보당 등 진보 정당들이 공통으로 내세우는 핵심 에너지 정책입니다.' },
+        { id: 33, axis: 'climate', dir: 1, core: true, text: '온실가스 다배출 기업에 강력한 탄소세를 부과하고, 무한한 경제성장 추구에서 벗어나 생태적 한계 내의 탈성장·기후정의 사회로 전환해야 한다.', tip: '녹색당과 정의당·노동당은 성장 중심주의를 넘어선 생태적 전환과 기후정의를 강조합니다.' },
+        { id: 34, axis: 'climate', dir: -1, core: false, text: '급격한 온실가스 감축 목표는 제조업 비용 상승과 일자리 감소를 초래하므로, 산업계 경쟁력을 고려해 감축 속도를 현실적으로 조절해야 한다.', tip: '제조업 기반과 경제 성장을 우선하는 보수 노선과 즉각적 감축을 요구하는 기후·진보 노선이 갈립니다.' },
+        { id: 35, axis: 'climate', dir: 1, core: false, text: '에너지 전환 과정에서 석탄발전소·내연기관 노동자와 지역사회가 일자리를 잃지 않도록 국가가 고용과 생계를 책임지는 정의로운 전환 법제를 강화해야 한다.', tip: '노동 중심 진보 정당(정의당·노동당·진보당)과 녹색당은 공공 주도의 정의로운 전환을 강조합니다.' },
+        { id: 36, axis: 'climate', dir: -1, core: false, text: '환경영향평가나 일회용품 규제 등 생활·개발 관련 환경 규제를 완화하고, 민간 기술 혁신을 통해 환경 문제를 해결해야 한다.', tip: '규제 완화와 기술 해법을 선호하는 시장자유 노선과 생태 보전·공공 규제를 중시하는 녹색·진보 노선의 차이를 보여줍니다.' },
+
+        // 영역 7: 사회·가치·제도
+        { id: 37, axis: 'social', dir: 1, core: true, text: '성별·장애·출신·성적 지향·성별 정체성 등 모든 영역의 차별을 금지하는 포괄적 차별금지법(평등법)을 조속히 제정해야 한다.', tip: '정의당·녹색당·노동당·기본소득당·진보당·사회민주당은 차별금지법 제정을 핵심 인권 과제로 추진하는 반면, 보수 정당들은 반대·신중론을 취합니다.' },
+        { id: 38, axis: 'social', dir: -1, core: true, text: '전통적인 가족 윤리와 사회 질서에 큰 변화를 주는 제도는 신중해야 하며, 차별금지법은 종교·양심·표현의 자유를 침해할 우려가 크다.', tip: '자유통일당·우리공화당·자유민주당과 국민의힘은 전통적 가족 가치와 보수적 사회 규범 수호를 중시합니다.' },
+        { id: 39, axis: 'social', dir: 1, core: true, text: '검찰 등 권력기관의 권한을 분산하고, 민심의 비례성을 높이는 연동형 비례대표제 확대·결선투표제 도입 등 정치개혁을 추진해야 한다.', tip: '조국혁신당·민주당 및 원내외 소수 진보 정당들은 권력기관 개혁과 다당제·비례성 강화를 지지합니다.' },
+        { id: 40, axis: 'social', dir: -1, core: false, text: '사회 질서와 국민 안전을 위해 강력범죄 처벌을 강화하고 공권력과 치안 법집행을 더욱 엄격하게 확립해야 한다.', tip: '법치주의와 엄정한 치안·질서 유지를 강조하는 보수·강경보수 정당들의 핵심 사회 기조입니다.' },
+        { id: 41, axis: 'social', dir: 1, core: false, text: '구조적 성차별을 해소하기 위해 성평등 전담 부처를 강화하고, 낙태죄 대체 입법 및 재생산권 보장·동성혼(생활동반자법) 제도를 도입해야 한다.', tip: '녹색당·정의당·노동당·기본소득당 등은 성평등 정책 강화와 다양한 가족 구성권 보장을 적극 지지합니다.' },
+        { id: 42, axis: 'social', dir: -1, core: false, text: '출입국 및 난민·이민 정책은 치안 유지와 내국인 일자리·주권 보호를 최우선 기준으로 삼아 엄격하게 통제해야 한다.', tip: '자국민 우선 원칙과 엄격한 국경·이민 통제를 중시하는 보수 노선과 이주민·난민의 보편적 인권 보장을 중시하는 진보 노선이 대조됩니다.' }
+      ];
+
+      /* =========================================================================
+       * 3. 5단계 리커트 선택지
+       * ========================================================================= */
+      var LIKERT_OPTIONS = [
+        { key: '1', value: 2, label: '매우 동의', sub: '강하게 찬성함' },
+        { key: '2', value: 1, label: '대체로 동의', sub: '전반적으로 찬성함' },
+        { key: '3', value: 0, label: '중립 / 유보', sub: '어느 쪽도 아니거나 유보적임' },
+        { key: '4', value: -1, label: '대체로 비동의', sub: '전반적으로 반대함' },
+        { key: '5', value: -2, label: '매우 비동의', sub: '강하게 반대함' }
+      ];
+
+      /* =========================================================================
+       * 4. 원내·원외 13개 정당 공식 강령 좌표 프로필 (가나다순)
+       * ========================================================================= */
+      var PARTIES = [
+        {
+          id: 'reform',
+          name: '개혁신당',
+          status: '원내',
+          color: '#FF7210',
+          accent: '#FFFFFF',
+          symbol: 'arrow',
+          keywords: ['자유시장경제', '규제혁파', '연금·교육개혁', '한미동맹·실용안보'],
+          profile: { economy: -65, welfare: -55, labor: -50, nation: -60, diplomacy: -55, climate: -45, social: 10 },
+          summary: '공식 강령에서 자유시장경제 원칙과 과감한 규제 철폐, 미래 세대를 위한 연금·재정·교육 구조개혁을 강조하며, 한미동맹 기반 실용 안보와 공정한 경쟁 질서를 지향합니다.',
+          nationNote: '한미동맹을 안보의 핵심 기축으로 유지하면서 과학기술·실용 중심의 외교·안보 전략을 강조합니다.'
+        },
+        {
+          id: 'ppp',
+          name: '국민의힘',
+          status: '원내',
+          color: '#E61E2B',
+          accent: '#FFFFFF',
+          symbol: 'cube',
+          keywords: ['자유민주주의', '민간주도성장', '건전재정', '한미동맹강화', '원전활용'],
+          profile: { economy: -68, welfare: -58, labor: -62, nation: -82, diplomacy: -78, climate: -72, social: -58 },
+          summary: '공식 강령에서 자유민주주의와 시장경제 수호, 감세·규제 완화를 통한 민간 주도 성장, 재정 건전성, 굳건한 한미동맹 및 원전 생태계 활성화를 핵심 기조로 제시합니다.',
+          nationNote: '굳건한 한미동맹과 확장억제 강화, 자유민주주의 체제 중심의 평화통일 원칙을 명확히 하고 있습니다.'
+        },
+        {
+          id: 'basicincome',
+          name: '기본소득당',
+          status: '원내',
+          color: '#00D2C3',
+          accent: '#0F172A',
+          symbol: 'circle_dot',
+          keywords: ['모두의기본소득', '공유부배당·탄소세', '성평등·차별금지', '재생에너지전환'],
+          profile: { economy: 48, welfare: 96, labor: 68, nation: 42, diplomacy: 62, climate: 82, social: 88 },
+          summary: '공식 강령에서 토지·탄소·데이터 등 공유부 배당을 재원으로 모든 시민에게 조건 없이 지급하는 기본소득 실현과 재생에너지 전환, 차별금지법 제정을 최우선 과제로 삼습니다.',
+          nationNote: '민족주의적 통일론보다는 한반도 평화 공존과 보편적 인권, 군축 및 기후·평화 연대를 중시합니다.'
+        },
+        {
+          id: 'labor',
+          name: '노동당',
+          status: '원외',
+          color: '#D91A2A',
+          accent: '#FFFFFF',
+          symbol: 'gear',
+          keywords: ['민주적사회주의', '기간산업국공유화', '비정규직철폐', '탈핵·반전군축'],
+          profile: { economy: 95, welfare: 90, labor: 98, nation: 68, diplomacy: 88, climate: 88, social: 92 },
+          summary: '공식 강령에서 민주적 사회주의를 지향하며 기간산업 국공유화, 재벌 해체, 비정규직 철폐와 노동자 권력 강화, 탈핵, 사회적 소수자 해방을 강조합니다.',
+          nationNote: '민족주의적 통일 담론보다 계급 연대와 반전·탈군사주의, 평화협정 및 군비 축소, 불평등한 한미 군사관계 재검토를 강조합니다.'
+        },
+        {
+          id: 'green',
+          name: '녹색당',
+          status: '원외',
+          color: '#2E9E44',
+          accent: '#FFFFFF',
+          symbol: 'leaf',
+          keywords: ['탈핵·100%재생에너지', '기후정의·탈성장', '기본소득', '비폭력평화주의'],
+          profile: { economy: 68, welfare: 82, labor: 72, nation: 58, diplomacy: 86, climate: 98, social: 94 },
+          summary: '공식 강령에서 성장 중심주의를 넘어선 생태적 전환, 탈핵·100% 재생에너지, 기본소득과 돌봄 경제, 비폭력 평화주의, 차별금지법과 직접민주주의 확대를 핵심 기조로 삼습니다.',
+          nationNote: '전통적 민족주의보다는 생태·비폭력 평화주의 관점에서 한반도 비핵·평화협정 체결 및 탈군사화를 지향합니다.'
+        },
+        {
+          id: 'dpk',
+          name: '더불어민주당',
+          status: '원내',
+          color: '#004EA2',
+          accent: '#FFFFFF',
+          symbol: 'wave',
+          keywords: ['포용적공정성장', '보편적복지확충', '한반도평화프로세스', '균형실용외교'],
+          profile: { economy: 42, welfare: 56, labor: 52, nation: 32, diplomacy: 55, climate: 45, social: 42 },
+          summary: '공식 강령에서 공정경제와 포용적 성장, 보편적 사회안전망 확충, 한미동맹을 기반으로 한 한반도 평화 프로세스 복원 및 국익 중심 실용 외교를 주요 방향으로 제시합니다.',
+          nationNote: '한미동맹의 틀을 유지하면서도 남북 화해·협력과 한반도 평화 체제 구축을 병행하는 실용적 접근을 취합니다.'
+        },
+        {
+          id: 'sdp',
+          name: '사회민주당',
+          status: '원내',
+          color: '#F58220',
+          accent: '#FFFFFF',
+          symbol: 'pillars',
+          keywords: ['혁신적복지국가', '보편복지·조세정의', '노사상생·노동권', '평화공존'],
+          profile: { economy: 58, welfare: 78, labor: 72, nation: 38, diplomacy: 60, climate: 66, social: 74 },
+          summary: '공식 강령에서 시장의 역동성과 국가의 복지 책임을 결합한 북유럽형 혁신적 복지국가, 조세 정의, 노동기본권 강화, 녹색 전환 및 평화 공존을 강조합니다.',
+          nationNote: '민족자주 노선보다는 보편적 민주주의·인권 가치를 바탕으로 한반도 평화 공존과 다자 협력 외교를 중시합니다.'
+        },
+        {
+          id: 'ourrepublican',
+          name: '우리공화당',
+          status: '원외',
+          color: '#006B3F',
+          accent: '#FFFFFF',
+          symbol: 'shield',
+          keywords: ['자유민주주의수호', '반공·자유통일', '한미동맹절대수호', '자유시장경제'],
+          profile: { economy: -82, welfare: -76, labor: -78, nation: -95, diplomacy: -94, climate: -80, social: -90 },
+          summary: '공식 강령에서 헌법적 자유민주주의 체제와 법치주의 수호, 확고한 반공·자유통일 노선, 한미동맹 절대 강화, 감세·규제 철폐 및 전통 가족 윤리 수호를 최우선으로 제시합니다.',
+          nationNote: '한미동맹 절대 수호와 주한미군 주둔 지지, 자유민주주의 체제 기반의 자유통일 노선을 최우선으로 삼습니다.'
+        },
+        {
+          id: 'ldp',
+          name: '자유민주당',
+          status: '원외',
+          color: '#1E3A8A',
+          accent: '#FFFFFF',
+          symbol: 'torch',
+          keywords: ['자유보수주의', '국가안보·법질서', '작은정부·시장자유', '국가보안법수호'],
+          profile: { economy: -84, welfare: -78, labor: -80, nation: -92, diplomacy: -90, climate: -76, social: -85 },
+          summary: '공식 강령에서 자유보수주의 이념을 바탕으로 국가안보와 자유민주주의 수호, 엄정한 법질서 확립, 작은 정부와 시장 자유, 한미동맹 강화를 핵심 기조로 삼습니다.',
+          nationNote: '한미동맹 강화와 국가보안법 수호, 확고한 안보 태세를 통한 자유민주주의 체제 통일을 강조합니다.'
+        },
+        {
+          id: 'libertyunification',
+          name: '자유통일당',
+          status: '원외',
+          color: '#0B4DA2',
+          accent: '#FFFFFF',
+          symbol: 'star_cross',
+          keywords: ['반공·자유통일', '강력한한미동맹', '시장자유·감세', '전통가족윤리'],
+          profile: { economy: -86, welfare: -82, labor: -82, nation: -98, diplomacy: -96, climate: -84, social: -96 },
+          summary: '공식 강령에서 자유민주주의 기반의 자유통일과 강력한 반공·안보 태세, 한미동맹 강화, 자유시장경제와 감세, 전통적 가족·윤리 가치 수호를 핵심 방향으로 제시합니다.',
+          nationNote: '반공 안보와 한미동맹 강화, 자유민주주의 체제 통일을 핵심 강령으로 제시하며 대북 유화책에 강하게 반대합니다.'
+        },
+        {
+          id: 'justice',
+          name: '정의당',
+          status: '원외',
+          color: '#FFCC00',
+          accent: '#1E293B',
+          symbol: 'scales',
+          keywords: ['노동중심사회민주주의', '정의로운기후전환', '포괄적차별금지법', '주4일제·평화체제'],
+          profile: { economy: 76, welfare: 82, labor: 88, nation: 48, diplomacy: 74, climate: 86, social: 90 },
+          summary: '공식 강령에서 불평등 타파와 노동 중심 사회민주주의·생태복지국가를 지향하며, 재벌 개혁, 노란봉투법·주4일제, 탈핵과 정의로운 전환, 포괄적 차별금지법 제정을 강조합니다.',
+          nationNote: '민족주의적 통일론보다는 보편적 인권과 시민의 삶, 한반도 평화협정 체결 및 남북 평화 공존을 중시합니다.'
+        },
+        {
+          id: 'rebuilding',
+          name: '조국혁신당',
+          status: '원내',
+          color: '#0073CF',
+          accent: '#FFFFFF',
+          symbol: 'horizon',
+          keywords: ['검찰·권력기관개혁', '사회권선진국', '국익중심실용외교', '재생에너지확대'],
+          profile: { economy: 52, welfare: 68, labor: 62, nation: 38, diplomacy: 58, climate: 60, social: 76 },
+          summary: '공식 강령에서 검찰 등 권력기관 개혁과 주거·돌봄·교육·건강을 보장하는 사회권 선진국 구현, 국익 중심의 균형 실용 외교, 재생에너지 확대와 인권 존중 사회를 강조합니다.',
+          nationNote: '특정 진영에 종속되지 않는 국익 중심의 균형 실용 외교와 한반도 평화 공존 체제 구축을 지향합니다.'
+        },
+        {
+          id: 'progressive',
+          name: '진보당',
+          status: '원내',
+          color: '#D6001C',
+          accent: '#FFFFFF',
+          symbol: 'star_ribbon',
+          keywords: ['민족자주·평화통일', '불평등한미관계재검토', '노동자·농민중심', '재벌체제개혁'],
+          profile: { economy: 88, welfare: 85, labor: 92, nation: 94, diplomacy: 88, climate: 76, social: 82 },
+          summary: '공식 강령에서 노동자·농민·서민 중심 직접정치와 재벌 체제 개혁, 외세 의존을 극복하는 민족자주와 자주적 평화통일, 한반도 평화협정 및 불평등한 한미관계 재검토를 강조합니다.',
+          nationNote: '진보 정당 중 민족자주 원칙과 자주적 평화통일, 한미동맹 및 주한미군 지위·불평등 협정의 전면 재검토를 가장 뚜렷하게 강조합니다.'
+        }
+      ];
+
+      /* =========================================================================
+       * 5. 안전한 DOM 기반 정당 SVG 로고 생성기 (innerHTML 파싱 오류 원천 차단)
+       * ========================================================================= */
+      function createPartyEmblemElement(party, isSmall) {
+        var wrap = document.createElement('span');
+        wrap.className = isSmall ? 'party-emblem sm' : 'party-emblem';
+        wrap.style.backgroundColor = party.color;
+        wrap.setAttribute('aria-hidden', 'true');
+
+        var svgNS = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(svgNS, 'svg');
+        var px = isSmall ? '19' : '26';
+        svg.setAttribute('width', px);
+        svg.setAttribute('height', px);
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+
+        var fg = party.accent;
+
+        function addEl(tag, attrs) {
+          var el = document.createElementNS(svgNS, tag);
+          for (var k in attrs) {
+            if (Object.prototype.hasOwnProperty.call(attrs, k)) {
+              el.setAttribute(k, attrs[k]);
+            }
+          }
+          svg.appendChild(el);
+        }
+
+        switch (party.symbol) {
+          case 'arrow':
+            addEl('path', { d: 'M5 17L19 7M19 7H10M19 7V15', stroke: fg, 'stroke-width': '2.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+            break;
+          case 'cube':
+            addEl('path', { d: 'M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z', stroke: fg, 'stroke-width': '2.2', 'stroke-linejoin': 'round' });
+            addEl('path', { d: 'M12 12L20 7.5M12 12V21M12 12L4 7.5', stroke: fg, 'stroke-width': '1.8', 'stroke-linejoin': 'round' });
+            break;
+          case 'circle_dot':
+            addEl('circle', { cx: '12', cy: '12', r: '7.5', stroke: fg, 'stroke-width': '2.4' });
+            addEl('circle', { cx: '12', cy: '12', r: '3', fill: fg });
+            break;
+          case 'gear':
+            addEl('circle', { cx: '12', cy: '12', r: '4', stroke: fg, 'stroke-width': '2.3' });
+            addEl('path', { d: 'M12 3V5.5M12 18.5V21M3 12H5.5M18.5 12H21M5.6 5.6L7.4 7.4M16.6 16.6L18.4 18.4M18.4 5.6L16.6 7.4M7.4 16.6L5.6 18.4', stroke: fg, 'stroke-width': '2.2', 'stroke-linecap': 'round' });
+            break;
+          case 'leaf':
+            addEl('path', { d: 'M19 5C11 5 6 9.5 6 16.5C6 18 6.5 19 6.5 19C6.5 19 7.5 19.5 9 19.5C16 19.5 19 14.5 19 5Z', stroke: fg, 'stroke-width': '2.2', 'stroke-linejoin': 'round' });
+            addEl('path', { d: 'M6 19L15 10', stroke: fg, 'stroke-width': '2', 'stroke-linecap': 'round' });
+            break;
+          case 'wave':
+            addEl('path', { d: 'M4 15C7 10 10 10 12 13C14 16 17 16 20 11', stroke: fg, 'stroke-width': '2.6', 'stroke-linecap': 'round' });
+            addEl('path', { d: 'M4 10C7 6 10 6 12 8.5C14 11 17 11 20 7', stroke: fg, 'stroke-width': '2', 'stroke-linecap': 'round', opacity: '0.75' });
+            break;
+          case 'pillars':
+            addEl('path', { d: 'M4 8L12 4L20 8', stroke: fg, 'stroke-width': '2.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+            addEl('path', { d: 'M7 10V17M12 10V17M17 10V17M4 19H20', stroke: fg, 'stroke-width': '2.2', 'stroke-linecap': 'round' });
+            break;
+          case 'shield':
+            addEl('path', { d: 'M12 3L19 6V12C19 16.5 15.8 19.8 12 21C8.2 19.8 5 16.5 5 12V6L12 3Z', stroke: fg, 'stroke-width': '2.2', 'stroke-linejoin': 'round' });
+            addEl('path', { d: 'M12 8V15M9 11.5H15', stroke: fg, 'stroke-width': '2', 'stroke-linecap': 'round' });
+            break;
+          case 'torch':
+            addEl('circle', { cx: '12', cy: '9', r: '3.2', fill: fg });
+            addEl('path', { d: 'M9.5 14H14.5L13.2 20H10.8L9.5 14Z', stroke: fg, 'stroke-width': '2', 'stroke-linejoin': 'round' });
+            break;
+          case 'star_cross':
+            addEl('path', { d: 'M12 3V21M5 10H19', stroke: fg, 'stroke-width': '2.5', 'stroke-linecap': 'round' });
+            addEl('circle', { cx: '12', cy: '10', r: '3', fill: party.color, stroke: fg, 'stroke-width': '2' });
+            break;
+          case 'scales':
+            addEl('path', { d: 'M12 4V19M7 19H17M5 8H19', stroke: fg, 'stroke-width': '2.2', 'stroke-linecap': 'round' });
+            addEl('path', { d: 'M5 8L3 13H7L5 8ZM19 8L17 13H21L19 8Z', stroke: fg, 'stroke-width': '1.8', 'stroke-linejoin': 'round' });
+            break;
+          case 'horizon':
+            addEl('circle', { cx: '12', cy: '13', r: '4.5', stroke: fg, 'stroke-width': '2.2' });
+            addEl('path', { d: 'M3 16H21M12 4V6M6.3 7.3L7.7 8.7M17.7 7.3L16.3 8.7', stroke: fg, 'stroke-width': '2.2', 'stroke-linecap': 'round' });
+            break;
+          default:
+            addEl('polygon', { points: '12,3 14.4,8.6 20.5,9.2 15.9,13.2 17.3,19.1 12,16 6.7,19.1 8.1,13.2 3.5,9.2 9.6,8.6', stroke: fg, 'stroke-width': '2', 'stroke-linejoin': 'round' });
+            break;
+        }
+
+        wrap.appendChild(svg);
+        return wrap;
+      }
+
+      /* Canvas 2D API 전용 정당 로고 심볼 드로잉 */
+      function drawPartyEmblemCanvas(ctx, party, x, y, size) {
+        var r = size * 0.25;
+        ctx.save();
+        roundRect(ctx, x, y, size, size, r);
+        ctx.fillStyle = party.color;
+        ctx.fill();
+
+        var cx = x + size / 2;
+        var cy = y + size / 2;
+        var u = size / 24;
+        ctx.strokeStyle = party.accent;
+        ctx.fillStyle = party.accent;
+        ctx.lineWidth = 2.4 * u;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        if (party.symbol === 'arrow') {
+          ctx.moveTo(x + 6 * u, y + 17 * u);
+          ctx.lineTo(x + 18 * u, y + 7 * u);
+          ctx.moveTo(x + 11 * u, y + 7 * u);
+          ctx.lineTo(x + 18 * u, y + 7 * u);
+          ctx.lineTo(x + 18 * u, y + 14 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'cube') {
+          ctx.moveTo(cx, y + 4 * u);
+          ctx.lineTo(x + 19 * u, y + 8 * u);
+          ctx.lineTo(x + 19 * u, y + 16 * u);
+          ctx.lineTo(cx, y + 20 * u);
+          ctx.lineTo(x + 5 * u, y + 16 * u);
+          ctx.lineTo(x + 5 * u, y + 8 * u);
+          ctx.closePath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(x + 19 * u, y + 8 * u);
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx, y + 20 * u);
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(x + 5 * u, y + 8 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'circle_dot') {
+          ctx.arc(cx, cy, 7 * u, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2.8 * u, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (party.symbol === 'gear') {
+          ctx.arc(cx, cy, 4 * u, 0, Math.PI * 2);
+          ctx.stroke();
+          for (var a = 0; a < 8; a++) {
+            var ang = (Math.PI / 4) * a;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(ang) * 6.2 * u, cy + Math.sin(ang) * 6.2 * u);
+            ctx.lineTo(cx + Math.cos(ang) * 8.8 * u, cy + Math.sin(ang) * 8.8 * u);
+            ctx.stroke();
+          }
+        } else if (party.symbol === 'leaf') {
+          ctx.moveTo(x + 18.5 * u, y + 5.5 * u);
+          ctx.quadraticCurveTo(x + 6 * u, y + 6 * u, x + 6.5 * u, y + 18.5 * u);
+          ctx.quadraticCurveTo(x + 18 * u, y + 19 * u, x + 18.5 * u, y + 5.5 * u);
+          ctx.moveTo(x + 6.5 * u, y + 18.5 * u);
+          ctx.lineTo(x + 14.5 * u, y + 10.5 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'wave') {
+          ctx.moveTo(x + 4.5 * u, y + 14 * u);
+          ctx.bezierCurveTo(x + 8 * u, y + 8 * u, x + 11 * u, y + 18 * u, x + 19.5 * u, y + 10 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'pillars') {
+          ctx.moveTo(x + 4.5 * u, y + 8.5 * u);
+          ctx.lineTo(cx, y + 4.5 * u);
+          ctx.lineTo(x + 19.5 * u, y + 8.5 * u);
+          ctx.moveTo(x + 7 * u, y + 10.5 * u);
+          ctx.lineTo(x + 7 * u, y + 17.5 * u);
+          ctx.moveTo(cx, y + 10.5 * u);
+          ctx.lineTo(cx, y + 17.5 * u);
+          ctx.moveTo(x + 17 * u, y + 10.5 * u);
+          ctx.lineTo(x + 17 * u, y + 17.5 * u);
+          ctx.moveTo(x + 4.5 * u, y + 19 * u);
+          ctx.lineTo(x + 19.5 * u, y + 19 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'shield') {
+          ctx.moveTo(cx, y + 3.8 * u);
+          ctx.lineTo(x + 18.5 * u, y + 6.5 * u);
+          ctx.lineTo(x + 18.5 * u, y + 12 * u);
+          ctx.quadraticCurveTo(x + 18.5 * u, y + 17.5 * u, cx, y + 20.2 * u);
+          ctx.quadraticCurveTo(x + 5.5 * u, y + 17.5 * u, x + 5.5 * u, y + 12 * u);
+          ctx.lineTo(x + 5.5 * u, y + 6.5 * u);
+          ctx.closePath();
+          ctx.stroke();
+        } else if (party.symbol === 'torch') {
+          ctx.arc(cx, y + 9 * u, 3.3 * u, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(x + 9.5 * u, y + 14 * u);
+          ctx.lineTo(x + 14.5 * u, y + 14 * u);
+          ctx.lineTo(x + 13.2 * u, y + 20 * u);
+          ctx.lineTo(x + 10.8 * u, y + 20 * u);
+          ctx.closePath();
+          ctx.stroke();
+        } else if (party.symbol === 'star_cross') {
+          ctx.moveTo(cx, y + 4 * u);
+          ctx.lineTo(cx, y + 20 * u);
+          ctx.moveTo(x + 5.5 * u, y + 10.5 * u);
+          ctx.lineTo(x + 18.5 * u, y + 10.5 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'scales') {
+          ctx.moveTo(cx, y + 4.5 * u);
+          ctx.lineTo(cx, y + 19 * u);
+          ctx.moveTo(x + 7 * u, y + 19 * u);
+          ctx.lineTo(x + 17 * u, y + 19 * u);
+          ctx.moveTo(x + 5 * u, y + 8.5 * u);
+          ctx.lineTo(x + 19 * u, y + 8.5 * u);
+          ctx.stroke();
+        } else if (party.symbol === 'horizon') {
+          ctx.arc(cx, y + 13 * u, 4.2 * u, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x + 4 * u, y + 16.5 * u);
+          ctx.lineTo(x + 20 * u, y + 16.5 * u);
+          ctx.stroke();
+        } else {
+          var spikes = 5;
+          var outerR = 8 * u;
+          var innerR = 3.6 * u;
+          for (var i = 0; i < spikes * 2; i++) {
+            var rad = i % 2 === 0 ? outerR : innerR;
+            var angle = (Math.PI * i) / spikes - Math.PI / 2;
+            var px = cx + Math.cos(angle) * rad;
+            var py = cy + Math.sin(angle) * rad;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      }
+
+      /* =========================================================================
+       * 6. 상태(State) 및 DOM 참조
+       * ========================================================================= */
+      var state = {
+        mode: 'quick', // 초기 즉시 렌더링되는 핵심 21문항 모드
+        questions: [],
+        currentIndex: 0,
+        answers: [],
+        weights: [],
+        tipOpen: false,
+        userScores: null,
+        balance: { con: 50, prog: 50, label: '중도·균형형' },
+        closeParties: [],
+        exportedUrl: ''
+      };
+
+      var viewQuiz = document.getElementById('view-quiz');
+      var viewResult = document.getElementById('view-result');
+
+      var btnTopQuiz = document.getElementById('btn-top-quiz');
+      var btnTopResult = document.getElementById('btn-top-result');
+      var btnModeQuick = document.getElementById('btn-mode-quick');
+      var btnModeDeep = document.getElementById('btn-mode-deep');
+      var btnResetAll = document.getElementById('btn-reset-all');
+
+      var axisTabsEl = document.getElementById('axis-tabs');
+      var quizAxisBadge = document.getElementById('quiz-axis-badge');
+      var quizProgressText = document.getElementById('quiz-progress-text');
+      var quizProgressFill = document.getElementById('quiz-progress-fill');
+      var quizQNum = document.getElementById('quiz-q-num');
+      var btnWeightToggle = document.getElementById('btn-weight-toggle');
+      var quizQText = document.getElementById('quiz-q-text');
+      var btnTipToggle = document.getElementById('btn-tip-toggle');
+      var quizTipBox = document.getElementById('quiz-tip-box');
+      var quizOptionsEl = document.getElementById('quiz-options');
+      var btnPrev = document.getElementById('btn-prev');
+      var btnNext = document.getElementById('btn-next');
+      var btnFinishNow = document.getElementById('btn-finish-now');
+
+      var ideologyLabelBadge = document.getElementById('ideology-label-badge');
+      var resultMetaBadge = document.getElementById('result-meta-badge');
+      var conPctVal = document.getElementById('con-pct-val');
+      var progPctVal = document.getElementById('prog-pct-val');
+      var barConFill = document.getElementById('bar-con-fill');
+      var barProgFill = document.getElementById('bar-prog-fill');
+
+      var closePartiesList = document.getElementById('close-parties-list');
+      var radarCanvas = document.getElementById('radar-canvas');
+      var radarLegendA = document.getElementById('radar-legend-a');
+      var radarLegendB = document.getElementById('radar-legend-b');
+      var axisMiniSummary = document.getElementById('axis-mini-summary');
+
+      var selectPartyA = document.getElementById('select-party-a');
+      var selectPartyB = document.getElementById('select-party-b');
+      var logoSlotA = document.getElementById('logo-slot-a');
+      var logoSlotB = document.getElementById('logo-slot-b');
+      var h2hDetailBox = document.getElementById('h2h-detail-box');
+      var spectrumBarsList = document.getElementById('spectrum-bars-list');
+      var partyDictionaryGrid = document.getElementById('party-dictionary-grid');
+
+      var btnExportPngTop = document.getElementById('btn-export-png-top');
+      var btnCopyTextTop = document.getElementById('btn-copy-text-top');
+      var btnBackToQuiz = document.getElementById('btn-back-to-quiz');
+      var btnExportPngBottom = document.getElementById('btn-export-png-bottom');
+      var btnCopyTextBottom = document.getElementById('btn-copy-text-bottom');
+      var btnRestartBottom = document.getElementById('btn-restart-bottom');
+
+      var pngModal = document.getElementById('png-modal');
+      var pngPreviewImg = document.getElementById('png-preview-img');
+      var btnModalX = document.getElementById('btn-modal-x');
+      var btnModalClose = document.getElementById('btn-modal-close');
+      var btnModalSave = document.getElementById('btn-modal-save');
+      var toastEl = document.getElementById('toast');
+
+      var toastTimer = null;
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toastEl.classList.remove('show');
+        }, 2400);
+      }
+
+      function showQuizView() {
+        viewResult.classList.add('hidden');
+        viewQuiz.classList.remove('hidden');
+        btnTopQuiz.classList.add('btn-primary');
+        btnTopResult.classList.remove('btn-primary');
+        renderQuiz();
+      }
+
+      function showResultView() {
+        computeAndRenderResults();
+        viewQuiz.classList.add('hidden');
+        viewResult.classList.remove('hidden');
+        btnTopResult.classList.add('btn-primary');
+        btnTopQuiz.classList.remove('btn-primary');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function setupMode(mode) {
+        state.mode = mode;
+        state.questions = mode === 'quick'
+          ? QUESTIONS.filter(function (q) { return q.core; })
+          : QUESTIONS.slice();
+        state.currentIndex = 0;
+        state.answers = new Array(state.questions.length).fill(null);
+        state.weights = new Array(state.questions.length).fill(1);
+        state.tipOpen = false;
+
+        if (mode === 'quick') {
+          btnModeQuick.classList.add('btn-active-mode');
+          btnModeDeep.classList.remove('btn-active-mode');
+        } else {
+          btnModeDeep.classList.add('btn-active-mode');
+          btnModeQuick.classList.remove('btn-active-mode');
+        }
+
+        showQuizView();
+      }
+
+      /* =========================================================================
+       * 7. 설문 화면 렌더링 (안전한 DOM 생성 방식)
+       * ========================================================================= */
+      function renderQuiz() {
+        var idx = state.currentIndex;
+        var q = state.questions[idx];
+        var total = state.questions.length;
+        var axisMeta = AXES.find(function (a) { return a.id === q.axis; });
+
+        // 1) 상단 영역 이동 탭 생성
+        axisTabsEl.innerHTML = '';
+        AXES.forEach(function (axis, aIdx) {
+          var axisQs = [];
+          for (var i = 0; i < state.questions.length; i++) {
+            if (state.questions[i].axis === axis.id) {
+              axisQs.push(i);
+            }
+          }
+          var answered = axisQs.filter(function (qIdx) { return state.answers[qIdx] !== null; }).length;
+          var tabBtn = document.createElement('button');
+          tabBtn.type = 'button';
+          tabBtn.className = 'axis-tab';
+          if (axis.id === q.axis) tabBtn.classList.add('active');
+          else if (answered === axisQs.length && axisQs.length > 0) tabBtn.classList.add('done');
+
+          tabBtn.textContent = (aIdx + 1) + '. ' + axis.shortName + ' (' + answered + '/' + axisQs.length + ')';
+          tabBtn.addEventListener('click', function () {
+            if (axisQs.length > 0) {
+              state.currentIndex = axisQs[0];
+              state.tipOpen = false;
+              renderQuiz();
+            }
+          });
+          axisTabsEl.appendChild(tabBtn);
+        });
+
+        // 2) 진행 정보 업데이트
+        var answeredTotal = state.answers.filter(function (v) { return v !== null; }).length;
+        quizAxisBadge.textContent = axisMeta.name;
+        quizProgressText.textContent = (idx + 1) + ' / ' + total + ' (응답 ' + answeredTotal + '개)';
+        quizProgressFill.style.width = (((idx + 1) / total) * 100).toFixed(2) + '%';
+
+        // 3) 문항 및 가중치 버튼
+        quizQNum.textContent = 'Q' + (idx + 1) + '. (' + axisMeta.shortName + ')';
+        quizQText.textContent = q.text;
+
+        var isWeighted = state.weights[idx] === 2;
+        btnWeightToggle.classList.toggle('weighted', isWeighted);
+        btnWeightToggle.setAttribute('aria-pressed', isWeighted ? 'true' : 'false');
+        btnWeightToggle.textContent = isWeighted ? '★ 중요한 쟁점 적용됨 (2배)' : '☆ 중요한 쟁점 (가중치 2배)';
+
+        // 4) 분기점 해설
+        quizTipBox.textContent = q.tip;
+        quizTipBox.classList.toggle('hidden', !state.tipOpen);
+        btnTipToggle.setAttribute('aria-expanded', state.tipOpen ? 'true' : 'false');
+        btnTipToggle.textContent = state.tipOpen
+          ? '▲ 쟁점 해설 접기'
+          : 'ⓘ 이 쟁점이 정당 간 분기점이 되는 이유 보기';
+
+        // 5) 5단계 선택지 버튼 직접 생성
+        quizOptionsEl.innerHTML = '';
+        LIKERT_OPTIONS.forEach(function (opt) {
+          var isSelected = state.answers[idx] === opt.value;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'option-item' + (isSelected ? ' selected' : '');
+          btn.setAttribute('role', 'radio');
+          btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+
+          var leftSpan = document.createElement('span');
+          leftSpan.className = 'option-left';
+
+          var keySpan = document.createElement('span');
+          keySpan.className = 'option-key';
+          keySpan.textContent = opt.key;
+
+          var labelSpan = document.createElement('span');
+          labelSpan.textContent = opt.label;
+
+          leftSpan.appendChild(keySpan);
+          leftSpan.appendChild(labelSpan);
+
+          var subSpan = document.createElement('span');
+          subSpan.className = 'option-sub';
+          subSpan.textContent = opt.sub;
+
+          btn.appendChild(leftSpan);
+          btn.appendChild(subSpan);
+
+          btn.addEventListener('click', function () {
+            state.answers[idx] = opt.value;
+            if (state.currentIndex < state.questions.length - 1) {
+              state.currentIndex += 1;
+              state.tipOpen = false;
+              renderQuiz();
+            } else {
+              showResultView();
+            }
+          });
+
+          quizOptionsEl.appendChild(btn);
+        });
+
+        // 6) 이전/다음 버튼 상태
+        btnPrev.disabled = idx === 0;
+        btnNext.textContent = idx === total - 1 ? '결과 화면 보기 →' : '다음 문항 →';
+      }
+
+      /* =========================================================================
+       * 8. 7차원 정책 좌표 계산 및 결과 화면 렌더링
+       * ========================================================================= */
+      function computeAndRenderResults() {
+        var sums = {};
+        var maxSums = {};
+        var axisWeights = {};
+
+        AXES.forEach(function (a) {
+          sums[a.id] = 0;
+          maxSums[a.id] = 0;
+          axisWeights[a.id] = 0;
+        });
+
+        state.questions.forEach(function (q, idx) {
+          var ans = state.answers[idx] !== null ? state.answers[idx] : 0;
+          var w = state.weights[idx] || 1;
+          sums[q.axis] += ans * q.dir * w;
+          maxSums[q.axis] += 2 * w;
+          axisWeights[q.axis] += w;
+        });
+
+        var scores = {};
+        AXES.forEach(function (a) {
+          var denom = maxSums[a.id] || 1;
+          scores[a.id] = Math.round((sums[a.id] / denom) * 100);
+        });
+        state.userScores = scores;
+
+        // 보수-진보 종합 성향 비율(%) 산출
+        var weightedTotalScore = 0;
+        var totalAxisWeight = 0;
+        AXES.forEach(function (a) {
+          weightedTotalScore += scores[a.id] * axisWeights[a.id];
+          totalAxisWeight += axisWeights[a.id];
+        });
+        var avgScore = totalAxisWeight > 0 ? weightedTotalScore / totalAxisWeight : 0;
+        var progPct = Math.max(0, Math.min(100, Math.round(((avgScore + 100) / 200) * 100)));
+        var conPct = 100 - progPct;
+
+        var label = '중도·균형형';
+        if (progPct >= 68) label = '진보적 정책 지향 뚜렷';
+        else if (progPct >= 55) label = '진보적 정책 지향 우세';
+        else if (conPct >= 68) label = '보수적 정책 지향 뚜렷';
+        else if (conPct >= 55) label = '보수적 정책 지향 우세';
+
+        state.balance = { con: conPct, prog: progPct, label: label };
+
+        conPctVal.textContent = conPct + '%';
+        progPctVal.textContent = progPct + '%';
+        barConFill.style.width = conPct + '%';
+        barProgFill.style.width = progPct + '%';
+        ideologyLabelBadge.textContent = label;
+
+        var answeredCount = state.answers.filter(function (v) { return v !== null; }).length;
+        var weightedCount = state.weights.filter(function (w) { return w === 2; }).length;
+        resultMetaBadge.textContent = (state.mode === 'quick' ? '핵심 21문항' : '심층 42문항') + ' 중 ' + answeredCount + '개 응답 · 가중치 2배 ' + weightedCount + '개';
+
+        // 13개 정당 공간적 근접도 계산
+        var meanW = totalAxisWeight / AXES.length;
+        var evaluated = PARTIES.map(function (party) {
+          var sqSum = 0;
+          var wSum = 0;
+          var diffs = [];
+
+          AXES.forEach(function (axis) {
+            var u = scores[axis.id];
+            var p = party.profile[axis.id];
+            var relW = meanW > 0 ? axisWeights[axis.id] / meanW : 1;
+            var d = Math.abs(u - p);
+            sqSum += relW * d * d;
+            wSum += relW;
+            diffs.push({
+              axisId: axis.id,
+              shortName: axis.shortName,
+              userScore: u,
+              partyScore: p,
+              diff: d
+            });
+          });
+
+          var rms = Math.sqrt(sqSum / wSum);
+          var proximity = Math.max(0, Math.min(100, Math.round((1 - rms / 200) * 100)));
+          var sortedDiffs = diffs.slice().sort(function (a, b) { return a.diff - b.diff; });
+
+          return {
+            party: party,
+            rms: rms,
+            proximity: proximity,
+            shared: sortedDiffs.slice(0, 2),
+            differing: sortedDiffs.slice().reverse().slice(0, 2)
+          };
+        });
+
+        evaluated.sort(function (a, b) { return a.rms - b.rms; });
+        state.closeParties = evaluated.slice(0, 3);
+
+        renderClosePartiesSection(state.closeParties);
+        renderAxisMiniCards(scores);
+        initPartySelectors(state.closeParties);
+        updateComparatorSection();
+        renderPartyDictionary();
+      }
+
+      function formatAxisLabel(axis, score) {
+        if (score <= -20) return axis.leftLabel + ' (' + Math.abs(score) + '%)';
+        if (score >= 20) return axis.rightLabel + ' (' + score + '%)';
+        return '중도·균형 (' + (score > 0 ? '+' + score : score) + '%)';
+      }
+
+      function renderClosePartiesSection(top3) {
+        closePartiesList.innerHTML = '';
+        top3.forEach(function (item, idx) {
+          var p = item.party;
+          var card = document.createElement('div');
+          card.className = 'close-party-card' + (idx === 0 ? ' highlight' : '');
+
+          var head = document.createElement('div');
+          head.className = 'close-party-head';
+
+          var left = document.createElement('div');
+          left.className = 'close-party-left';
+          left.appendChild(createPartyEmblemElement(p, false));
+
+          var infoDiv = document.createElement('div');
+          var titleRow = document.createElement('div');
+          titleRow.style.display = 'flex';
+          titleRow.style.flexWrap = 'wrap';
+          titleRow.style.alignItems = 'center';
+          titleRow.style.gap = '0.45rem';
+
+          var refBadge = document.createElement('span');
+          refBadge.className = idx === 0 ? 'badge badge-navy' : 'badge badge-gray';
+          refBadge.textContent = '근접 참고 ' + (idx + 1);
+
+          var nameEl = document.createElement('strong');
+          nameEl.style.fontSize = '1.08rem';
+          nameEl.textContent = p.name;
+
+          var statusBadge = document.createElement('span');
+          statusBadge.className = 'badge badge-gray';
+          statusBadge.textContent = p.status + ' 정당';
+
+          titleRow.appendChild(refBadge);
+          titleRow.appendChild(nameEl);
+          titleRow.appendChild(statusBadge);
+
+          var kwLine = document.createElement('div');
+          kwLine.style.fontSize = '0.78rem';
+          kwLine.style.color = 'var(--text-muted)';
+          kwLine.style.marginTop = '0.25rem';
+          kwLine.textContent = '공식 강령 키워드: ' + p.keywords.join(' · ');
+
+          infoDiv.appendChild(titleRow);
+          infoDiv.appendChild(kwLine);
+          left.appendChild(infoDiv);
+
+          var proxBadge = document.createElement('span');
+          proxBadge.className = 'badge badge-indigo';
+          proxBadge.style.fontSize = '0.82rem';
+          proxBadge.textContent = '방향 근접도 ' + item.proximity + '%';
+
+          head.appendChild(left);
+          head.appendChild(proxBadge);
+
+          var summaryP = document.createElement('p');
+          summaryP.style.fontSize = '0.86rem';
+          summaryP.style.color = 'var(--text-sub)';
+          summaryP.textContent = p.summary;
+
+          var pointGrid = document.createElement('div');
+          pointGrid.className = 'point-grid';
+
+          var sharedBox = document.createElement('div');
+          var sharedTitle = document.createElement('div');
+          sharedTitle.style.fontSize = '0.76rem';
+          sharedTitle.style.fontWeight = '700';
+          sharedTitle.style.marginBottom = '0.25rem';
+          sharedTitle.textContent = '방향이 가장 맞닿아 있는 영역';
+          sharedBox.appendChild(sharedTitle);
+
+          item.shared.forEach(function (s) {
+            var tag = document.createElement('span');
+            tag.className = 'tag-pill';
+            tag.textContent = '✓ ' + s.shortName + ' (좌표 차이 ' + s.diff + 'p)';
+            sharedBox.appendChild(tag);
+          });
+
+          var diffBox = document.createElement('div');
+          var diffTitle = document.createElement('div');
+          diffTitle.style.fontSize = '0.76rem';
+          diffTitle.style.fontWeight = '700';
+          diffTitle.style.marginBottom = '0.25rem';
+          diffTitle.textContent = '상대적으로 입장 차이가 나타나는 영역';
+          diffBox.appendChild(diffTitle);
+
+          item.differing.forEach(function (d) {
+            var ax = AXES.find(function (a) { return a.id === d.axisId; });
+            var dirNote = d.partyScore > d.userScore
+              ? '정당이 더 ' + ax.rightLabel.split('·')[0] + ' 방향'
+              : '정당이 더 ' + ax.leftLabel.split('·')[0] + ' 방향';
+            var tag = document.createElement('span');
+            tag.className = 'tag-pill';
+            tag.textContent = '↔ ' + d.shortName + ': ' + dirNote;
+            diffBox.appendChild(tag);
+          });
+
+          pointGrid.appendChild(sharedBox);
+          pointGrid.appendChild(diffBox);
+
+          card.appendChild(head);
+          card.appendChild(summaryP);
+          card.appendChild(pointGrid);
+          closePartiesList.appendChild(card);
+        });
+      }
+
+      function renderAxisMiniCards(scores) {
+        axisMiniSummary.innerHTML = '';
+        AXES.forEach(function (axis) {
+          var s = scores[axis.id];
+          var desc = s <= -20 ? axis.leftDesc : s >= 20 ? axis.rightDesc : axis.neutralDesc;
+
+          var card = document.createElement('div');
+          card.className = 'axis-mini-card';
+
+          var top = document.createElement('div');
+          top.style.display = 'flex';
+          top.style.justifyContent = 'space-between';
+          top.style.alignItems = 'center';
+          top.style.gap = '0.4rem';
+          top.style.marginBottom = '0.2rem';
+
+          var nameEl = document.createElement('strong');
+          nameEl.style.fontSize = '0.82rem';
+          nameEl.textContent = axis.name;
+
+          var valEl = document.createElement('span');
+          valEl.style.fontSize = '0.75rem';
+          valEl.style.fontWeight = '700';
+          valEl.style.color = 'var(--indigo)';
+          valEl.textContent = formatAxisLabel(axis, s);
+
+          top.appendChild(nameEl);
+          top.appendChild(valEl);
+
+          var descEl = document.createElement('div');
+          descEl.style.fontSize = '0.76rem';
+          descEl.style.color = 'var(--text-sub)';
+          descEl.textContent = desc;
+
+          card.appendChild(top);
+          card.appendChild(descEl);
+          axisMiniSummary.appendChild(card);
+        });
+      }
+
+      function initPartySelectors(top3) {
+        var sortedAlpha = PARTIES.slice().sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'ko');
+        });
+        var defA = top3[0] ? top3[0].party.id : 'progressive';
+        var defB = top3[1] ? top3[1].party.id : 'justice';
+
+        [selectPartyA, selectPartyB].forEach(function (sel, idx) {
+          sel.innerHTML = '';
+          sortedAlpha.forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name + ' (' + p.status + ')';
+            sel.appendChild(opt);
+          });
+          sel.value = idx === 0 ? defA : defB;
+        });
+      }
+
+      function updateComparatorSection() {
+        var pA = PARTIES.find(function (p) { return p.id === selectPartyA.value; }) || PARTIES[0];
+        var pB = PARTIES.find(function (p) { return p.id === selectPartyB.value; }) || PARTIES[1];
+
+        logoSlotA.innerHTML = '';
+        logoSlotA.appendChild(createPartyEmblemElement(pA, true));
+
+        logoSlotB.innerHTML = '';
+        logoSlotB.appendChild(createPartyEmblemElement(pB, true));
+
+        radarLegendA.textContent = '◆ ' + pA.name + ' (A)';
+        radarLegendB.textContent = '▲ ' + pB.name + ' (B)';
+
+        drawRadarChart(state.userScores, pA, pB);
+        renderHeadToHead(pA, pB);
+        renderSpectrumList(state.userScores, pA, pB);
+      }
+
+      function drawRadarChart(userScores, pA, pB) {
+        var ctx = radarCanvas.getContext('2d');
+        var w = radarCanvas.width;
+        var h = radarCanvas.height;
+        var cx = w / 2;
+        var cy = h / 2 + 6;
+        var maxR = Math.min(w, h) * 0.34;
+        var n = AXES.length;
+
+        ctx.clearRect(0, 0, w, h);
+
+        [0.25, 0.5, 0.75, 1.0].forEach(function (ratio, rIdx) {
+          ctx.beginPath();
+          for (var i = 0; i < n; i++) {
+            var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+            var r = maxR * ratio;
+            var x = cx + Math.cos(ang) * r;
+            var y = cy + Math.sin(ang) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.strokeStyle = rIdx === 1 ? '#94a3b8' : '#cbd5e1';
+          ctx.lineWidth = rIdx === 1 ? 1.5 : 1;
+          ctx.stroke();
+        });
+
+        ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif';
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        AXES.forEach(function (axis, i) {
+          var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(ang) * maxR, cy + Math.sin(ang) * maxR);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          var lx = cx + Math.cos(ang) * (maxR + 30);
+          var ly = cy + Math.sin(ang) * (maxR + 30);
+          ctx.fillText(axis.shortName, lx, ly);
+        });
+
+        function scoreToR(score) {
+          var norm = (score + 100) / 200;
+          return maxR * (0.12 + norm * 0.84);
+        }
+
+        function drawPoly(profile, stroke, fill, width, dash) {
+          ctx.save();
+          ctx.beginPath();
+          AXES.forEach(function (axis, i) {
+            var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+            var r = scoreToR(profile[axis.id] || 0);
+            var x = cx + Math.cos(ang) * r;
+            var y = cy + Math.sin(ang) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.closePath();
+          if (fill) {
+            ctx.fillStyle = fill;
+            ctx.fill();
+          }
+          if (dash) ctx.setLineDash(dash);
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = width;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        drawPoly(pB.profile, '#64748b', 'rgba(100, 116, 139, 0.08)', 1.8, [4, 4]);
+        drawPoly(pA.profile, '#3730a3', 'rgba(55, 48, 163, 0.12)', 2.2, null);
+        drawPoly(userScores, '#0f172a', 'rgba(15, 23, 42, 0.16)', 2.8, null);
+
+        AXES.forEach(function (axis, i) {
+          var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+          var r = scoreToR(userScores[axis.id] || 0);
+          var x = cx + Math.cos(ang) * r;
+          var y = cy + Math.sin(ang) * r;
+          ctx.beginPath();
+          ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#0f172a';
+          ctx.fill();
+        });
+      }
+
+      function renderHeadToHead(pA, pB) {
+        h2hDetailBox.innerHTML = '';
+
+        var topRow = document.createElement('div');
+        topRow.style.display = 'flex';
+        topRow.style.flexWrap = 'wrap';
+        topRow.style.justifyContent = 'space-between';
+        topRow.style.alignItems = 'center';
+        topRow.style.gap = '0.4rem';
+
+        var title = document.createElement('strong');
+        title.style.fontSize = '0.96rem';
+        title.textContent = pA.name + ' vs ' + pB.name + ' 공식 강령 핵심 노선 대조';
+
+        var nationDiff = Math.abs(pA.profile.nation - pB.profile.nation);
+        var badge = document.createElement('span');
+        badge.className = 'badge badge-gray';
+        badge.textContent = '민족·통일·대미 축 좌표 차이: ' + nationDiff + 'p';
+
+        topRow.appendChild(title);
+        topRow.appendChild(badge);
+        h2hDetailBox.appendChild(topRow);
+
+        var cols = document.createElement('div');
+        cols.className = 'h2h-cols';
+
+        var c1 = document.createElement('div');
+        c1.className = 'h2h-subcard';
+        var c1Title = document.createElement('div');
+        c1Title.style.fontWeight = '700';
+        c1Title.style.color = 'var(--indigo)';
+        c1Title.style.marginBottom = '0.35rem';
+        c1Title.textContent = '① 민족·통일·자주·대미관계 노선 비교';
+
+        var c1P1 = document.createElement('p');
+        c1P1.style.marginBottom = '0.4rem';
+        c1P1.textContent = '• ' + pA.name + ' (' + (pA.profile.nation > 0 ? '+' + pA.profile.nation : pA.profile.nation) + '): ' + pA.nationNote;
+
+        var c1P2 = document.createElement('p');
+        c1P2.textContent = '• ' + pB.name + ' (' + (pB.profile.nation > 0 ? '+' + pB.profile.nation : pB.profile.nation) + '): ' + pB.nationNote;
+
+        c1.appendChild(c1Title);
+        c1.appendChild(c1P1);
+        c1.appendChild(c1P2);
+
+        var c2 = document.createElement('div');
+        c2.className = 'h2h-subcard';
+        var c2Title = document.createElement('div');
+        c2Title.style.fontWeight = '700';
+        c2Title.style.color = 'var(--indigo)';
+        c2Title.style.marginBottom = '0.35rem';
+        c2Title.textContent = '② 경제·복지·노동·기후·사회 기조 요약';
+
+        var c2P1 = document.createElement('p');
+        c2P1.style.marginBottom = '0.4rem';
+        c2P1.textContent = '• ' + pA.name + ': ' + pA.summary;
+
+        var c2P2 = document.createElement('p');
+        c2P2.textContent = '• ' + pB.name + ': ' + pB.summary;
+
+        c2.appendChild(c2Title);
+        c2.appendChild(c2P1);
+        c2.appendChild(c2P2);
+
+        cols.appendChild(c1);
+        cols.appendChild(c2);
+        h2hDetailBox.appendChild(cols);
+      }
+
+      function renderSpectrumList(scores, pA, pB) {
+        spectrumBarsList.innerHTML = '';
+        AXES.forEach(function (axis) {
+          var u = scores[axis.id];
+          var a = pA.profile[axis.id];
+          var b = pB.profile[axis.id];
+
+          var uPct = Math.round(((u + 100) / 200) * 100);
+          var aPct = Math.round(((a + 100) / 200) * 100);
+          var bPct = Math.round(((b + 100) / 200) * 100);
+
+          var card = document.createElement('div');
+          card.className = 'spectrum-card';
+
+          var head = document.createElement('div');
+          head.style.display = 'flex';
+          head.style.flexWrap = 'wrap';
+          head.style.justifyContent = 'space-between';
+          head.style.alignItems = 'center';
+          head.style.gap = '0.4rem';
+
+          var titleEl = document.createElement('strong');
+          titleEl.style.fontSize = '0.9rem';
+          titleEl.textContent = axis.name;
+
+          var badge = document.createElement('span');
+          badge.className = 'badge badge-gray';
+          badge.textContent = formatAxisLabel(axis, u);
+
+          head.appendChild(titleEl);
+          head.appendChild(badge);
+
+          var poles = document.createElement('div');
+          poles.style.display = 'flex';
+          poles.style.justifyContent = 'space-between';
+          poles.style.fontSize = '0.74rem';
+          poles.style.color = 'var(--text-muted)';
+          poles.style.marginTop = '0.35rem';
+
+          var leftP = document.createElement('span');
+          leftP.textContent = '← ' + axis.leftLabel;
+          var rightP = document.createElement('span');
+          rightP.textContent = axis.rightLabel + ' →';
+          poles.appendChild(leftP);
+          poles.appendChild(rightP);
+
+          var barArea = document.createElement('div');
+          barArea.className = 'spectrum-bar-area';
+
+          var track = document.createElement('div');
+          track.className = 'spectrum-track';
+          var mid = document.createElement('div');
+          mid.className = 'spectrum-mid';
+          track.appendChild(mid);
+
+          var dotA = document.createElement('div');
+          dotA.className = 'dot-pa';
+          dotA.style.left = aPct + '%';
+
+          var dotB = document.createElement('div');
+          dotB.className = 'dot-pb';
+          dotB.style.left = bPct + '%';
+
+          var dotU = document.createElement('div');
+          dotU.className = 'dot-user';
+          dotU.style.left = uPct + '%';
+
+          barArea.appendChild(track);
+          barArea.appendChild(dotA);
+          barArea.appendChild(dotB);
+          barArea.appendChild(dotU);
+
+          var scoreRow = document.createElement('div');
+          scoreRow.style.display = 'flex';
+          scoreRow.style.flexWrap = 'wrap';
+          scoreRow.style.gap = '0.85rem';
+          scoreRow.style.fontSize = '0.75rem';
+          scoreRow.style.color = 'var(--text-muted)';
+          scoreRow.textContent =
+            '● 나의 좌표: ' + (u > 0 ? '+' + u : u) +
+            '   |   ◆ ' + pA.name + ': ' + (a > 0 ? '+' + a : a) +
+            '   |   ▲ ' + pB.name + ': ' + (b > 0 ? '+' + b : b);
+
+          card.appendChild(head);
+          card.appendChild(poles);
+          card.appendChild(barArea);
+          card.appendChild(scoreRow);
+          spectrumBarsList.appendChild(card);
+        });
+      }
+
+      function renderPartyDictionary() {
+        partyDictionaryGrid.innerHTML = '';
+        var sorted = PARTIES.slice().sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'ko');
+        });
+
+        sorted.forEach(function (p) {
+          var item = document.createElement('div');
+          item.className = 'dict-item';
+
+          var top = document.createElement('div');
+          top.style.display = 'flex';
+          top.style.justifyContent = 'space-between';
+          top.style.alignItems = 'center';
+          top.style.marginBottom = '0.45rem';
+
+          var left = document.createElement('div');
+          left.style.display = 'flex';
+          left.style.alignItems = 'center';
+          left.style.gap = '0.55rem';
+          left.appendChild(createPartyEmblemElement(p, true));
+
+          var nameEl = document.createElement('strong');
+          nameEl.style.fontSize = '0.94rem';
+          nameEl.textContent = p.name;
+          left.appendChild(nameEl);
+
+          var statusBadge = document.createElement('span');
+          statusBadge.className = 'badge badge-gray';
+          statusBadge.textContent = p.status + ' 정당';
+
+          top.appendChild(left);
+          top.appendChild(statusBadge);
+
+          var desc = document.createElement('p');
+          desc.style.color = 'var(--text-sub)';
+          desc.style.marginBottom = '0.5rem';
+          desc.textContent = p.summary;
+
+          var nationLine = document.createElement('div');
+          nationLine.style.fontSize = '0.76rem';
+          nationLine.style.color = 'var(--indigo)';
+          nationLine.style.fontWeight = '600';
+          nationLine.textContent = '민족·대미 기조: ' + p.nationNote;
+
+          item.appendChild(top);
+          item.appendChild(desc);
+          item.appendChild(nationLine);
+          partyDictionaryGrid.appendChild(item);
+        });
+      }
+
+      /* =========================================================================
+       * 9. 고해상도 PNG 결과 카드 생성 및 다운로드
+       * ========================================================================= */
+      function exportResultPng() {
+        if (!state.userScores) computeAndRenderResults();
+
+        var W = 1080;
+        var H = 1520;
+        var canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        var ctx = canvas.getContext('2d');
+        var fontSans = '-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif';
+
+        // 배경
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(0, 0, W, H);
+
+        // 상단 헤더
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, W, 170);
+
+        roundRect(ctx, 56, 34, 270, 34, 17);
+        ctx.fillStyle = '#312e81';
+        ctx.fill();
+        ctx.font = '700 17px ' + fontSans;
+        ctx.fillStyle = '#e0e7ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('7대 영역 · 13개 정당 정밀 분석', 191, 51);
+
+        var now = new Date();
+        var dateStr = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
+        ctx.textAlign = 'right';
+        ctx.font = '500 18px ' + fontSans;
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText((state.mode === 'quick' ? '핵심 21문항' : '심층 42문항') + ' · ' + dateStr, W - 56, 51);
+
+        ctx.textAlign = 'left';
+        ctx.font = '800 36px ' + fontSans;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('한국 정당·정책 스펙트럼 탐색 결과', 56, 114);
+
+        // 카드 1: 보수 vs 진보 비율 게이지
+        var c1Y = 198;
+        var c1H = 258;
+        roundRect(ctx, 48, c1Y, W - 96, c1H, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        ctx.font = '700 22px ' + fontSans;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillText('7대 영역 종합 정책 스펙트럼 균형', 84, c1Y + 44);
+
+        roundRect(ctx, W - 294, c1Y + 24, 210, 38, 19);
+        ctx.fillStyle = '#eef2ff';
+        ctx.fill();
+        ctx.font = '700 18px ' + fontSans;
+        ctx.fillStyle = '#312e81';
+        ctx.textAlign = 'center';
+        ctx.fillText(state.balance.label, W - 189, c1Y + 43);
+
+        ctx.textAlign = 'left';
+        ctx.font = '700 17px ' + fontSans;
+        ctx.fillStyle = '#475569';
+        ctx.fillText('보수적 정책 지향 (시장자유·한미동맹·전통)', 84, c1Y + 90);
+        ctx.font = '800 50px ' + fontSans;
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillText(state.balance.con + '%', 84, c1Y + 140);
+
+        ctx.textAlign = 'right';
+        ctx.font = '700 17px ' + fontSans;
+        ctx.fillStyle = '#475569';
+        ctx.fillText('진보적 정책 지향 (공공개입·자주평화·개혁)', W - 84, c1Y + 90);
+        ctx.font = '800 50px ' + fontSans;
+        ctx.fillStyle = '#1d4ed8';
+        ctx.fillText(state.balance.prog + '%', W - 84, c1Y + 140);
+
+        var bx = 84;
+        var by = c1Y + 180;
+        var bw = W - 168;
+        var bh = 30;
+        ctx.save();
+        roundRect(ctx, bx, by, bw, bh, 15);
+        ctx.clip();
+        var conW = Math.round((bw * state.balance.con) / 100);
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(bx, by, conW, bh);
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(bx + conW, by, bw - conW, bh);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(bx + bw / 2 - 2, by, 4, bh);
+        ctx.restore();
+
+        // 카드 2: 근접 참고 정당 3곳
+        var c2Y = 480;
+        var c2H = 450;
+        roundRect(ctx, 48, c2Y, W - 96, c2H, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        ctx.font = '700 22px ' + fontSans;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillText('공식 강령 기준 정책 방향 유사 정당 (근접 참고 3곳)', 84, c2Y + 44);
+
+        state.closeParties.forEach(function (item, idx) {
+          var p = item.party;
+          var ry = c2Y + 76 + idx * 116;
+          var rh = 100;
+
+          roundRect(ctx, 80, ry, W - 160, rh, 16);
+          ctx.fillStyle = idx === 0 ? '#f8fafc' : '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = idx === 0 ? '#1e293b' : '#e2e8f0';
+          ctx.lineWidth = idx === 0 ? 2.5 : 1.5;
+          ctx.stroke();
+
+          roundRect(ctx, 100, ry + 32, 74, 36, 10);
+          ctx.fillStyle = idx === 0 ? '#0f172a' : '#e2e8f0';
+          ctx.fill();
+          ctx.font = '800 17px ' + fontSans;
+          ctx.fillStyle = idx === 0 ? '#ffffff' : '#334155';
+          ctx.textAlign = 'center';
+          ctx.fillText('참고 ' + (idx + 1), 137, ry + 50);
+
+          drawPartyEmblemCanvas(ctx, p, 190, ry + 20, 60);
+
+          ctx.textAlign = 'left';
+          ctx.font = '800 26px ' + fontSans;
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText(p.name + ' (' + p.status + ')', 268, ry + 38);
+
+          ctx.font = '500 17px ' + fontSans;
+          ctx.fillStyle = '#64748b';
+          ctx.fillText(p.keywords.slice(0, 3).join(' · '), 268, ry + 72);
+
+          ctx.textAlign = 'right';
+          ctx.font = '600 15px ' + fontSans;
+          ctx.fillStyle = '#64748b';
+          ctx.fillText('방향 근접도', W - 104, ry + 32);
+
+          ctx.font = '800 32px ' + fontSans;
+          ctx.fillStyle = '#312e81';
+          ctx.fillText(item.proximity + '%', W - 104, ry + 68);
+        });
+
+        // 카드 3: 7대 정책 영역 레이더 차트 & 수치 요약
+        var c3Y = 954;
+        var c3H = 486;
+        roundRect(ctx, 48, c3Y, W - 96, c3H, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        ctx.font = '700 22px ' + fontSans;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillText('7대 핵심 정책 영역 좌표 프로파일', 84, c3Y + 44);
+
+        var rCx = 305;
+        var rCy = c3Y + 270;
+        var maxR = 148;
+        var n = AXES.length;
+
+        [0.25, 0.5, 0.75, 1.0].forEach(function (ratio, rIdx) {
+          ctx.beginPath();
+          for (var i = 0; i < n; i++) {
+            var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+            var rad = maxR * ratio;
+            var px = rCx + Math.cos(ang) * rad;
+            var py = rCy + Math.sin(ang) * rad;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.strokeStyle = rIdx === 1 ? '#94a3b8' : '#cbd5e1';
+          ctx.lineWidth = rIdx === 1 ? 2 : 1.5;
+          ctx.stroke();
+        });
+
+        ctx.font = '700 16px ' + fontSans;
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        AXES.forEach(function (axis, i) {
+          var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+          ctx.beginPath();
+          ctx.moveTo(rCx, rCy);
+          ctx.lineTo(rCx + Math.cos(ang) * maxR, rCy + Math.sin(ang) * maxR);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          var lx = rCx + Math.cos(ang) * (maxR + 36);
+          var ly = rCy + Math.sin(ang) * (maxR + 36);
+          ctx.fillText(axis.shortName, lx, ly);
+        });
+
+        ctx.beginPath();
+        AXES.forEach(function (axis, i) {
+          var ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+          var norm = ((state.userScores[axis.id] || 0) + 100) / 200;
+          var rad = maxR * (0.12 + norm * 0.84);
+          var px = rCx + Math.cos(ang) * rad;
+          var py = rCy + Math.sin(ang) * rad;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.18)';
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        var listX = 545;
+        AXES.forEach(function (axis, idx) {
+          var itemY = c3Y + 86 + idx * 53;
+          var s = state.userScores[axis.id] || 0;
+          var sideStr = s <= -20 ? '보수 방향' : s >= 20 ? '진보 방향' : '중도·균형';
+          var valStr = sideStr + ' (' + (s > 0 ? '+' + s : s) + ')';
+
+          roundRect(ctx, listX, itemY, W - listX - 84, 42, 10);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fill();
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          ctx.textAlign = 'left';
+          ctx.font = '700 17px ' + fontSans;
+          ctx.fillStyle = '#1e293b';
+          ctx.fillText(axis.shortName, listX + 16, itemY + 21);
+
+          ctx.textAlign = 'right';
+          ctx.font = '700 16px ' + fontSans;
+          ctx.fillStyle = s <= -20 ? '#b91c1c' : s >= 20 ? '#1d4ed8' : '#475569';
+          ctx.fillText(valStr, W - 100, itemY + 21);
+        });
+
+        ctx.textAlign = 'center';
+        ctx.font = '500 15px ' + fontSans;
+        ctx.fillStyle = '#64748b';
+        ctx.fillText('※ 본 결과는 각 정당의 공식 강령·정책 자료집에 기반한 교육·참고용 시뮬레이션입니다.', W / 2, H - 36);
+
+        var dataUrl = canvas.toDataURL('image/png');
+        state.exportedUrl = dataUrl;
+        pngPreviewImg.src = dataUrl;
+        pngModal.classList.remove('hidden');
+
+        downloadDataUrl(dataUrl);
+        showToast('결과 카드 이미지(PNG)가 생성 및 다운로드되었습니다.');
+      }
+
+      function downloadDataUrl(url) {
+        if (!url) return;
+        var a = document.createElement('a');
+        var now = new Date();
+        var stamp = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+        a.download = '한국정당정책스펙트럼_결과_' + stamp + '.png';
+        a.href = url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+
+      function copySummaryToClipboard() {
+        if (!state.userScores) computeAndRenderResults();
+        var lines = [
+          '[한국 정당·정책 스펙트럼 탐색기 결과 요약]',
+          '모드: ' + (state.mode === 'quick' ? '핵심 21문항' : '심층 42문항'),
+          '종합 스펙트럼 균형: 보수적 정책 지향 ' + state.balance.con + '% vs 진보적 정책 지향 ' + state.balance.prog + '% (' + state.balance.label + ')',
+          '',
+          '1. 공식 강령 기준 정책 방향 유사 정당 (근접 참고 3곳)'
+        ];
+
+        state.closeParties.forEach(function (item, i) {
+          lines.push('  참고 ' + (i + 1) + '. ' + item.party.name + ' (' + item.party.status + '): 방향 근접도 ' + item.proximity + '%');
+        });
+
+        lines.push('');
+        lines.push('2. 7대 정책 영역별 나의 좌표');
+        AXES.forEach(function (axis) {
+          var s = state.userScores[axis.id];
+          lines.push('  - ' + axis.name + ': ' + formatAxisLabel(axis, s));
+        });
+
+        lines.push('');
+        lines.push('※ 본 결과는 각 정당의 공식 강령·정책 자료집에 기반한 교육·참고용 시뮬레이션입니다.');
+
+        var ta = document.createElement('textarea');
+        ta.value = lines.join('\n');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('결과 요약 텍스트가 클립보드에 복사되었습니다.');
+        } catch (e) {
+          showToast('클립보드 복사에 실패했습니다.');
+        } finally {
+          document.body.removeChild(ta);
+        }
+      }
+
+      /* =========================================================================
+       * 10. 모든 버튼에 직접 이벤트 바인딩 및 즉시 초기화
+       * ========================================================================= */
+      btnTopQuiz.addEventListener('click', showQuizView);
+      btnTopResult.addEventListener('click', showResultView);
+
+      btnModeQuick.addEventListener('click', function () {
+        setupMode('quick');
+        showToast('핵심 요약 21문항 모드로 전환되었습니다.');
+      });
+
+      btnModeDeep.addEventListener('click', function () {
+        setupMode('deep');
+        showToast('심층 정밀 42문항 모드로 전환되었습니다.');
+      });
+
+      btnResetAll.addEventListener('click', function () {
+        setupMode(state.mode);
+        showToast('모든 응답이 초기화되었습니다.');
+      });
+
+      btnWeightToggle.addEventListener('click', function () {
+        var idx = state.currentIndex;
+        state.weights[idx] = state.weights[idx] === 2 ? 1 : 2;
+        renderQuiz();
+      });
+
+      btnTipToggle.addEventListener('click', function () {
+        state.tipOpen = !state.tipOpen;
+        renderQuiz();
+      });
+
+      btnPrev.addEventListener('click', function () {
+        if (state.currentIndex > 0) {
+          state.currentIndex -= 1;
+          state.tipOpen = false;
+          renderQuiz();
+        }
+      });
+
+      btnNext.addEventListener('click', function () {
+        if (state.currentIndex < state.questions.length - 1) {
+          state.currentIndex += 1;
+          state.tipOpen = false;
+          renderQuiz();
+        } else {
+          showResultView();
+        }
+      });
+
+      btnFinishNow.addEventListener('click', showResultView);
+
+      selectPartyA.addEventListener('change', updateComparatorSection);
+      selectPartyB.addEventListener('change', updateComparatorSection);
+
+      btnExportPngTop.addEventListener('click', exportResultPng);
+      btnExportPngBottom.addEventListener('click', exportResultPng);
+      btnCopyTextTop.addEventListener('click', copySummaryToClipboard);
+      btnCopyTextBottom.addEventListener('click', copySummaryToClipboard);
+      btnBackToQuiz.addEventListener('click', showQuizView);
+      btnRestartBottom.addEventListener('click', function () {
+        setupMode(state.mode);
+        showToast('처음부터 다시 응답을 시작합니다.');
+      });
+
+      btnModalX.addEventListener('click', function () { pngModal.classList.add('hidden'); });
+      btnModalClose.addEventListener('click', function () { pngModal.classList.add('hidden'); });
+      btnModalSave.addEventListener('click', function () { downloadDataUrl(state.exportedUrl); });
+      pngModal.addEventListener('click', function (e) {
+        if (e.target === pngModal) pngModal.classList.add('hidden');
+      });
+
+      // 페이지 로드 즉시 첫 번째 문항 화면 렌더링
+      setupMode('quick');
+    })();
+  </script>
+</body>
+</html>
