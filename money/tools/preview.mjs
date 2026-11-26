@@ -35,7 +35,10 @@ const TABLES = {
   // 하나는 이미 등록해 둔다 (이번 달 화면의 '갚아야 할 빚' 칸을 보려고).
   // match 를 걸어 두었으므로 상환은 위 거래에서 저절로 붙는다
   money_debts: [{ id: "d1", name: "학자금대출", lender: "한국장학재단", principal: 3000000,
-                  match: "한국장학재단", due_on: "2031-03-01", rate: 1.7, closed: false, sort: 0, memo: "" }],
+                  match: "한국장학재단", due_on: "2031-03-01", rate: 1.7, closed: false, sort: 0, memo: "",
+                  // 곳은 맞지만 뺀 것 하나, 곳은 안 맞지만 넣은 것 하나
+                  tx_out: ["2025-12-25-한국장학재단 학자금대출"],
+                  tx_in: ["2025-11-15-엄마"] }],
   money_debt_payments: [],
   money_accounts: [{ id: "a1", name: "카카오뱅크", kind: "bank", opening_balance: 0, sort: 0 }],
   money_categories: [{ id: "c1", name: "식비", kind: "expense", color: "#e8590c", sort: 0 }],
@@ -78,10 +81,23 @@ await p.addInitScript(`
 
 await p.goto(`http://localhost:${port}/money/#${route}`, { waitUntil: "networkidle" });
 await p.waitForTimeout(2000);
+// --open 을 주면 접힌 칸(details)을 모두 펼쳐서 본다
+if (process.argv.includes("--open")) {
+  await p.$$eval("details", (ds) => ds.forEach((d) => (d.open = true)));
+  await p.waitForTimeout(300);
+}
 
-const main = await p.$("main");
-console.log((await (main ?? p).innerText("body").catch(() => p.innerText("body")))
-  .split("\n").filter(Boolean).slice(0, 60).join("\n"));
+// --lines N 으로 찍을 줄 수를 늘린다 (기본 60줄. 접힌 칸은 --open 과 같이 쓰면 보인다)
+const linesAt = process.argv.indexOf("--lines");
+const lines = linesAt > 0 ? Number(process.argv[linesAt + 1]) : 60;
+console.log((await p.innerText("body")).split("\n").filter(Boolean).slice(0, lines).join("\n"));
+// --html <고르개> 를 주면 그 자리의 HTML 을 그대로 찍는다 (왜 안 그려지나 볼 때)
+const htmlAt = process.argv.indexOf("--html");
+if (htmlAt > 0) {
+  const sel = process.argv[htmlAt + 1];
+  console.log("\n--- " + sel + " ---");
+  console.log(await p.$eval(sel, (e) => e.innerHTML).catch(() => "(없음)"));
+}
 if (shot) { await p.screenshot({ path: shot, fullPage: true }); console.log(`\n그림: ${shot}`); }
 console.log(errs.length ? `\n에러:\n  ${errs.join("\n  ")}` : "\nJS 에러 없음");
 await b.close();

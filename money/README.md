@@ -74,6 +74,19 @@ Supabase **SQL Editor**에서 `supabase/money.sql` 실행 (일기장 `schema.sql
 - 돈이 **들어온** 흔적이 있으면 그게 빌린 금액일 수 있어 원금 칸을 미리 채워 둡니다.
 - '아니에요'를 누르면 그 곳은 다시 제안하지 않습니다 (이 브라우저에만 기억합니다).
 
+### 거래 하나하나를 넣고 뺍니다
+
+곳 이름으로 묶으면 엉뚱한 거래가 섞이거나 빠질 수 있습니다. 부채마다
+**'이 부채로 잡힌 거래 N건 · 넣고 빼기'** 를 펼치면 잡힌 거래가 줄줄이 나옵니다.
+
+- 아닌 것은 **빼기** — 곳은 맞아도 이 부채의 상환이 아니면 뺍니다. 뺀 것은 아래에
+  따로 모여 있고 **다시 넣기** 로 되돌립니다.
+- 곳이 안 맞는 것은 **찾아 넣기** — 곳 이름을 두 글자 이상 넣어 찾고, 넣으면
+  `내가 넣음` 딱지가 붙습니다. 곳 이름을 아예 안 걸고 거래만 골라 담아도 됩니다.
+
+뺀 것과 넣은 것은 `money_debts.tx_out` · `tx_in` (거래 id 목록)에 남습니다.
+둘 다에 든 거래는 **빼기가 셉니다**.
+
 단서 낱말에 안 걸리는 부채도 있습니다 (곳 이름이 그냥 `엄마` 인 경우처럼). 그래서
 **곳 이름으로 직접 찾는 칸**을 같이 두었습니다. 두 글자 이상 넣으면 그 말이 든 거래를
 바로 보여 주고, 그 말로 부채를 등록할 수 있습니다.
@@ -87,6 +100,8 @@ Supabase **SQL Editor**에서 `supabase/money.sql` 실행 (일기장 `schema.sql
 python3 -m http.server 8080 &        # meironomachi.github.io 안에서
 node money/tools/preview.mjs /debts
 node money/tools/preview.mjs / --shot month.png
+node money/tools/preview.mjs /debts --open --lines 200   # 접힌 칸까지 펼쳐서
+node money/tools/preview.mjs /debts --html ".debt-txs"   # 그 자리 HTML 그대로
 ```
 
 화면의 글을 찍어 주고, JS 오류가 있으면 알려 줍니다 (`app.js` 의

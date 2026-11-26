@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, budgetFor, budgetAmount, debtTotal, debtPayments, debtCandidates, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, budgetFor, budgetAmount, debtTotal, debtPayments, debtCandidates, debtExcluded, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -574,4 +574,40 @@ test("남은 빚 합계도 거래내역을 본다", () => {
   const r = debtTotal(debts, [], "2026-11-26", txs);
   assert.equal(r.remaining, 700000);
   assert.equal(r.thisMonth, 150000);
+});
+
+test("곳이 맞아도 내가 뺀 거래는 안 센다", () => {
+  const txs = [
+    거래("t1", "2026-09-25", -150000, "한국장학재단"),
+    거래("t2", "2026-10-25", -150000, "한국장학재단"),
+  ];
+  const debt = { id: "d1", match: "한국장학재단", tx_out: ["t2"] };
+  const got = debtPayments(debt, [], txs);
+  assert.deepEqual(got.map((p) => p.tx_id), ["t1"]);
+  assert.deepEqual(debtExcluded(debt, txs).map((t) => t.id), ["t2"]);
+});
+
+test("곳이 안 맞아도 내가 넣은 거래는 센다", () => {
+  const txs = [
+    거래("t1", "2026-10-25", -150000, "한국장학재단"),
+    거래("t2", "2026-10-26", -50000, "엄마"),
+  ];
+  const got = debtPayments({ id: "d1", match: "한국장학재단", tx_in: ["t2"] }, [], txs);
+  assert.deepEqual(got.map((p) => p.amount), [150000, 50000]);
+  assert.equal(got.find((p) => p.tx_id === "t2").picked, true);
+});
+
+test("곳을 안 걸어 두고 거래만 골라 넣어도 된다", () => {
+  const txs = [
+    거래("t1", "2026-10-25", -150000, "한국장학재단"),
+    거래("t2", "2026-10-26", -50000, "엄마"),
+  ];
+  const got = debtPayments({ id: "d1", tx_in: ["t2"] }, [], txs);
+  assert.deepEqual(got.map((p) => p.tx_id), ["t2"]);
+});
+
+test("뺀 거래가 넣은 거래보다 세다", () => {
+  const txs = [거래("t1", "2026-10-25", -150000, "한국장학재단")];
+  const got = debtPayments({ id: "d1", match: "한국장학재단", tx_in: ["t1"], tx_out: ["t1"] }, [], txs);
+  assert.equal(got.length, 0);
 });

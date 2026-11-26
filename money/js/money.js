@@ -371,20 +371,29 @@ export const INTEREST_WORDS = /이자/;
  */
 export function debtPayments(debt, manual, txs) {
   const mine = (manual ?? []).filter((p) => p.debt_id === debt.id);
-  if (!debt.match) return mine.slice().sort((a, b) => a.paid_on.localeCompare(b.paid_on));
-  const key = normalizePlace(debt.match);
+  const out = new Set(debt.tx_out ?? []);   // 곳은 맞지만 내가 뺀 거래
+  const inn = new Set(debt.tx_in ?? []);    // 곳은 안 맞지만 내가 넣은 거래
+  if (!debt.match && !inn.size) return mine.slice().sort((a, b) => a.paid_on.localeCompare(b.paid_on));
+  const key = debt.match ? normalizePlace(debt.match) : null;
   const linked = new Set(mine.map((p) => p.tx_id).filter(Boolean));
   const auto = (txs ?? [])
-    .filter((t) => isReal(t) && t.amount < 0 && !linked.has(t.id)
-      && normalizePlace(t.place ?? "").includes(key))
+    .filter((t) => isReal(t) && t.amount < 0 && !linked.has(t.id) && !out.has(t.id)
+      && (inn.has(t.id) || (key && normalizePlace(t.place ?? "").includes(key))))
     .map((t) => ({
       id: "tx:" + t.id, debt_id: debt.id, tx_id: t.id,
       paid_on: kstDay(t.occurred_at), amount: -t.amount,
       // 은행 파일은 원금과 이자를 나눠 주지 않는다. '이자'라고 찍힌 거래만 이자로 본다
       interest: INTEREST_WORDS.test((t.tx_type ?? "") + " " + (t.place ?? "")) ? -t.amount : 0,
-      memo: t.place ?? "", auto: true,
+      memo: t.place ?? "", auto: true, picked: inn.has(t.id),
     }));
   return [...mine, ...auto].sort((a, b) => a.paid_on.localeCompare(b.paid_on));
+}
+
+/** 곳은 맞지만 내가 빼 둔 거래. 부채 화면에서 '다시 넣기'로 보여 주려고 쓴다 */
+export function debtExcluded(debt, txs) {
+  const out = new Set(debt.tx_out ?? []);
+  if (!out.size) return [];
+  return (txs ?? []).filter((t) => out.has(t.id)).sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 }
 
 /** 거래내역에서 '이거 부채 아닌가' 싶은 곳을 찾아 제안한다.

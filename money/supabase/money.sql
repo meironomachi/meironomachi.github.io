@@ -146,6 +146,12 @@ CREATE TABLE IF NOT EXISTS public.money_debts (
 -- 거래내역의 곳 이름 조각. 이 말이 든 곳으로 나간 거래를 이 부채의 상환으로 본다.
 -- 비어 있으면 손으로 적은 상환만 센다.
 ALTER TABLE public.money_debts ADD COLUMN IF NOT EXISTS match text;
+-- 자동으로 붙은 거래를 하나씩 넣고 빼기.
+--   tx_out: 곳은 맞지만 이 부채의 상환이 아닌 거래
+--   tx_in : 곳은 안 맞지만 이 부채의 상환인 거래
+ALTER TABLE public.money_debts
+  ADD COLUMN IF NOT EXISTS tx_out uuid[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS tx_in  uuid[] NOT NULL DEFAULT '{}';
 CREATE TABLE IF NOT EXISTS public.money_debt_payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
