@@ -74,6 +74,24 @@ Supabase **SQL Editor**에서 `supabase/money.sql` 실행 (일기장 `schema.sql
 - 돈이 **들어온** 흔적이 있으면 그게 빌린 금액일 수 있어 원금 칸을 미리 채워 둡니다.
 - '아니에요'를 누르면 그 곳은 다시 제안하지 않습니다 (이 브라우저에만 기억합니다).
 
+단서 낱말에 안 걸리는 부채도 있습니다 (곳 이름이 그냥 `엄마` 인 경우처럼). 그래서
+**곳 이름으로 직접 찾는 칸**을 같이 두었습니다. 두 글자 이상 넣으면 그 말이 든 거래를
+바로 보여 주고, 그 말로 부채를 등록할 수 있습니다.
+
+## 화면 미리 보기 (로그인 없이)
+
+로그인해야 보이는 화면을 고칠 때 쓰는 도구입니다. 가짜 자료를 끼워 크로미움으로 그립니다.
+실제 자료는 건드리지 않습니다.
+
+```bash
+python3 -m http.server 8080 &        # meironomachi.github.io 안에서
+node money/tools/preview.mjs /debts
+node money/tools/preview.mjs / --shot month.png
+```
+
+화면의 글을 찍어 주고, JS 오류가 있으면 알려 줍니다 (`app.js` 의
+`window.__MONEY_TEST_CLIENT__` 훅을 씁니다).
+
 ## 올리기 전에 / 테스트
 
 ```sh

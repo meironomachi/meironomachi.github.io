@@ -488,3 +488,9 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .cand-add { display: grid; gap: 8px; margin-top: 8px; }
 @media (min-width: 560px) { .cand-add { grid-template-columns: 1fr 1fr; align-items: end; } .cand-add .add-as { grid-column: 1 / -1; } }
 .auto-note { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 5px 9px; display: inline-block; }
+.cand-find { display: grid; gap: 8px; margin: 10px 0 14px; }
+.cand-txs { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; }
+.cand-txs li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; font-size: 13px; align-items: baseline; }
+.cand-txs li span:first-child { color: var(--muted-fg); }
+.cand-place { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand-txs b.income { color: var(--primary); }

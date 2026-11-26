@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611261251";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js?v=202611261258";
 import {
   KINDS, kindName, DEFAULT_CATEGORIES, BANKS, kstDay, kstMonth, monthRange, shiftMonth, parseAmount, won, signedWon,
   parseBankRows, importKey, classify, normalizePlace, findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, parseKstDateTime,
   monthSummary, budgetStatus, budgetAmount, debtTotal, debtPayments, debtCandidates, changeRate, spendRate, accountBalance, savingDeposits, savingPlan, dailyFlow, debtStatus, frequentEntries,
   recurringDay, recurringActive, recurringDueMonths, recurringTx, recurringTotals, goalStatus, inflowByCat,
-} from "./money.js?v=202611261251";
+} from "./money.js?v=202611261258";
 
 const app = document.getElementById("app");
 let sb = null;
@@ -915,11 +915,14 @@ async function renderDebts() {
   const [d, p, all] = await Promise.all([
     sb.from("money_debts").select("*").order("sort").order("created_at"),
     sb.from("money_debt_payments").select("*").order("paid_on"),
-    // 후보를 찾으려면 거래를 두루 봐야 한다. 필요한 칸만 받는다
-    selectAll(() => sb.from("money_transactions").select("id, occurred_at, amount, place, tx_type, planned")),
+    // 후보를 찾으려면 거래를 두루 봐야 한다. 필요한 칸만 받는다.
+    // 여기서 터지면 부채 화면이 통째로 안 그려지므로 빈 배열로 떨어뜨린다
+    selectAll(() => sb.from("money_transactions").select("id, occurred_at, amount, place, tx_type, planned"))
+      .catch(() => null),
   ]);
   if (d.error || p.error) { fill('<div class="paper notice"><h2>부채 표가 아직 없어요</h2><p>money.sql의 부채 부분을 실행해 주세요.</p></div>'); return; }
   const debts = d.data ?? [], pays = p.data ?? [], txs = all ?? [];
+  const txLoadFailed = all === null;
   const today = kstDay(new Date().toISOString());
   const st = new Map(debts.map((x) => [x.id, debtStatus(x, debtPayments(x, pays, txs), today)]));
   const skipped = new Set(JSON.parse(remember("money-debt-skip") ?? "[]"));
@@ -965,9 +968,17 @@ async function renderDebts() {
     </li>`;
   };
   fill(`<p class="total-balance"><span class="muted">남은 부채</span><b>${won(totalLeft)}</b>${monthPaid ? `<span class="planned-note small">이번 달 상환 ${won(monthPaid)}</span>` : ""}</p>
-    ${cands.length ? `<section class="paper debt-cands">
-      <div class="section-head"><h3>거래내역에서 찾은 것</h3><span class="muted small">부채 같아 보이는 곳이에요. 맞으면 눌러서 등록하세요</span></div>
-      <ul class="cand-list">${cands.slice(0, 6).map((g, i) => `<li data-cand="${i}">
+    <section class="paper debt-cands">
+      <div class="section-head"><h3>거래내역에서 찾기</h3><span class="muted small">거래 ${txs.length.toLocaleString("ko-KR")}건을 훑었어요</span></div>
+      ${txLoadFailed ? '<p class="muted small">거래내역을 읽지 못했어요. 잠시 뒤 다시 열어 보세요.</p>' : ""}
+      ${cands.length ? "" : `<p class="muted small">부채 같아 보이는 곳을 못 찾았어요. '대출·상환·융자·원리금·학자금·전세자금·카드론' 같은 말이
+        거래에 안 적혀 있으면 못 알아봐요. 아래에 곳 이름을 직접 넣어 찾아 보세요.</p>`}
+      <form class="cand-find" id="cand-find">
+        <label class="field full">곳 이름으로 직접 찾기
+          <input class="input" name="q" placeholder="예: 한국장학재단, 국민은행, 엄마" autocomplete="off"></label>
+        <div id="cand-found"></div>
+      </form>
+      ${cands.length ? `<ul class="cand-list">${cands.slice(0, 6).map((g, i) => `<li data-cand="${i}">
         <div class="cand-head"><b>${esc(g.place)}</b><span class="muted small">${g.first.replaceAll("-", ".")} ~ ${g.last.replaceAll("-", ".")}</span></div>
         <p class="muted small">${g.payCount ? `${g.payCount}번 나감 · 모두 ${won(g.out)}${g.monthly ? ` · 달마다 ${won(g.monthly)}쯤` : ""}` : ""}${g.borrowed ? `${g.payCount ? " · " : ""}들어온 돈 ${won(g.borrowed)}` : ""}</p>
         <form class="cand-add">
@@ -977,8 +988,8 @@ async function renderDebts() {
           <div class="add-as"><button class="btn primary sm" type="submit">부채로 등록</button>
             <button class="btn ghost sm" type="button" data-cand-skip>아니에요</button></div>
         </form>
-      </li>`).join("")}</ul>
-    </section>` : ""}
+      </li>`).join("")}</ul>` : ""}
+    </section>
 
     ${open.length ? `<ul class="accounts debts">${open.map(card).join("")}</ul>` : '<p class="empty">갚고 있는 부채가 없어요.</p>'}
     ${closed.length ? `<details class="closed-debts"><summary class="small">다 갚은 부채 ${closed.length}건</summary><ul class="accounts debts">${closed.map(card).join("")}</ul></details>` : ""}
@@ -998,6 +1009,44 @@ async function renderDebts() {
   const num = (v) => parseAmount(String(v ?? "").replace(/[^\d]/g, ""));
   $$("input.money").forEach((el) => el.addEventListener("input", () => { const n = num(el.value); el.value = n ? n.toLocaleString("ko-KR") : ""; }));
   const fields = (f) => ({ name: f.name.value.trim(), lender: f.lender.value.trim(), principal: num(f.principal.value), rate: f.rate.value.trim() ? Number(f.rate.value) : null, started_on: f.started.value || null, due_on: f.due.value || null, match: f.match ? (f.match.value.trim() || null) : null });
+  // 곳 이름으로 직접 찾기. 내가 고른 단서 낱말에 안 걸리는 부채를 위해 둔다.
+  // 찾은 거래를 그대로 보여 주고, 그 말을 match 로 걸어 부채로 등록할 수 있다.
+  const findBox = $("#cand-find");
+  if (findBox) {
+    const out = $("#cand-found");
+    const draw = () => {
+      const q = findBox.q.value.trim();
+      if (q.length < 2) { out.innerHTML = ""; return; }
+      const key = normalizePlace(q);
+      const hit = txs.filter((t) => !t.planned && t.place && normalizePlace(t.place).includes(key));
+      const outs = hit.filter((t) => t.amount < 0), ins = hit.filter((t) => t.amount > 0);
+      if (!hit.length) { out.innerHTML = `<p class="muted small">'${esc(q)}' 이 든 거래가 없어요.</p>`; return; }
+      const days = hit.map((t) => kstDay(t.occurred_at)).sort();
+      const sumOut = outs.reduce((a, t) => a - t.amount, 0), sumIn = ins.reduce((a, t) => a + t.amount, 0);
+      out.innerHTML = `<p class="muted small">${hit.length}건 · ${days[0].replaceAll("-", ".")} ~ ${days[days.length - 1].replaceAll("-", ".")}
+          ${outs.length ? ` · 나간 돈 ${won(sumOut)}` : ""}${ins.length ? ` · 들어온 돈 ${won(sumIn)}` : ""}</p>
+        <ul class="cand-txs">${hit.slice(-5).reverse().map((t) => `<li><span>${kstDay(t.occurred_at).replaceAll("-", ".")}</span>
+          <span class="cand-place">${esc(t.place)}</span><b class="${t.amount < 0 ? "" : "income"}">${signedWon(t.amount)}</b></li>`).join("")}</ul>
+        <div class="grid2">
+          <label class="field">이름<input class="input" name="name" value="${esc(q)}"></label>
+          <label class="field">원금<input class="input money" name="principal" inputmode="numeric" value="${sumIn ? sumIn.toLocaleString("ko-KR") : ""}" placeholder="0"></label>
+        </div>
+        <div class="add-as"><button class="btn primary sm" type="submit">이 말로 부채 등록</button></div>`;
+      $$("input.money", out).forEach((el) => el.addEventListener("input", () => { const n = num(el.value); el.value = n ? n.toLocaleString("ko-KR") : ""; }));
+    };
+    findBox.q.addEventListener("input", draw);
+    findBox.onsubmit = async (e) => {
+      e.preventDefault();
+      const q = findBox.q.value.trim();
+      const name = out.querySelector("[name=name]")?.value.trim() || q;
+      const principal = num(out.querySelector("[name=principal]")?.value);
+      if (!q || !principal) { toast("원금을 넣어 주세요.", "error"); return; }
+      const { error } = await sb.from("money_debts").insert({ name, lender: "", principal, match: q, sort: debts.length });
+      if (error) { toast("등록하지 못했어요.", "error"); return; }
+      toast(`'${name}' 을 등록했어요. 지난 상환도 함께 붙었어요`); rerender();
+    };
+  }
+
   // 후보를 눌러 등록하면, 그 곳 이름을 match 로 걸어 둔다.
   // 그러면 과거 상환까지 거래내역에서 저절로 붙는다.
   $$(".cand-list li[data-cand]").forEach((li) => {
@@ -1225,7 +1274,7 @@ function askPassword(what, first) {
 /** 엑셀·CSV 읽기. 비밀번호가 걸려 있으면 물어보고 풂 (xlsx는 직접 풀고, 옛 xls는 SheetJS에 비밀번호를 넘김) */
 async function readWorkbook(XLSX, file) {
   const data = new Uint8Array(await file.arrayBuffer());
-  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611261251");
+  const { isEncryptedOffice, decryptOffice, WrongPassword } = await import("./office-crypto.js?v=202611261258");
   if (isEncryptedOffice(XLSX.CFB, data)) {
     for (let first = true; ; first = false) {
       const pw = askPassword("엑셀 파일", first);
