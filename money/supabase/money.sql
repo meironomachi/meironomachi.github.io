@@ -143,6 +143,9 @@ CREATE TABLE IF NOT EXISTS public.money_debts (
   closed boolean NOT NULL DEFAULT false, sort integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- 거래내역의 곳 이름 조각. 이 말이 든 곳으로 나간 거래를 이 부채의 상환으로 본다.
+-- 비어 있으면 손으로 적은 상환만 센다.
+ALTER TABLE public.money_debts ADD COLUMN IF NOT EXISTS match text;
 CREATE TABLE IF NOT EXISTS public.money_debt_payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,

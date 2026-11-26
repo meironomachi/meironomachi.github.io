@@ -357,10 +357,75 @@ export function budgetFor(budgets, categoryId, month) {
 export const budgetAmount = (budgets, categoryId, month) =>
   budgetFor(budgets, categoryId, month)?.amount;
 
+/* ---------- 거래내역에서 부채 찾기 ---------- */
+
+/** 부채로 보이는 거래의 단서. 은행 파일의 '거래구분'과 '내용'에 흔히 찍히는 말 */
+export const DEBT_WORDS = /대출|상환|융자|차입|원리금|할부금|학자금|전세자금|주택자금|마이너스통장|카드론|loan/i;
+/** 이자만 따로 나가는 거래 */
+export const INTEREST_WORDS = /이자/;
+
+/** 부채 한 건에 딸린 상환 내역. 손으로 적은 것 + 거래내역에서 자동으로 붙은 것.
+ *
+ * debt.match 에 곳 이름을 적어 두면 그 곳으로 '나간' 거래가 모두 이 부채의 상환이
+ * 된다. 손으로 적으면서 거래를 이어 둔 것(tx_id)은 두 번 세지 않는다.
+ */
+export function debtPayments(debt, manual, txs) {
+  const mine = (manual ?? []).filter((p) => p.debt_id === debt.id);
+  if (!debt.match) return mine.slice().sort((a, b) => a.paid_on.localeCompare(b.paid_on));
+  const key = normalizePlace(debt.match);
+  const linked = new Set(mine.map((p) => p.tx_id).filter(Boolean));
+  const auto = (txs ?? [])
+    .filter((t) => isReal(t) && t.amount < 0 && !linked.has(t.id)
+      && normalizePlace(t.place ?? "").includes(key))
+    .map((t) => ({
+      id: "tx:" + t.id, debt_id: debt.id, tx_id: t.id,
+      paid_on: kstDay(t.occurred_at), amount: -t.amount,
+      // 은행 파일은 원금과 이자를 나눠 주지 않는다. '이자'라고 찍힌 거래만 이자로 본다
+      interest: INTEREST_WORDS.test((t.tx_type ?? "") + " " + (t.place ?? "")) ? -t.amount : 0,
+      memo: t.place ?? "", auto: true,
+    }));
+  return [...mine, ...auto].sort((a, b) => a.paid_on.localeCompare(b.paid_on));
+}
+
+/** 거래내역에서 '이거 부채 아닌가' 싶은 곳을 찾아 제안한다.
+ *
+ * 이미 등록한 부채가 잡아가는 곳은 뺀다. 같은 곳끼리 묶어, 나간 돈이 여러 번
+ * 되풀이되는 것부터 보여 준다 (한 번 스친 거래는 부채가 아닐 때가 많다).
+ */
+export function debtCandidates(txs, debts = [], minCount = 2) {
+  const taken = (debts ?? []).filter((d) => d.match).map((d) => normalizePlace(d.match));
+  const groups = new Map();
+  for (const t of txs ?? []) {
+    if (!isReal(t) || !t.place) continue;
+    if (!DEBT_WORDS.test((t.tx_type ?? "") + " " + t.place)) continue;
+    const key = normalizePlace(t.place);
+    if (!key || taken.some((x) => x && key.includes(x))) continue;
+    if (!groups.has(key)) groups.set(key, { key, place: t.place.trim(), out: 0, in: 0, txs: [] });
+    const g = groups.get(key);
+    g.txs.push(t);
+    if (t.amount < 0) g.out += -t.amount; else g.in += t.amount;
+  }
+  return [...groups.values()]
+    .map((g) => {
+      const days = g.txs.map((t) => kstDay(t.occurred_at)).sort();
+      const outs = g.txs.filter((t) => t.amount < 0);
+      const months = new Set(outs.map((t) => kstMonth(t.occurred_at))).size;
+      return {
+        key: g.key, place: g.place, out: g.out, in: g.in, txs: g.txs,
+        count: g.txs.length, payCount: outs.length,
+        first: days[0], last: days[days.length - 1],
+        borrowed: g.in || null,                      // 들어온 돈이 있으면 빌린 돈일 수 있다
+        monthly: months ? Math.round(g.out / months) : 0,
+      };
+    })
+    .filter((g) => g.payCount >= minCount || g.borrowed)
+    .sort((a, b) => b.out - a.out);
+}
+
 /** 아직 갚아야 할 빚을 모두 더한다. 다 갚음으로 표시한 것은 뺀다. */
-export function debtTotal(debts, payments, today) {
+export function debtTotal(debts, payments, today, txs = []) {
   const open = (debts ?? []).filter((d) => !d.closed);
-  const each = open.map((d) => ({ debt: d, st: debtStatus(d, payments ?? [], today) }));
+  const each = open.map((d) => ({ debt: d, st: debtStatus(d, debtPayments(d, payments, txs), today) }));
   const remaining = each.reduce((s, x) => s + x.st.remaining, 0);
   const thisMonth = each.reduce((s, x) => s + x.st.thisMonth, 0);
   // 가장 가까운 갚는 날 (적어 둔 것만)

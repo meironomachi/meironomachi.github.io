@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseBankRows, parseAmount, parseKstDateTime, kstDay, kstMonth, monthRange, shiftMonth, importKey, classify, normalizePlace,
-  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, budgetFor, budgetAmount, debtTotal, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
+  findCancelPairs, findTransferPairs, findManualMatch, fromScreenshotRows, parsePastedHistory, alignPdfRows, monthSummary, budgetStatus, budgetFor, budgetAmount, debtTotal, debtPayments, debtCandidates, changeRate, spendRate, accountBalance, savingDeposits, inflowByCat, frequentEntries, signedWon,
 } from "../js/money.js";
 
 // 보내 주신 카카오뱅크 캡처와 같은 모양 (내용 칸은 예시)
@@ -490,4 +490,88 @@ test("갚아야 할 빚이 없으면 0", () => {
   assert.equal(r.count, 0);
   assert.equal(r.remaining, 0);
   assert.equal(r.nextDue, null);
+});
+
+/* ---------- 거래내역에서 부채 골라내기 ---------- */
+const 거래 = (id, at, amount, place, tx_type = "") =>
+  ({ id, occurred_at: at + "T09:00:00+09:00", amount, place, tx_type });
+
+test("부채 상환이 거래내역에서 자동으로 붙는다", () => {
+  const debt = { id: "d1", match: "한국장학재단" };
+  const txs = [
+    거래("t1", "2026-09-25", -150000, "한국장학재단"),
+    거래("t2", "2026-10-25", -150000, "한국장학재단"),
+    거래("t3", "2026-10-25", -8000, "한국장학재단 이자", "이자"),
+    거래("t4", "2026-10-26", -4500, "카페"),            // 상관없는 거래
+    거래("t5", "2026-10-01", 2000000, "한국장학재단"),  // 들어온 돈은 상환이 아님
+  ];
+  const got = debtPayments(debt, [], txs);
+  assert.equal(got.length, 3);
+  assert.deepEqual(got.map((p) => p.amount), [150000, 150000, 8000]);
+  assert.equal(got.every((p) => p.auto), true);
+  assert.equal(got.every((p) => p.debt_id === "d1"), true);
+  // '이자'라고 찍힌 것만 이자로 본다
+  assert.deepEqual(got.map((p) => p.interest), [0, 0, 8000]);
+});
+
+test("손으로 적으면서 거래를 이어 둔 것은 두 번 세지 않는다", () => {
+  const debt = { id: "d1", match: "한국장학재단" };
+  const txs = [거래("t1", "2026-10-25", -150000, "한국장학재단")];
+  const manual = [{ id: "p1", debt_id: "d1", tx_id: "t1", paid_on: "2026-10-25", amount: 150000, interest: 20000 }];
+  const got = debtPayments(debt, manual, txs);
+  assert.equal(got.length, 1);
+  assert.equal(got[0].interest, 20000);   // 손으로 적은 쪽(이자까지 나눈 것)이 남는다
+});
+
+test("곳 이름을 안 걸어 두면 손으로 적은 것만", () => {
+  const debt = { id: "d1" };
+  const txs = [거래("t1", "2026-10-25", -150000, "한국장학재단")];
+  assert.equal(debtPayments(debt, [], txs).length, 0);
+});
+
+test("거래내역에서 부채 후보를 찾는다", () => {
+  const txs = [
+    거래("a1", "2026-08-25", -150000, "한국장학재단 학자금대출"),
+    거래("a2", "2026-09-25", -150000, "한국장학재단 학자금대출"),
+    거래("a3", "2026-10-25", -150000, "한국장학재단 학자금대출"),
+    거래("b1", "2026-10-05", -300000, "국민은행 전세자금 원리금"),
+    거래("b2", "2026-09-05", -300000, "국민은행 전세자금 원리금"),
+    거래("c1", "2026-10-10", -5000, "편의점"),        // 단서 없음
+    거래("d1", "2026-07-01", -20000, "무슨대출수수료"), // 한 번뿐이고 들어온 돈도 없음
+  ];
+  const got = debtCandidates(txs);
+  assert.equal(got.length, 2);
+  assert.equal(got[0].place, "국민은행 전세자금 원리금");  // 나간 돈이 많은 쪽 먼저
+  assert.equal(got[0].out, 600000);
+  assert.equal(got[1].payCount, 3);
+  assert.equal(got[1].monthly, 150000);                 // 달마다 15만 원씩
+  assert.equal(got[1].first, "2026-08-25");
+  assert.equal(got[1].last, "2026-10-25");
+});
+
+test("빌린 돈이 들어온 흔적이 있으면 한 번만 나와도 후보", () => {
+  const txs = [거래("x1", "2026-01-02", 10000000, "국민은행 대출실행")];
+  const got = debtCandidates(txs);
+  assert.equal(got.length, 1);
+  assert.equal(got[0].borrowed, 10000000);
+  assert.equal(got[0].payCount, 0);
+});
+
+test("이미 등록한 부채가 잡아가는 곳은 후보에서 뺀다", () => {
+  const txs = [
+    거래("a1", "2026-09-25", -150000, "한국장학재단 학자금대출"),
+    거래("a2", "2026-10-25", -150000, "한국장학재단 학자금대출"),
+  ];
+  assert.equal(debtCandidates(txs, [{ id: "d1", match: "한국장학재단" }]).length, 0);
+});
+
+test("남은 빚 합계도 거래내역을 본다", () => {
+  const debts = [{ id: "d1", name: "학자금", principal: 1000000, match: "한국장학재단" }];
+  const txs = [
+    거래("t1", "2026-10-25", -150000, "한국장학재단"),
+    거래("t2", "2026-11-25", -150000, "한국장학재단"),
+  ];
+  const r = debtTotal(debts, [], "2026-11-26", txs);
+  assert.equal(r.remaining, 700000);
+  assert.equal(r.thisMonth, 150000);
 });

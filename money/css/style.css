@@ -479,3 +479,12 @@ details.cat-section .cat-rows { margin-bottom: 12px; }
 .debt-mini { list-style: none; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); }
 .debt-mini li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 14px; }
 .debt-mini li span { color: var(--muted-fg); }
+
+/* 거래내역에서 찾은 부채 후보 */
+.debt-cands { margin-bottom: 16px; }
+.cand-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cand-list li { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.cand-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.cand-add { display: grid; gap: 8px; margin-top: 8px; }
+@media (min-width: 560px) { .cand-add { grid-template-columns: 1fr 1fr; align-items: end; } .cand-add .add-as { grid-column: 1 / -1; } }
+.auto-note { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 5px 9px; display: inline-block; }
