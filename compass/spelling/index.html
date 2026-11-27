@@ -1,0 +1,3755 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script id="lumi-getcssvar">
+window.getCssVar = window.getCssVar || function(name, fallback) {
+  try {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback || '';
+  } catch (e) { return fallback || ''; }
+};
+</script>
+
+<script id="lumi-chart-guard">
+(function() {
+  if (window.__lumiChartGuard) return;
+  window.__lumiChartGuard = true;
+  var fixData = function(data, opts) {
+    if (!data || !Array.isArray(data.datasets)) return;
+    var topP = opts && opts.parsing;
+    if (topP && typeof topP === 'object' && (topP.xAxisKey || topP.yAxisKey)) return;
+    var labels = Array.isArray(data.labels) ? data.labels : null;
+    data.datasets.forEach(function(ds) {
+      if (!ds || !Array.isArray(ds.data) || !ds.data.length) return;
+      var dp = ds.parsing;
+      if (dp && typeof dp === 'object' && (dp.xAxisKey || dp.yAxisKey)) return;
+      var hasXY = false, hasNull = false;
+      for (var i = 0; i < ds.data.length; i++) {
+        var pt = ds.data[i];
+        if (pt == null) hasNull = true;
+        else if (typeof pt === 'object' && !Array.isArray(pt) &&
+                 ('x' in pt || 'y' in pt)) hasXY = true;
+      }
+      if (!hasXY || !hasNull) return;
+      var repl = function(pt, i) {
+        if (pt != null) return pt;
+        var lv = labels && i < labels.length ? labels[i] : NaN;
+        var xv = (typeof lv === 'number' || typeof lv === 'string') ? lv : NaN;
+        return {x: xv, y: null};
+      };
+      if (Object.isFrozen && Object.isFrozen(ds.data)) {
+        ds.data = ds.data.map(repl);
+      } else {
+        for (var j = 0; j < ds.data.length; j++) {
+          if (ds.data[j] == null) ds.data[j] = repl(null, j);
+        }
+      }
+    });
+  };
+  var wrap = function(C) {
+    if (!C) return C;
+    if (C.__lumiGuardProxy) return C.__lumiGuardProxy;
+    if (C.__lumiIsGuardProxy) return C;
+    if (!C.__lumiDataGuard && C.prototype && typeof C.prototype.update === 'function') {
+      var ou = C.prototype.update;
+      C.prototype.update = function() {
+        try { fixData(this && this.data, this && this.options); } catch (e) {}
+        return ou.apply(this, arguments);
+      };
+      C.__lumiDataGuard = true;
+    }
+    if (typeof Proxy === 'function' && typeof C === 'function') {
+      try {
+        var px = new Proxy(C, {
+          construct: function(T, args, NT) {
+            try {
+              var cfg = args && args[1];
+              if (cfg && typeof cfg === 'object') fixData(cfg.data, cfg.options);
+            } catch (e) {}
+            return Reflect.construct(T, args, NT);
+          }
+        });
+        Object.defineProperty(C, '__lumiGuardProxy', {value: px});
+        Object.defineProperty(px, '__lumiIsGuardProxy', {value: true});
+        return px;
+      } catch (e) {}
+    }
+    return C;
+  };
+  window.__lumiWrapChart = wrap;
+  try {
+    var cur = wrap(window.Chart);
+    Object.defineProperty(window, 'Chart', {
+      configurable: true, enumerable: true,
+      get: function() { return cur; },
+      set: function(v) { cur = wrap(v); }
+    });
+  } catch (e) {}
+})();
+</script>
+
+<script id="lumi-canvas-guard">
+(function() {
+  if (window.__lumiCanvasGuard) return;
+  window.__lumiCanvasGuard = true;
+  var MAX_PX = 4096, MIN_FONT_PX = 12;
+  try {
+    var CP = HTMLCanvasElement.prototype;
+    var BOX = {width: 'clientWidth', height: 'clientHeight'}, D = {};
+    Object.keys(BOX).forEach(function(p) {
+      D[p] = Object.getOwnPropertyDescriptor(CP, p);
+    });
+    var tracking = function(el, p) {
+      var box = el[BOX[p]];
+      return !el.style[p] && box > 0 && box === D[p].get.call(el) &&
+          box === el['__lumiLast' + p];
+    };
+    var MAX = {width: 'maxWidth', height: 'maxHeight'};
+    var PAD = {width: ['paddingLeft', 'paddingRight'],
+               height: ['paddingTop', 'paddingBottom']};
+    var avail = function(el, p) {
+      var pe = el.parentElement;
+      if (!pe) return 0;
+      var cs = getComputedStyle(pe);
+      return pe[BOX[p]] - parseFloat(cs[PAD[p][0]]) -
+          parseFloat(cs[PAD[p][1]]);
+    };
+    Object.keys(BOX).forEach(function(p) {
+      var d = D[p];
+      if (!d || !d.set || !d.get) return;
+      Object.defineProperty(CP, p, {
+        configurable: true, enumerable: d.enumerable, get: d.get,
+        set: function(v) {
+          var n = +v, box = this[BOX[p]];
+          if (n > MAX_PX) n = MAX_PX;
+          if (n > box && tracking(this, p)) {
+            var el = this, pins = {};
+            Object.keys(BOX).forEach(function(q) {
+              if (tracking(el, q)) pins[q] = avail(el, q) ||
+                  el['__lumiBox' + q];
+            });
+            Object.keys(pins).forEach(function(q) {
+              el.style[q] = '100%';
+              el.style[MAX[q]] = pins[q] + 'px';
+            });
+            n = box;
+          }
+          this['__lumiBox' + p] = box;
+          this['__lumiLast' + p] = n;
+          d.set.call(this, isNaN(n) ? v : n);
+        }
+      });
+    });
+  } catch (e) {}
+  try {
+    var XP = CanvasRenderingContext2D.prototype;
+    var px = /(\d*\.?\d+)px/;
+    var floorFont = function(ctx) {
+      var f = ctx.font, m = px.exec(f);
+      if (m && +m[1] >= 4 && +m[1] < MIN_FONT_PX) ctx.font = f.replace(px, MIN_FONT_PX + 'px');
+    };
+    ['fillText', 'strokeText', 'measureText'].forEach(function(k) {
+      var o = XP[k];
+      if (typeof o !== 'function') return;
+      XP[k] = function() { floorFont(this); return o.apply(this, arguments); };
+    });
+  } catch (e) {}
+})();
+</script>
+
+<style id="lumi-runtime">
+/* luminous.css */
+/*
+ * Luminous runtime stylesheet — injected once into every generated widget's
+ * <head> by the C++ widget agent (id="lumi-runtime"). Single Source of Truth
+ * for ALL design tokens and pre-baked .lumi-* component classes. The SI prompts
+ * (design.md / html_generation.jinja2 / chart.jinja2) must NOT re-declare these
+ * tokens or component CSS; they only reference them.
+ *
+ * Sections:
+ *   1. Web fonts (Google Sans Flex + Google Sans Code)
+ *   2. Light token :root (from previewer tokens.css, verbatim)
+ *   3. Dark token overrides — REMAPPED to :root so canvas/D3 readers of
+ *      getComputedStyle(document.documentElement) resolve dark values (D3).
+ *   4. Short diagram/chart aliases (bridge legacy --surface / --chart-N names).
+ *   5. In-scope pre-baked .lumi-* component classes.
+ */
+
+/* ============================================================
+ * 1. WEB FONTS & ICONOGRAPHY
+ *    Loads Google Sans Flex, Google Sans Code, and Material Symbols Outlined.
+ *    Enforces the dual-class iconography rendering protocol.
+ * ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:ital,wght@0,300..700;1,300..700&family=Google+Sans+Code:ital,wght,MONO@0,300..700,0..1;1,300..700,0..1&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+
+/* Dual-Class Iconography */
+.lumi-icon {
+  font-family: 'Luminous Symbols', 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+}
+
+.material-icon {
+  font-family: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+}
+
+/* ============================================================
+ * 2. LIGHT TOKENS (:root)
+ * ============================================================ */
+:root {
+  color-scheme: light;
+  --body-bg: transparent;
+  --ff-sans: 'Google Sans Flex', 'Google Sans Text', 'Google Sans', sans-serif;
+  --ff-mono: 'Google Sans Code', 'Google Sans Mono', monospace;
+
+  --lumi-sys-spacing--xxs: 2px;
+  --lumi-sys-spacing--xs: 4px;
+  --lumi-sys-spacing--s: 8px;
+  --lumi-sys-spacing--m: 12px;
+  --lumi-sys-spacing--l: 16px;
+  --lumi-sys-spacing--xl: 20px;
+  --lumi-sys-spacing--xxl: 24px;
+  --lumi-sys-spacing--3xl: 28px;
+  --lumi-sys-spacing--4xl: 36px;
+
+  --lumi-sys-shape--none: 0px;
+  --lumi-sys-shape--extra-small: 4px;
+  --lumi-sys-shape--small: 8px;
+  --lumi-sys-shape--medium: 12px;
+  --lumi-sys-shape--large: 16px;
+  --lumi-sys-shape--large-increased: 20px;
+  --lumi-sys-shape--large-max: 24px;
+  --lumi-sys-shape--xl: 28px;
+  --lumi-sys-shape--xl-increased: 32px;
+  --lumi-sys-shape--xl-max: 40px;
+  --lumi-sys-shape--xxl: 48px;
+  --lumi-sys-shape--xxl-increased: 56px;
+  --lumi-sys-shape--full: 999px;
+
+  --lumi-sys-elevation--level1: 0 0 20px 0 rgba(0, 0, 0, 0.04);
+  --lumi-sys-elevation--level2: 0 0 20px 0 rgba(0, 0, 0, 0.11);
+
+  --lumi-sys-color--surface: #fdfcfc;
+  --lumi-sys-color--surface-dim: #f2f0f0;
+  --lumi-sys-color--surface-bright: #ffffff;
+  --lumi-sys-color--surface-background: #fdfcfc;
+  --lumi-sys-color--surface-accent: #9dd2ff;
+  --lumi-sys-color--surface-container: #f2f0f0;
+  --lumi-sys-color--surface-container-high: #e6e6e6;
+  --lumi-sys-color--surface-translucent: rgba(255, 255, 255, 0.88);
+  --lumi-sys-color--on-surface: #000000;
+  --lumi-sys-color--on-surface-default: #000000;
+  --lumi-sys-color--on-surface-variant: rgba(0, 0, 0, 0.62);
+  --lumi-sys-color--on-surface-de-emphasis: rgba(0, 0, 0, 0.62);
+  --lumi-sys-color--on-surface-low: rgba(0, 0, 0, 0.08);
+  --lumi-sys-color--positive: #008052;
+  --lumi-sys-color--positive-container: #daf9d4;
+  --lumi-sys-color--on-positive-container: #009954;
+  --lumi-sys-color--error: #de2d29;
+  --lumi-sys-color--error-container: #ffdeec;
+  --lumi-sys-color--on-error-container: #de2d29;
+  --lumi-sys-color--accent: #9dd2ff;
+  --lumi-sys-color--accent-container: #dcf1ff;
+  --lumi-sys-color--accent-fixed: #3186ff;
+  --lumi-sys-color--primary: #3186ff;
+  --lumi-sys-color--on-primary: #ffffff;
+  --lumi-sys-color--black: #000000;
+  --lumi-sys-color--white: #ffffff;
+  --lumi-sys-color--outline: #727676;
+  --lumi-sys-color--stroke-default: #e3e3e3;
+
+  /* --- Luminous Typography Tokens: Display (Carbon SSoT) --- */
+  --lumi-sys-typography-type-scale--display-l-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--display-l-font-size: 2.625rem;
+  --lumi-sys-typography-type-scale--display-l-line-height: 3rem;
+  --lumi-sys-typography-type-scale--display-l-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--display-l-font-weight: 280;
+  --lumi-sys-typography-type-scale--display-l-font-wght: 280;
+  --lumi-sys-typography-type-scale--display-l-font-width: 100;
+  --lumi-sys-typography-type-scale--display-l-font-rond: 100;
+  --lumi-sys-typography-type-scale--display-l-opsz: 42;
+
+  --lumi-sys-typography-type-scale--display-m-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--display-m-font-size: 2.25rem;
+  --lumi-sys-typography-type-scale--display-m-line-height: 2.75rem;
+  --lumi-sys-typography-type-scale--display-m-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--display-m-font-weight: 320;
+  --lumi-sys-typography-type-scale--display-m-font-wght: 320;
+  --lumi-sys-typography-type-scale--display-m-font-width: 100;
+  --lumi-sys-typography-type-scale--display-m-font-rond: 100;
+  --lumi-sys-typography-type-scale--display-m-opsz: 36;
+
+  --lumi-sys-typography-type-scale--display-s-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--display-s-font-size: 2rem;
+  --lumi-sys-typography-type-scale--display-s-line-height: 2.375rem;
+  --lumi-sys-typography-type-scale--display-s-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--display-s-font-weight: 360;
+  --lumi-sys-typography-type-scale--display-s-font-wght: 360;
+  --lumi-sys-typography-type-scale--display-s-font-width: 100;
+  --lumi-sys-typography-type-scale--display-s-font-rond: 100;
+  --lumi-sys-typography-type-scale--display-s-opsz: 32;
+
+  /* --- Luminous Typography Tokens: Headline (Carbon SSoT) --- */
+  --lumi-sys-typography-type-scale--headline-l-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--headline-l-font-size: 1.75rem;
+  --lumi-sys-typography-type-scale--headline-l-line-height: 2.25rem;
+  --lumi-sys-typography-type-scale--headline-l-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--headline-l-font-weight: 350;
+  --lumi-sys-typography-type-scale--headline-l-font-wght: 350;
+  --lumi-sys-typography-type-scale--headline-l-font-width: 100;
+  --lumi-sys-typography-type-scale--headline-l-font-rond: 20;
+  --lumi-sys-typography-type-scale--headline-l-opsz: 28;
+
+  --lumi-sys-typography-type-scale--headline-m-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--headline-m-font-size: 1.5rem;
+  --lumi-sys-typography-type-scale--headline-m-line-height: 1.75rem;
+  --lumi-sys-typography-type-scale--headline-m-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--headline-m-font-weight: 380;
+  --lumi-sys-typography-type-scale--headline-m-font-wght: 380;
+  --lumi-sys-typography-type-scale--headline-m-font-width: 100;
+  --lumi-sys-typography-type-scale--headline-m-font-rond: 20;
+  --lumi-sys-typography-type-scale--headline-m-opsz: 24;
+
+  --lumi-sys-typography-type-scale--headline-s-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--headline-s-font-size: 1.25rem;
+  --lumi-sys-typography-type-scale--headline-s-line-height: 1.5rem;
+  --lumi-sys-typography-type-scale--headline-s-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--headline-s-font-weight: 470;
+  --lumi-sys-typography-type-scale--headline-s-font-wght: 470;
+  --lumi-sys-typography-type-scale--headline-s-font-width: 94;
+  --lumi-sys-typography-type-scale--headline-s-font-rond: 20;
+  --lumi-sys-typography-type-scale--headline-s-opsz: 20;
+
+  /* --- Luminous Typography Tokens: Body (Carbon SSoT) --- */
+  --lumi-sys-typography-type-scale--body-l-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--body-l-font-size: 1.0625rem;
+  --lumi-sys-typography-type-scale--body-l-line-height: 1.5rem;
+  --lumi-sys-typography-type-scale--body-l-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--body-l-font-weight: 400;
+  --lumi-sys-typography-type-scale--body-l-font-wght: 400;
+  --lumi-sys-typography-type-scale--body-l-font-width: 92;
+  --lumi-sys-typography-type-scale--body-l-font-rond: 0;
+  --lumi-sys-typography-type-scale--body-l-opsz: 17;
+
+  --lumi-sys-typography-type-scale--body-m-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--body-m-font-size: 0.9375rem;
+  --lumi-sys-typography-type-scale--body-m-line-height: 1.25rem;
+  --lumi-sys-typography-type-scale--body-m-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--body-m-font-weight: 400;
+  --lumi-sys-typography-type-scale--body-m-font-wght: 400;
+  --lumi-sys-typography-type-scale--body-m-font-width: 92;
+  --lumi-sys-typography-type-scale--body-m-font-rond: 0;
+  --lumi-sys-typography-type-scale--body-m-opsz: 15;
+
+  --lumi-sys-typography-type-scale--body-s-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--body-s-font-size: 0.8125rem;
+  --lumi-sys-typography-type-scale--body-s-line-height: 1.0625rem;
+  --lumi-sys-typography-type-scale--body-s-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--body-s-font-weight: 400;
+  --lumi-sys-typography-type-scale--body-s-font-wght: 400;
+  --lumi-sys-typography-type-scale--body-s-font-width: 92;
+  --lumi-sys-typography-type-scale--body-s-font-rond: 0;
+  --lumi-sys-typography-type-scale--body-s-opsz: 13;
+
+  /* --- Luminous Typography Tokens: Label (Carbon SSoT) --- */
+  --lumi-sys-typography-type-scale--label-l-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--label-l-font-size: 1.0625rem;
+  --lumi-sys-typography-type-scale--label-l-line-height: 1.5rem;
+  --lumi-sys-typography-type-scale--label-l-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--label-l-font-weight: 370;
+  --lumi-sys-typography-type-scale--label-l-font-wght: 370;
+  --lumi-sys-typography-type-scale--label-l-font-width: 92;
+  --lumi-sys-typography-type-scale--label-l-font-rond: 0;
+  --lumi-sys-typography-type-scale--label-l-opsz: 17;
+
+  --lumi-sys-typography-type-scale--label-m-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--label-m-font-size: 0.9375rem;
+  --lumi-sys-typography-type-scale--label-m-line-height: 1.25rem;
+  --lumi-sys-typography-type-scale--label-m-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--label-m-font-weight: 370;
+  --lumi-sys-typography-type-scale--label-m-font-wght: 370;
+  --lumi-sys-typography-type-scale--label-m-font-width: 92;
+  --lumi-sys-typography-type-scale--label-m-font-rond: 0;
+  --lumi-sys-typography-type-scale--label-m-opsz: 15;
+
+  --lumi-sys-typography-type-scale--label-s-font-name: 'Google Sans Flex';
+  --lumi-sys-typography-type-scale--label-s-font-size: 0.8125rem;
+  --lumi-sys-typography-type-scale--label-s-line-height: 1.25rem;
+  --lumi-sys-typography-type-scale--label-s-font-tracking: 0rem;
+  --lumi-sys-typography-type-scale--label-s-font-weight: 370;
+  --lumi-sys-typography-type-scale--label-s-font-wght: 370;
+  --lumi-sys-typography-type-scale--label-s-font-width: 92;
+  --lumi-sys-typography-type-scale--label-s-font-rond: 0;
+  --lumi-sys-typography-type-scale--label-s-opsz: 13;
+
+  --lumi-sys-opacity-state--hover: 0.08;
+  --lumi-sys-opacity-state--focus: 0.08;
+  --lumi-sys-opacity-state--pressed: 0.12;
+  --lumi-sys-opacity-state--disabled: 0.12;
+  --lumi-sys-opacity-state--disabled-label: 0.38;
+
+  --lumi-sys-color--code-background: #000000;
+  --lumi-sys-color--code-primary-text: #ffffff;
+  --lumi-sys-color--code-blue-text: #4fa0ff;
+  --lumi-sys-color--code-green-text: #60d673;
+  --lumi-sys-color--code-grey-text: #808080;
+  --lumi-sys-color--code-pink-text: #ff96da;
+  --lumi-sys-color--code-purple-text: #969dff;
+  --lumi-sys-color--code-red-text: #ff5a59;
+  --lumi-sys-color--code-yellow-text: #ffdb0f;
+
+  --lumi-sys-color--chart-series-1: #2575fc;
+  --lumi-sys-color--chart-series-2: #5b6e9e;
+  --lumi-sys-color--chart-series-3: #228a49;
+  --lumi-sys-color--chart-series-4: #62991b;
+  --lumi-sys-color--chart-series-5: #1e564d;
+  --lumi-sys-color--chart-series-6: #526a45;
+  --lumi-sys-color--chart-series-7: #2780c4;
+  --lumi-sys-color--chart-series-8: #997112;
+  --lumi-sys-color--chart-series-9: #705ec2;
+  --lumi-sys-color--chart-series-10: #c84288;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* ============================================================
+ * 3. DARK TOKENS  (REMAPPED to :root — Decision D3)
+ *    Canvas / Chart.js / D3 read getComputedStyle(document.documentElement);
+ *    the theme-sync listener sets data-theme="dark" on <html>, so dark values
+ *    MUST live on :root (not scoped to body) to prevent black-chart regressions.
+ * ============================================================ */
+:root[data-theme="dark"],
+:root:not([data-theme="light"]):has(> body.dark-mode),
+body.dark-mode,
+:root[data-theme="dark"] body {
+  color-scheme: dark;
+  --body-bg: transparent;
+  --lumi-sys-elevation--level1: 0 0 20px 0 rgba(0, 0, 0, 0.28);
+  --lumi-sys-elevation--level2: 0 0 20px 0 rgba(0, 0, 0, 0.40);
+
+  --lumi-sys-color--surface: #0f0f0f;
+  --lumi-sys-color--surface-dim: #141414;
+  --lumi-sys-color--surface-bright: #1c1c1c;
+  --lumi-sys-color--surface-background: #0f0f0f;
+  --lumi-sys-color--surface-accent: #14204f;
+  --lumi-sys-color--surface-container: #141414;
+  --lumi-sys-color--surface-container-high: #1c1c1c;
+  --lumi-sys-color--surface-translucent: rgba(24, 24, 27, 0.88);
+  --lumi-sys-color--on-surface: #e0e0e0;
+  --lumi-sys-color--on-surface-default: #e0e0e0;
+  --lumi-sys-color--on-surface-variant: rgba(255, 255, 255, 0.55);
+  --lumi-sys-color--on-surface-de-emphasis: rgba(255, 255, 255, 0.55);
+  --lumi-sys-color--on-surface-low: rgba(255, 255, 255, 0.12);
+  --lumi-sys-color--positive: #0ebc5f;
+  --lumi-sys-color--positive-container: #002220;
+  --lumi-sys-color--on-positive-container: #0ebc5f;
+  --lumi-sys-color--error: #ff4c45;
+  --lumi-sys-color--error-container: #3c0202;
+  --lumi-sys-color--on-error-container: #ff4c45;
+  --lumi-sys-color--accent: #1f3b9b;
+  --lumi-sys-color--accent-container: #192967;
+  --lumi-sys-color--accent-fixed: #3186ff;
+  --lumi-sys-color--primary: #9dd2ff;
+  --lumi-sys-color--on-primary: #192967;
+  --lumi-sys-color--black: #000000;
+  --lumi-sys-color--white: #ffffff;
+  --lumi-sys-color--outline: #9a9b9c;
+  --lumi-sys-color--stroke-default: #2d2f38;
+
+  --lumi-sys-color--code-background: #141414;
+  --lumi-sys-color--code-primary-text: #ffffff;
+  --lumi-sys-color--code-blue-text: #4fa0ff;
+  --lumi-sys-color--code-green-text: #60d673;
+  --lumi-sys-color--code-grey-text: #808080;
+  --lumi-sys-color--code-pink-text: #ff96da;
+  --lumi-sys-color--code-purple-text: #969dff;
+  --lumi-sys-color--code-red-text: #ff5a59;
+  --lumi-sys-color--code-yellow-text: #ffdb0f;
+
+  --lumi-sys-color--chart-series-1: #9dd2ff;
+  --lumi-sys-color--chart-series-2: #96a7d6;
+  --lumi-sys-color--chart-series-3: #50e389;
+  --lumi-sys-color--chart-series-4: #c8f585;
+  --lumi-sys-color--chart-series-5: #f5f2e6;
+  --lumi-sys-color--chart-series-6: #dcd8c0;
+  --lumi-sys-color--chart-series-7: #82c7ff;
+  --lumi-sys-color--chart-series-8: #f5d77f;
+  --lumi-sys-color--chart-series-9: #d9ceff;
+  --lumi-sys-color--chart-series-10: #ffa6d7;
+}
+
+/* ============================================================
+ * 3b. OS-LEVEL DARK FALLBACK  (prefers-color-scheme)
+ *     A prior refactor introduced this stylesheet and moved the dark tokens onto
+ *     :root[data-theme="dark"], but dropped the @media (prefers-color-scheme:
+ *     dark) trigger that widgets previously carried in their own <style>.
+ *     Inline widgets whose host sends no set-theme / data-theme message therefore
+ *     stayed on the light --surface (#fdfcfc), rendering white in dark mode.
+ *     Re-apply the dark values on OS dark; an explicit host data-theme="light"
+ *     still opts back to light. Keep in sync with the :root[data-theme="dark"]
+ *     block above.
+ * ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --body-bg: transparent;
+    --lumi-sys-elevation--level1: 0 0 20px 0 rgba(0, 0, 0, 0.28);
+    --lumi-sys-elevation--level2: 0 0 20px 0 rgba(0, 0, 0, 0.40);
+
+    --lumi-sys-color--surface: #0f0f0f;
+    --lumi-sys-color--surface-dim: #141414;
+    --lumi-sys-color--surface-bright: #1c1c1c;
+    --lumi-sys-color--surface-background: #0f0f0f;
+    --lumi-sys-color--surface-accent: #14204f;
+    --lumi-sys-color--surface-container: #141414;
+    --lumi-sys-color--surface-container-high: #1c1c1c;
+    --lumi-sys-color--surface-translucent: rgba(24, 24, 27, 0.88);
+    --lumi-sys-color--on-surface: #e0e0e0;
+    --lumi-sys-color--on-surface-default: #e0e0e0;
+    --lumi-sys-color--on-surface-variant: rgba(255, 255, 255, 0.55);
+    --lumi-sys-color--on-surface-de-emphasis: rgba(255, 255, 255, 0.55);
+    --lumi-sys-color--on-surface-low: rgba(255, 255, 255, 0.12);
+    --lumi-sys-color--positive: #0ebc5f;
+    --lumi-sys-color--positive-container: #002220;
+    --lumi-sys-color--on-positive-container: #0ebc5f;
+    --lumi-sys-color--error: #ff4c45;
+    --lumi-sys-color--error-container: #3c0202;
+    --lumi-sys-color--on-error-container: #ff4c45;
+    --lumi-sys-color--accent: #1f3b9b;
+    --lumi-sys-color--accent-container: #192967;
+    --lumi-sys-color--accent-fixed: #3186ff;
+    --lumi-sys-color--primary: #9dd2ff;
+    --lumi-sys-color--on-primary: #192967;
+    --lumi-sys-color--black: #000000;
+    --lumi-sys-color--white: #ffffff;
+    --lumi-sys-color--outline: #9a9b9c;
+    --lumi-sys-color--stroke-default: #2d2f38;
+
+    --lumi-sys-color--code-background: #141414;
+    --lumi-sys-color--code-primary-text: #ffffff;
+    --lumi-sys-color--code-blue-text: #4fa0ff;
+    --lumi-sys-color--code-green-text: #60d673;
+    --lumi-sys-color--code-grey-text: #808080;
+    --lumi-sys-color--code-pink-text: #ff96da;
+    --lumi-sys-color--code-purple-text: #969dff;
+    --lumi-sys-color--code-red-text: #ff5a59;
+    --lumi-sys-color--code-yellow-text: #ffdb0f;
+
+    --lumi-sys-color--chart-series-1: #9dd2ff;
+    --lumi-sys-color--chart-series-2: #96a7d6;
+    --lumi-sys-color--chart-series-3: #50e389;
+    --lumi-sys-color--chart-series-4: #c8f585;
+    --lumi-sys-color--chart-series-5: #f5f2e6;
+    --lumi-sys-color--chart-series-6: #dcd8c0;
+    --lumi-sys-color--chart-series-7: #82c7ff;
+    --lumi-sys-color--chart-series-8: #f5d77f;
+    --lumi-sys-color--chart-series-9: #d9ceff;
+    --lumi-sys-color--chart-series-10: #ffa6d7;
+  }
+}
+
+/* Dark mode slider thumb override */
+:root[data-theme="dark"] .lumi-slider::-webkit-slider-thumb,
+body.dark-mode .lumi-slider::-webkit-slider-thumb {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect x='14' y='6' width='4' height='20' rx='2' fill='%23ffffff'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .lumi-slider::-webkit-slider-thumb {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect x='14' y='6' width='4' height='20' rx='2' fill='%23ffffff'/%3E%3C/svg%3E");
+  }
+}
+
+/* ============================================================
+ * 4. SHORT DIAGRAM / CHART ALIASES
+ *    Legacy diagram.md and chart.jinja2 reference short names such as
+ *    --surface, --on-surface, --chart-1..10, --primary, --r-full. These MUST
+ *    resolve to the canonical --lumi-sys-color--* tokens (which flip in dark
+ *    mode) — otherwise every diagram var() falls back to black (historical
+ *    mass-regression bug #4). Light-hex fallbacks are a last resort only.
+ * ============================================================ */
+:root {
+  /* surfaces */
+  --surface: var(--lumi-sys-color--surface, #fdfcfc);
+  --surface-dim: var(--lumi-sys-color--surface-dim, #f2f0f0);
+  --surface-bright: var(--lumi-sys-color--surface-bright, #ffffff);
+  --surface-container: var(--lumi-sys-color--surface-container, #f2f0f0);
+  --surface-container-high: var(--lumi-sys-color--surface-container-high, #e6e6e6);
+  --surface-container-lowest: var(--lumi-sys-color--surface, #ffffff);
+  --surface-accent: var(--lumi-sys-color--surface-accent, #9dd2ff);
+  --surface-translucent: var(--lumi-sys-color--surface-translucent, rgba(255, 255, 255, 0.88));
+  --surface-glass: var(--lumi-sys-color--surface-translucent, rgba(255, 255, 255, 0.88));
+  /* foreground */
+  --on-surface: var(--lumi-sys-color--on-surface, #000000);
+  --on-surface-variant: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62));
+  --on-surface-low: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08));
+  /* accents / brand */
+  --primary: var(--lumi-sys-color--primary, #3186ff);
+  --primary-container: var(--lumi-sys-color--accent-container, #dcf1ff);
+  --accent: var(--lumi-sys-color--accent, #9dd2ff);
+  --accent-container: var(--lumi-sys-color--accent-container, #dcf1ff);
+  --accent-fixed: var(--lumi-sys-color--accent-fixed, #3186ff);
+  /* status */
+  --positive: var(--lumi-sys-color--positive, #008052);
+  --positive-container: var(--lumi-sys-color--positive-container, #daf9d4);
+  --error: var(--lumi-sys-color--error, #de2d29);
+  --error-container: var(--lumi-sys-color--error-container, #ffdeec);
+  /* structure */
+  --outline: var(--lumi-sys-color--outline, #727676);
+  --stroke-default: var(--lumi-sys-color--stroke-default, #e3e3e3);
+  /* chart series 1..10 */
+  --chart-1: var(--lumi-sys-color--chart-series-1, #2575fc);
+  --chart-2: var(--lumi-sys-color--chart-series-2, #5b6e9e);
+  --chart-3: var(--lumi-sys-color--chart-series-3, #228a49);
+  --chart-4: var(--lumi-sys-color--chart-series-4, #62991b);
+  --chart-5: var(--lumi-sys-color--chart-series-5, #1e564d);
+  --chart-6: var(--lumi-sys-color--chart-series-6, #526a45);
+  --chart-7: var(--lumi-sys-color--chart-series-7, #2780c4);
+  --chart-8: var(--lumi-sys-color--chart-series-8, #997112);
+  --chart-9: var(--lumi-sys-color--chart-series-9, #705ec2);
+  --chart-10: var(--lumi-sys-color--chart-series-10, #c84288);
+  /* code palette */
+  --code-background: var(--lumi-sys-color--code-background, #000000);
+  --code-primary-text: var(--lumi-sys-color--code-primary-text, #ffffff);
+  /* spacing shorthands */
+  --spacing-xs: var(--lumi-sys-spacing--xs, 4px);
+  --spacing-s: var(--lumi-sys-spacing--s, 8px);
+  --spacing-m: var(--lumi-sys-spacing--m, 12px);
+  --spacing-l: var(--lumi-sys-spacing--l, 16px);
+  --spacing-xl: var(--lumi-sys-spacing--xl, 20px);
+  /* radius shorthands */
+  --r-container: var(--lumi-sys-shape--xl-max, 40px);
+  --r-xl: var(--lumi-sys-shape--xl, 28px);
+  --r-l: var(--lumi-sys-shape--large-max, 24px);
+  --r-m: var(--lumi-sys-shape--large, 16px);
+  --r-s: var(--lumi-sys-shape--small, 8px);
+  --r-full: var(--lumi-sys-shape--full, 999px);
+}
+
+/* ============================================================
+ * 5. IN-SCOPE PRE-BAKED COMPONENT CLASSES
+ *    Interactive controls + simple display components only (Decision D5).
+ *    Complex components (timeline, sequence, stepper, pros-cons, hero, HUD,
+ *    hotspot, media grid) are intentionally excluded.
+ * ============================================================ */
+
+/* Global font rendering quality + transparent root backdrop.
+ * Keep --body-bg transparent in both light and dark modes so inline widgets
+ * blend into both desktop (#0f0f0f) and mobile / <960px (#000000) host
+ * surfaces. Matching :root color-scheme rules prevent Chromium from painting an
+ * opaque white canvas behind transparent dark-mode iframes (b/566242402). */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  background: var(--body-bg, transparent) !important;
+  color: var(--on-surface) !important;
+  /* Auto-resizing iframe: content grows the frame, never scrolls the document.
+   * Model widgets already emit this; declared here as the SSoT default. */
+  overflow-y: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+.widget-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-inline: 0 !important;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+ * SCROLLBAR DISCIPLINE (single source of truth)
+ *   Long lists/cards flow and let the iframe auto-resize (see the C++
+ *   NeutralizeInnerScroll pass, which removes accidental tiny scroll boxes).
+ *   For LEGITIMATE overflow that remains (wide tables, code, pan-containers,
+ *   large >=240px viewports) render a slim, theme-aware scrollbar.
+ *   One token carries the correct light/dark contrast (the auto-flipped
+ *   stroke token is too dark on #0f0f0f), referenced once = SSoT.
+ * ============================================================ */
+:root { --lumi-scrollbar-thumb: rgba(0, 0, 0, 0.20); }
+:root[data-theme="dark"], body.dark-mode { --lumi-scrollbar-thumb: rgba(255, 255, 255, 0.20); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --lumi-scrollbar-thumb: rgba(255, 255, 255, 0.20); }
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--lumi-scrollbar-thumb) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--lumi-scrollbar-thumb);
+  border-radius: var(--lumi-sys-shape--full, 999px);
+}
+
+/* --- Buttons --- */
+/* Universal button fallback (element specificity 0,0,1) — beats `* { padding: 0 }`
+   author resets (0,0,0) while still yielding to any author class selector (0,1,0). */
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lumi-sys-spacing--xs, 6px);
+  min-height: 36px;
+  padding: 6px 16px;
+  font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--on-surface, #000000);
+  background-color: var(--surface-bright, #ffffff);
+  border: 1px solid var(--stroke-default, #e3e3e3);
+  border-radius: var(--lumi-sys-shape--full, 999px);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+button:hover {
+  background-color: var(--surface-container-high, #e6e6e6);
+}
+button.active, button.is-active, button.selected, button.is-selected, button[aria-pressed="true"], button[aria-selected="true"], button[aria-checked="true"] {
+  background-color: var(--accent-container, #dcf1ff);
+  color: var(--lumi-sys-color--on-surface-default, #000000);
+  border-color: var(--lumi-sys-color--primary, #3186ff);
+}
+
+.lumi-btn, [class^="lumi-btn-"], [class*=" lumi-btn-"] { display: inline-flex; align-items: center; justify-content: center; gap: var(--lumi-sys-spacing--s, 8px); min-height: 40px; padding: 0px 20px; font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 14px; font-weight: 500; line-height: 20px; border-radius: var(--lumi-sys-shape--full, 999px); border: 1px solid var(--lumi-sys-color--stroke-default, #e3e3e3); cursor: pointer; user-select: none; transition: background-color 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s; text-decoration: none; box-sizing: border-box; white-space: nowrap; }
+.lumi-btn:active, .lumi-btn.is-pressed, [class^="lumi-btn-"]:active, [class*=" lumi-btn-"]:active { transform: scale(0.98); }
+.lumi-btn--tonal, .lumi-btn-tonal, .lumi-btn--secondary, .lumi-btn-secondary, [class^="lumi-btn-"], [class*=" lumi-btn-"] { background-color: var(--lumi-sys-color--surface-bright, #ffffff); color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-btn--tonal:hover, .lumi-btn-tonal:hover, .lumi-btn--secondary:hover, .lumi-btn-secondary:hover, [class^="lumi-btn-"]:hover, [class*=" lumi-btn-"]:hover { background-color: var(--lumi-sys-color--surface-container-high, #e6e6e6); }
+.lumi-btn--accent, .lumi-btn-accent, .lumi-btn--primary, .lumi-btn-primary { background-color: var(--lumi-sys-color--accent, #9dd2ff); color: var(--lumi-sys-color--on-surface-default, #000000); border-color: transparent; }
+.lumi-btn--accent:hover, .lumi-btn-accent:hover, .lumi-btn--primary:hover, .lumi-btn-primary:hover { background-color: var(--lumi-sys-color--accent-container, #dcf1ff); }
+.lumi-btn--bright, .lumi-btn-bright { background-color: var(--lumi-sys-color--surface-bright, #ffffff); color: var(--lumi-sys-color--on-surface-default, #000000); border-color: var(--lumi-sys-color--stroke-default, #e3e3e3); box-shadow: none; }
+.lumi-btn--bright:hover, .lumi-btn-bright:hover { background-color: var(--lumi-sys-color--surface-container-high, #e6e6e6); }
+.lumi-btn--ghost, .lumi-btn-ghost, .lumi-btn--on-surface { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.04)); color: var(--lumi-sys-color--on-surface-default, #000000); border-color: transparent; }
+.lumi-btn--ghost:hover, .lumi-btn-ghost:hover, .lumi-btn--on-surface:hover { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-btn--translucent { background-color: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px); color: var(--lumi-sys-color--on-surface-default, #000000); border-color: rgba(255, 255, 255, 0.3); }
+.lumi-btn--translucent:hover { background-color: rgba(255, 255, 255, 0.35); }
+.lumi-btn--small, .lumi-btn-small { min-height: 36px; padding: 0px 16px; font-size: 13px; line-height: 18px; gap: var(--lumi-sys-spacing--xs, 4px); }
+.lumi-btn--xsmall, .lumi-btn-xsmall { min-height: 24px; padding: 0px 10px; font-size: 11px; line-height: 16px; gap: 4px; }
+/* Toggleable Buttons */
+.lumi-btn.is-selected,
+.lumi-btn.selected,
+.lumi-btn.is-active,
+.lumi-btn.active,
+.lumi-btn[aria-pressed="true"],
+.lumi-btn[aria-selected="true"],
+.lumi-btn[aria-checked="true"] {
+  background-color: var(--lumi-sys-color--accent-container, #dcf1ff);
+  color: var(--lumi-sys-color--on-surface-default, #000000);
+  border: 1px solid var(--lumi-sys-color--primary, #3186ff);
+  box-shadow: none;
+}
+.lumi-btn.is-selected:hover,
+.lumi-btn.selected:hover,
+.lumi-btn.is-active:hover,
+.lumi-btn.active:hover,
+.lumi-btn[aria-pressed="true"]:hover,
+.lumi-btn[aria-selected="true"]:hover,
+.lumi-btn[aria-checked="true"]:hover {
+  background-color: var(--lumi-sys-color--accent, #9dd2ff);
+  color: var(--lumi-sys-color--on-surface-default, #000000);
+}
+.lumi-btn.is-selected:active,
+.lumi-btn.selected:active,
+.lumi-btn.is-active:active,
+.lumi-btn.active:active,
+.lumi-btn[aria-pressed="true"]:active,
+.lumi-btn[aria-selected="true"]:active,
+.lumi-btn[aria-checked="true"]:active {
+  transform: scale(0.98);
+}
+
+:root[data-theme="dark"] .lumi-btn.is-selected,
+:root[data-theme="dark"] .lumi-btn.selected,
+:root[data-theme="dark"] .lumi-btn.is-active,
+:root[data-theme="dark"] .lumi-btn.active,
+:root[data-theme="dark"] .lumi-btn[aria-pressed="true"],
+:root[data-theme="dark"] .lumi-btn[aria-selected="true"],
+:root[data-theme="dark"] .lumi-btn[aria-checked="true"],
+body.dark-mode .lumi-btn.is-selected,
+body.dark-mode .lumi-btn.selected,
+body.dark-mode .lumi-btn.is-active,
+body.dark-mode .lumi-btn.active,
+body.dark-mode .lumi-btn[aria-pressed="true"],
+body.dark-mode .lumi-btn[aria-selected="true"],
+body.dark-mode .lumi-btn[aria-checked="true"],
+.lumi-theme-dark .lumi-btn.is-selected,
+.lumi-theme-dark .lumi-btn.selected,
+.lumi-theme-dark .lumi-btn.is-active,
+.lumi-theme-dark .lumi-btn.active,
+.lumi-theme-dark .lumi-btn[aria-pressed="true"],
+.lumi-theme-dark .lumi-btn[aria-selected="true"],
+.lumi-theme-dark .lumi-btn[aria-checked="true"] {
+  background-color: var(--lumi-sys-color--accent-container, #192967);
+  color: var(--lumi-sys-color--on-surface-default, #e0e0e0);
+  border: 1px solid var(--lumi-sys-color--primary, #9dd2ff);
+  box-shadow: none;
+}
+:root[data-theme="dark"] .lumi-btn.is-selected:hover,
+:root[data-theme="dark"] .lumi-btn.selected:hover,
+:root[data-theme="dark"] .lumi-btn.is-active:hover,
+:root[data-theme="dark"] .lumi-btn.active:hover,
+:root[data-theme="dark"] .lumi-btn[aria-pressed="true"]:hover,
+:root[data-theme="dark"] .lumi-btn[aria-selected="true"]:hover,
+:root[data-theme="dark"] .lumi-btn[aria-checked="true"]:hover,
+body.dark-mode .lumi-btn.is-selected:hover,
+body.dark-mode .lumi-btn.selected:hover,
+body.dark-mode .lumi-btn.is-active:hover,
+body.dark-mode .lumi-btn.active:hover,
+body.dark-mode .lumi-btn[aria-pressed="true"]:hover,
+body.dark-mode .lumi-btn[aria-selected="true"]:hover,
+body.dark-mode .lumi-btn[aria-checked="true"]:hover,
+.lumi-theme-dark .lumi-btn.is-selected:hover,
+.lumi-theme-dark .lumi-btn.selected:hover,
+.lumi-theme-dark .lumi-btn.is-active:hover,
+.lumi-theme-dark .lumi-btn.active:hover,
+.lumi-theme-dark .lumi-btn[aria-pressed="true"]:hover,
+.lumi-theme-dark .lumi-btn[aria-selected="true"]:hover,
+.lumi-theme-dark .lumi-btn[aria-checked="true"]:hover {
+  background-color: var(--lumi-sys-color--accent, #1f3b9b);
+  color: var(--lumi-sys-color--on-surface-default, #e0e0e0);
+}
+
+/* --- Switch --- */
+.lumi-switch { display: inline-flex; align-items: center; gap: var(--lumi-sys-spacing--s, 8px); cursor: pointer; font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 15px; color: var(--lumi-sys-color--on-surface-default, #000000); user-select: none; }
+.lumi-switch input[type="checkbox"] { position: absolute; opacity: 0; width: 0px; height: 0px; pointer-events: none; }
+.lumi-switch__track { position: relative; display: inline-flex; align-items: center; width: 52px; height: 32px; background-color: var(--lumi-sys-color--surface-dim, #f2f0f0); border: 2px solid var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)); border-radius: var(--lumi-sys-shape--full, 999px); transition: background-color 0.2s, border-color 0.2s; flex-shrink: 0; box-sizing: border-box; }
+.lumi-switch__thumb, .lumi-switch__track::after { content: ""; position: absolute; top: 50%; left: 6px; transform: translateY(-50%); width: 16px; height: 16px; border-radius: 50%; background-color: var(--lumi-sys-color--on-surface-variant, #757575); transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.lumi-switch input[type="checkbox"]:checked + .lumi-switch__track { background-color: var(--lumi-sys-color--accent-fixed, #3186ff); border-color: transparent; }
+.lumi-switch input[type="checkbox"]:checked + .lumi-switch__track .lumi-switch__thumb, .lumi-switch input[type="checkbox"]:checked + .lumi-switch__track::after { left: 22px; width: 24px; height: 24px; background-color: rgb(255, 255, 255); }
+.lumi-switch input[type="checkbox"]:disabled + .lumi-switch__track { opacity: var(--lumi-sys-opacity-state--disabled, 0.38); cursor: not-allowed; }
+.lumi-switch--small .lumi-switch__track, .lumi-switch--mini .lumi-switch__track { width: 32px; height: 20px; }
+.lumi-switch--small .lumi-switch__thumb, .lumi-switch--small .lumi-switch__track::after, .lumi-switch--mini .lumi-switch__thumb, .lumi-switch--mini .lumi-switch__track::after { width: 12px; height: 12px; left: 2px; }
+.lumi-switch--small input[type="checkbox"]:checked + .lumi-switch__track .lumi-switch__thumb, .lumi-switch--small input[type="checkbox"]:checked + .lumi-switch__track::after, .lumi-switch--mini input[type="checkbox"]:checked + .lumi-switch__track .lumi-switch__thumb, .lumi-switch--mini input[type="checkbox"]:checked + .lumi-switch__track::after { left: 12px; width: 16px; height: 16px; }
+
+/* --- Checkbox --- */
+.lumi-checkbox-label { display: inline-flex; align-items: center; gap: var(--lumi-sys-spacing--s, 8px); cursor: pointer; font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 15px; color: var(--lumi-sys-color--on-surface-default, #000000); user-select: none; }
+.lumi-checkbox-label input[type="checkbox"] { position: absolute; opacity: 0; width: 0px; height: 0px; pointer-events: none; }
+.lumi-checkbox { position: relative; width: 24px; height: 24px; border-radius: var(--lumi-sys-shape--small, 8px); border: 2px solid var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); background-color: transparent; transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box; }
+.lumi-checkbox-label:hover .lumi-checkbox { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.04)); border-color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-checkbox-label input[type="checkbox"]:checked ~ .lumi-checkbox, .lumi-checkbox-label input[type="checkbox"]:indeterminate ~ .lumi-checkbox, .lumi-checkbox.is-indeterminate { background-color: var(--lumi-sys-color--on-surface-default, #000000); border-color: transparent; }
+.lumi-checkbox .lumi-checkmark { font-size: 18px; line-height: 1; color: var(--lumi-sys-color--surface, #ffffff); fill: var(--lumi-sys-color--surface, #ffffff); display: none; user-select: none; }
+.lumi-checkbox-label input[type="checkbox"]:checked ~ .lumi-checkbox .lumi-checkmark, .lumi-checkbox-label input[type="checkbox"]:checked ~ .lumi-checkbox .lumi-checkbox__check { display: block; }
+.lumi-checkbox-label input[type="checkbox"]:indeterminate ~ .lumi-checkbox .lumi-checkbox__indeterminate, .lumi-checkbox.is-indeterminate .lumi-checkbox__indeterminate { display: block; }
+.lumi-checkbox-label input[type="checkbox"]:disabled ~ .lumi-checkbox, .lumi-checkbox-label input[type="checkbox"]:disabled ~ span { opacity: var(--lumi-sys-opacity-state--disabled, 0.38); cursor: not-allowed; }
+
+/* --- Slider --- */
+.lumi-slider-container { display: flex; align-items: center; gap: var(--lumi-sys-spacing--m, 16px); width: 100%; }
+.lumi-slider-row { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xs, 4px); width: 100%; }
+.lumi-slider-label { font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 15px; font-weight: 400; color: var(--lumi-sys-color--on-surface-default, #000000); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lumi-slider { appearance: none; width: calc(100% + 28px); margin-left: -14px; margin-right: -14px; height: 40px; background: transparent; cursor: pointer; box-sizing: border-box; }
+.lumi-slider:focus { outline: none; }
+.lumi-slider::-webkit-slider-runnable-track { height: 4px; --thumb-center: clamp(14px, var(--progress, 50%), calc(100% - 14px)); --active-end: max(14px, calc(var(--thumb-center) - 8px)); background-image: radial-gradient(circle at calc(100% - 18px) center, var(--lumi-sys-color--on-surface-variant, #757575) 2px, transparent 2.5px), linear-gradient( to right, transparent 0, transparent 14px, var(--lumi-sys-color--on-surface-default, #000000) 14px, var(--lumi-sys-color--on-surface-default, #000000) var(--active-end), transparent var(--active-end), transparent calc(var(--thumb-center) + 8px), var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)) calc(var(--thumb-center) + 8px), var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)) calc(100% - 16px), transparent calc(100% - 16px), transparent 100% ); border-radius: var(--lumi-sys-shape--full, 999px); border-width: medium; border-style: none; border-color: currentcolor; border-image: none; }
+.lumi-slider[style*="--progress-ratio"]::-webkit-slider-runnable-track { --thumb-center: calc(14px + (100% - 28px) * var(--progress-ratio, 0.5)); --active-end: calc(var(--thumb-center) - 8px + var(--progress-ratio, 0.5) * 6px); }
+@supports (left: calc(1px * (50% / 100%))) { .lumi-slider::-webkit-slider-runnable-track, .lumi-slider[style*="--progress-ratio"]::-webkit-slider-runnable-track { --thumb-center: calc(14px + (100% - 28px) * (var(--progress, 50%) / 100%)); --active-end: calc(var(--thumb-center) - 8px + (var(--progress, 50%) / 100%) * 6px); } }
+.lumi-slider::-webkit-slider-thumb { appearance: none; width: 32px; height: 32px; border-radius: 50%; background-color: transparent; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect x='14' y='6' width='4' height='20' rx='2' fill='%23000000'/%3E%3C/svg%3E"); background-size: 32px 32px; background-repeat: no-repeat; background-position: center center; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; box-sizing: border-box; margin-top: -14px; cursor: pointer; transition: background-color 0.15s; }
+.lumi-slider:hover::-webkit-slider-thumb { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-slider:active::-webkit-slider-thumb { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.12)); }
+.lumi-slider:disabled { opacity: var(--lumi-sys-opacity-state--disabled, 0.38); cursor: not-allowed; }
+.lumi-slider:disabled::-webkit-slider-thumb { cursor: not-allowed; box-shadow: none; }
+.lumi-slider-value { display: flex; align-items: center; justify-content: center; min-width: 64px; height: 40px; padding: 0px 12px; background-color: var(--lumi-sys-color--surface-dim, #f2f0f0); border-radius: var(--lumi-sys-shape--medium, 16px); font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 15px; line-height: 20px; font-weight: 540; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 15; font-variant-numeric: tabular-nums; color: var(--lumi-sys-color--on-surface-default, #000000); flex-shrink: 0; box-sizing: border-box; }
+
+/* --- Text input --- */
+.lumi-input-group { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xs, 4px); width: 100%; }
+.lumi-input-label { font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 14px; font-weight: 500; line-height: 20px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-input { appearance: none; width: 100%; min-height: 48px; padding: 0px 16px; font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 15px; font-weight: 400; line-height: 22px; color: var(--lumi-sys-color--on-surface-default, #000000); background-color: var(--lumi-sys-color--surface-bright, #ffffff); border: 1px solid var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)); border-radius: var(--lumi-sys-shape--large, 16px); background-clip: padding-box; outline: none; box-sizing: border-box; transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s; }
+.lumi-input::placeholder { color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); }
+.lumi-input:hover { border-color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-input:focus, .lumi-input:focus-visible { border-color: var(--lumi-sys-color--accent-fixed, #3186ff); box-shadow: 0 0 0 2px var(--lumi-sys-color--accent-container, rgba(49, 134, 255, 0.25)); }
+textarea.lumi-input, .lumi-input--area { min-height: 100px; padding: 12px 16px; resize: vertical; line-height: 22px; }
+.lumi-input.is-error, .lumi-input-group.is-error .lumi-input { border-color: var(--lumi-sys-color--error, #ff4c45); }
+.lumi-input-helper { font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif); font-size: 12px; line-height: 16px; color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); }
+.lumi-input-group.is-error .lumi-input-helper, .lumi-input-helper--error { color: var(--lumi-sys-color--error, #ff4c45); }
+.lumi-input:disabled, .lumi-input.is-disabled { opacity: var(--lumi-sys-opacity-state--disabled, 0.38); background-color: var(--lumi-sys-color--surface-dim, #f2f0f0); cursor: not-allowed; }
+
+/* --- Focus ring --- */
+:focus-visible { outline: 2px solid var(--lumi-sys-color--on-surface-default, #000000) !important; outline-offset: 2px !important; box-shadow: none !important; }
+.lumi-btn:focus-visible, .lumi-switch input[type="checkbox"]:focus-visible + .lumi-switch__track, .lumi-checkbox-label input[type="checkbox"]:focus-visible ~ .lumi-checkbox, .lumi-slider:focus-visible::-webkit-slider-thumb, .lumi-input:focus-visible { outline: 2px solid var(--lumi-sys-color--on-surface-default, #000000); outline-offset: 2px; box-shadow: none; }
+[role="application"]:focus-visible, [aria-roledescription*="chart"]:focus-visible { outline: 2px solid var(--lumi-sys-color--primary, #3186ff) !important; outline-offset: 4px !important; }
+
+/* --- Typography: Display / Headline / Body / Label --- */
+.lumi-display-l { font-family: var(--lumi-sys-typography-type-scale--display-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-l-font-size, 2.625rem); line-height: var(--lumi-sys-typography-type-scale--display-l-line-height, 3rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-l-font-weight, 280); font-variation-settings: "wght" 280, "wdth" 100, "opsz" 42, "ROND" 100; }
+.lumi-display-l-emphasized { font-family: var(--lumi-sys-typography-type-scale--display-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-l-font-size, 2.625rem); line-height: var(--lumi-sys-typography-type-scale--display-l-line-height, 3rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-l-font-weight, 280); font-variation-settings: "wght" 280, "wdth" 100, "opsz" 42, "ROND" 100; }
+.lumi-display-m { font-family: var(--lumi-sys-typography-type-scale--display-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-m-font-size, 2.25rem); line-height: var(--lumi-sys-typography-type-scale--display-m-line-height, 2.75rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-m-font-weight, 320); font-variation-settings: "wght" 320, "wdth" 100, "opsz" 36, "ROND" 100; }
+.lumi-display-m-emphasized { font-family: var(--lumi-sys-typography-type-scale--display-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-m-font-size, 2.25rem); line-height: var(--lumi-sys-typography-type-scale--display-m-line-height, 2.75rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-m-font-weight, 320); font-variation-settings: "wght" 320, "wdth" 100, "opsz" 36, "ROND" 100; }
+.lumi-display-s { font-family: var(--lumi-sys-typography-type-scale--display-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-s-font-size, 2rem); line-height: var(--lumi-sys-typography-type-scale--display-s-line-height, 2.375rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-s-font-weight, 360); font-variation-settings: "wght" 360, "wdth" 100, "opsz" 32, "ROND" 100; }
+.lumi-display-s-emphasized { font-family: var(--lumi-sys-typography-type-scale--display-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--display-s-font-size, 2rem); line-height: var(--lumi-sys-typography-type-scale--display-s-line-height, 2.375rem); letter-spacing: var(--lumi-sys-typography-type-scale--display-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--display-s-font-weight, 360); font-variation-settings: "wght" 360, "wdth" 100, "opsz" 32, "ROND" 100; }
+.lumi-headline-l { font-family: var(--lumi-sys-typography-type-scale--headline-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-l-font-size, 1.75rem); line-height: var(--lumi-sys-typography-type-scale--headline-l-line-height, 2.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-l-font-weight, 350); font-variation-settings: "wght" 350, "wdth" 100, "opsz" 28, "ROND" 20; }
+.lumi-headline-l-emphasized { font-family: var(--lumi-sys-typography-type-scale--headline-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-l-font-size, 1.75rem); line-height: var(--lumi-sys-typography-type-scale--headline-l-line-height, 2.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-l-font-weight, 350); font-variation-settings: "wght" 350, "wdth" 100, "opsz" 28, "ROND" 20; }
+.lumi-headline-m { font-family: var(--lumi-sys-typography-type-scale--headline-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-m-font-size, 1.5rem); line-height: var(--lumi-sys-typography-type-scale--headline-m-line-height, 1.75rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-m-font-weight, 380); font-variation-settings: "wght" 380, "wdth" 100, "opsz" 24, "ROND" 20; }
+.lumi-headline-m-emphasized { font-family: var(--lumi-sys-typography-type-scale--headline-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-m-font-size, 1.5rem); line-height: var(--lumi-sys-typography-type-scale--headline-m-line-height, 1.75rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-m-font-weight, 380); font-variation-settings: "wght" 380, "wdth" 100, "opsz" 24, "ROND" 20; }
+.lumi-headline-s { font-family: var(--lumi-sys-typography-type-scale--headline-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-s-font-size, 1.25rem); line-height: var(--lumi-sys-typography-type-scale--headline-s-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-s-font-weight, 470); font-variation-settings: "wght" 470, "wdth" 94, "opsz" 20, "ROND" 20; }
+.lumi-headline-s-emphasized { font-family: var(--lumi-sys-typography-type-scale--headline-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--headline-s-font-size, 1.25rem); line-height: var(--lumi-sys-typography-type-scale--headline-s-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--headline-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--headline-s-font-weight, 470); font-variation-settings: "wght" 470, "wdth" 94, "opsz" 20, "ROND" 20; }
+.lumi-body-l { font-family: var(--lumi-sys-typography-type-scale--body-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-l-font-size, 1.0625rem); line-height: var(--lumi-sys-typography-type-scale--body-l-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--body-l-font-weight, 400); font-variation-settings: "wght" 400, "wdth" 92, "opsz" 17; }
+.lumi-body-l-emphasized { font-family: var(--lumi-sys-typography-type-scale--body-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-l-font-size, 1.0625rem); line-height: var(--lumi-sys-typography-type-scale--body-l-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-l-font-tracking, 0rem); font-weight: 540; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 17; font-variant-numeric: tabular-nums; }
+.lumi-body-m { font-family: var(--lumi-sys-typography-type-scale--body-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-m-font-size, 0.9375rem); line-height: var(--lumi-sys-typography-type-scale--body-m-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--body-m-font-weight, 400); font-variation-settings: "wght" 400, "wdth" 92, "opsz" 15; }
+.lumi-body-m-emphasized { font-family: var(--lumi-sys-typography-type-scale--body-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-m-font-size, 0.9375rem); line-height: var(--lumi-sys-typography-type-scale--body-m-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-m-font-tracking, 0rem); font-weight: 540; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 15; font-variant-numeric: tabular-nums; }
+.lumi-body-s { font-family: var(--lumi-sys-typography-type-scale--body-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-s-font-size, 0.8125rem); line-height: var(--lumi-sys-typography-type-scale--body-s-line-height, 1.0625rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--body-s-font-weight, 400); font-variation-settings: "wght" 400, "wdth" 92, "opsz" 13; }
+.lumi-body-s-emphasized { font-family: var(--lumi-sys-typography-type-scale--body-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--body-s-font-size, 0.8125rem); line-height: var(--lumi-sys-typography-type-scale--body-s-line-height, 1.0625rem); letter-spacing: var(--lumi-sys-typography-type-scale--body-s-font-tracking, 0rem); font-weight: 540; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 13; font-variant-numeric: tabular-nums; }
+.lumi-label-l { font-family: var(--lumi-sys-typography-type-scale--label-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-l-font-size, 1.0625rem); line-height: var(--lumi-sys-typography-type-scale--label-l-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-l-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 17; }
+.lumi-label-l-emphasized { font-family: var(--lumi-sys-typography-type-scale--label-l-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-l-font-size, 1.0625rem); line-height: var(--lumi-sys-typography-type-scale--label-l-line-height, 1.5rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-l-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-l-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 17; }
+.lumi-label-m { font-family: var(--lumi-sys-typography-type-scale--label-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-m-font-size, 0.9375rem); line-height: var(--lumi-sys-typography-type-scale--label-m-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-m-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 15; }
+.lumi-label-m-emphasized { font-family: var(--lumi-sys-typography-type-scale--label-m-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-m-font-size, 0.9375rem); line-height: var(--lumi-sys-typography-type-scale--label-m-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-m-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-m-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 15; }
+.lumi-label-s { font-family: var(--lumi-sys-typography-type-scale--label-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-s-font-size, 0.8125rem); line-height: var(--lumi-sys-typography-type-scale--label-s-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-s-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 13; }
+.lumi-label-s-emphasized { font-family: var(--lumi-sys-typography-type-scale--label-s-font-name, 'Google Sans Flex', sans-serif); font-size: var(--lumi-sys-typography-type-scale--label-s-font-size, 0.8125rem); line-height: var(--lumi-sys-typography-type-scale--label-s-line-height, 1.25rem); letter-spacing: var(--lumi-sys-typography-type-scale--label-s-font-tracking, 0rem); font-weight: var(--lumi-sys-typography-type-scale--label-s-font-weight, 370); font-variation-settings: "wght" 370, "wdth" 92, "opsz" 13; }
+
+/* --- Typography: Monospace / Extended (Google Sans Code) --- */
+.lumi-blockquote { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-style: italic; font-size: 22px; line-height: 30px; font-weight: 300; font-variation-settings: "wght" 300, "opsz" 22, "MONO" 0; }
+.lumi-takeaway { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-style: italic; font-size: 17px; line-height: 24px; font-weight: 400; font-variation-settings: "wght" 400, "opsz" 17, "MONO" 0; }
+.lumi-caption { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-style: italic; font-size: 13px; line-height: 20px; font-weight: 400; font-variation-settings: "wght" 400, "opsz" 13, "MONO" 0; }
+.lumi-code { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-size: 15px; line-height: 20px; font-weight: 400; font-variation-settings: "wght" 400, "MONO" 1; }
+.lumi-bullet { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-size: 15px; line-height: 24px; font-weight: 650; font-variation-settings: "wght" 650, "MONO" 1; }
+
+/* --- Cards & attribution --- */
+.lumi-summary-card { padding: var(--lumi-sys-spacing--l, 16px); background-color: var(--lumi-sys-color--surface-bright, #ffffff); border-radius: var(--lumi-sys-shape--medium, 12px); color: var(--lumi-sys-color--on-surface-default, #000000); font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 15px; line-height: 20px; box-sizing: border-box; }
+.lumi-link-card { display: flex; align-items: center; justify-content: space-between; padding: var(--lumi-sys-spacing--l, 16px); background-color: var(--lumi-sys-color--surface-bright, #ffffff); border-radius: var(--lumi-sys-shape--medium, 12px); text-decoration: none; color: var(--lumi-sys-color--on-surface-default, #000000); transition: background-color 0.15s; box-sizing: border-box; }
+.lumi-link-card:hover { background-color: var(--lumi-sys-color--surface-container-high, #e6e6e6); }
+.lumi-attribution-buffer { margin-top: var(--lumi-sys-spacing--xxl, 24px); font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 13px; color: var(--lumi-sys-color--on-surface-de-emphasis, rgba(0, 0, 0, 0.62)); }
+.lumi-card { background-color: var(--lumi-sys-color--surface-bright, #ffffff); border-radius: var(--lumi-sys-shape--xl-max, 40px); padding: var(--lumi-sys-spacing--3xl, 28px); display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--s, 8px); width: 100%; box-sizing: border-box; }
+.lumi-card.is-prominent, .lumi-card--prominent, .lumi-card.surface-dim { background-color: var(--lumi-sys-color--surface-dim, #f2f0f0); }
+.lumi-card-title { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 20px; font-weight: 500; font-variation-settings: "wght" 470, "wdth" 94, "opsz" 20; color: var(--lumi-sys-color--on-surface, #000000); margin: 0px; }
+.lumi-card-subtitle { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 13px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 13; color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); margin: 0; }
+.lumi-card-body { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 15px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 15; color: var(--lumi-sys-color--on-surface, #000000); margin: var(--lumi-sys-spacing--xs, 4px) 0 0 0; }
+.lumi-overlay-card { background-color: var(--surface-translucent, rgba(255, 255, 255, 0.88)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--stroke-default); border-radius: var(--lumi-sys-shape--medium, 12px); padding: var(--lumi-sys-spacing--m, 12px) var(--lumi-sys-spacing--l, 16px); color: var(--on-surface); box-shadow: var(--lumi-sys-elevation--level1); box-sizing: border-box; }
+
+/* --- Progress bar --- */
+.lumi-progress-tracker { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xs, 4px); width: 100%; }
+.lumi-progress-bar { width: 100%; height: 8px; background-color: var(--lumi-sys-color--stroke-default, #e3e3e3); border: 1px solid transparent; box-sizing: border-box; border-radius: var(--lumi-sys-shape--full, 999px); overflow: hidden; }
+.lumi-progress-fill { height: 100%; background-color: var(--lumi-sys-color--accent-fixed, #3186ff); border-radius: var(--lumi-sys-shape--full, 999px); transition: width 0.3s; }
+
+/* --- Accordion (card group variant) --- */
+.lumi-accordion-group { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--s, 8px); }
+.lumi-accordion-group .lumi-accordion-item { background-color: var(--lumi-sys-color--surface-container, #f2f0f0); border-radius: var(--lumi-sys-shape--medium, 12px); overflow: hidden; transition: background-color 0.15s; }
+.lumi-accordion-group .lumi-accordion-header { padding: var(--lumi-sys-spacing--l, 16px); font-family: var(--ff-sans, sans-serif); font-size: 15px; font-weight: 540; cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-accordion-group .lumi-accordion-chevron { transition: transform 0.2s; font-size: 12px; }
+.lumi-accordion-group .lumi-accordion-item.active .lumi-accordion-chevron { transform: rotate(180deg); }
+.lumi-accordion-group .lumi-accordion-body { display: none; padding: 0 var(--lumi-sys-spacing--l, 16px) var(--lumi-sys-spacing--l, 16px) var(--lumi-sys-spacing--l, 16px); font-family: var(--ff-sans, sans-serif); font-size: 15px; color: var(--lumi-sys-color--on-surface-de-emphasis, rgba(0, 0, 0, 0.62)); line-height: 20px; }
+.lumi-accordion-group .lumi-accordion-item.active .lumi-accordion-body { display: block; }
+
+/* --- Accordion (borderless list variant) --- */
+.lumi-accordion { display: flex; flex-direction: column; width: 100%; border-top: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-accordion-item { display: flex; flex-direction: column; width: 100%; background: transparent; border-radius: 0px; border-bottom: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-accordion-header { display: flex; justify-content: space-between; align-items: center; padding: var(--lumi-sys-spacing--xl, 20px) 0; cursor: pointer; user-select: none; }
+.lumi-accordion-title { margin: 0px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-accordion-item.active .lumi-accordion-content { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--l, 16px); }
+.lumi-accordion-content { display: none; padding-bottom: var(--lumi-sys-spacing--xxl, 24px); }
+.lumi-accordion-field { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xxs, 2px); }
+.lumi-accordion-field-label { margin: 0px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-accordion-field-val { margin: 0px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+
+/* --- Segmented control --- */
+.lumi-segmented-group { display: flex; background-color: var(--lumi-sys-color--surface-container, #f2f0f0); padding: 4px; border-radius: var(--lumi-sys-shape--full, 999px); gap: 4px; }
+.lumi-segmented-btn { flex: 1 1 0%; padding: 8px 16px; border: 1px solid transparent; border-radius: var(--lumi-sys-shape--full, 999px); background-color: transparent; font-family: var(--ff-sans, sans-serif); font-size: 14px; font-weight: 510; cursor: pointer; color: var(--lumi-sys-color--on-surface-de-emphasis, rgba(0, 0, 0, 0.62)); transition: 0.2s; }
+.lumi-segmented-btn.is-active, .lumi-segmented-btn.active, .lumi-segmented-btn.is-selected, .lumi-segmented-btn.selected, .lumi-segmented-btn[aria-pressed="true"], .lumi-segmented-btn[aria-selected="true"], .lumi-segmented-btn[aria-checked="true"] { background-color: var(--lumi-sys-color--surface-bright, #ffffff); color: var(--lumi-sys-color--on-surface-default, #000000); box-shadow: var(--lumi-sys-elevation--level1); }
+
+/* --- Tabs --- */
+.lumi-tab-group { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--4xl, 36px); width: 100%; }
+.lumi-tab-bar { display: flex; gap: var(--lumi-sys-spacing--l, 16px); padding-bottom: 0px; overflow-x: auto; scrollbar-width: none; }
+.lumi-tab-bar::-webkit-scrollbar { display: none; }
+.lumi-tab { height: 40px; padding: 0 var(--lumi-sys-spacing--xl, 20px); display: flex; align-items: center; justify-content: center; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 17px; line-height: 24px; font-weight: 370; font-variation-settings: "wght" 370, "wdth" 92, "opsz" 17; color: var(--lumi-sys-color--on-surface-de-emphasis, rgba(0, 0, 0, 0.62)); background: transparent; border: 1px solid transparent; border-radius: var(--lumi-sys-shape--full, 999px); cursor: pointer; white-space: nowrap; transition: background-color 0.15s, color 0.15s; }
+.lumi-tab:hover { color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-tab.active, .lumi-tab.is-active, .lumi-tab.is-selected, .lumi-tab.selected, .lumi-tab[aria-pressed="true"], .lumi-tab[aria-selected="true"], .lumi-tab[aria-checked="true"] { background-color: var(--lumi-sys-color--surface-container-high, #f2f0f0); color: var(--lumi-sys-color--on-surface-default, #000000); font-weight: 510; font-variation-settings: "wght" 510, "wdth" 92, "opsz" 17; }
+.lumi-tab-content { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--m, 12px); padding-top: 0px; padding-bottom: 0px; }
+.lumi-tab-content .lumi-body-l-emphasized, .lumi-tab-content .lumi-headline-s { margin: 0px; }
+.lumi-tab-content .lumi-body-l { margin: 0px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+
+/* --- Callout / pullquote --- */
+.lumi-callout { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xs, 4px); width: 100%; }
+.lumi-callout .lumi-body-l-emphasized { margin: 0px; }
+.lumi-pullquote { display: flex; gap: var(--lumi-sys-spacing--xl, 20px); width: 100%; margin: 0px; }
+.lumi-pullquote-mark { width: 30px; height: 22px; flex-shrink: 0; margin-top: 4px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-pullquote-body { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--l, 16px); flex: 1 1 0%; min-width: 0px; }
+p.lumi-pullquote-text, .lumi-pullquote-text { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-style: italic; font-weight: 300; font-variation-settings: "wght" 300, "opsz" 22, "MONO" 0; color: var(--lumi-sys-color--on-surface-default, #000000); margin: 0px; font-size: 22px !important; line-height: 30px !important; }
+.lumi-pullquote-cite { display: flex; flex-direction: column; font-style: normal; }
+.lumi-pullquote-cite .lumi-de-emphasis { color: var(--lumi-sys-color--on-surface-de-emphasis, rgba(0, 0, 0, 0.62)); }
+
+/* --- Data table (simple) --- */
+.lumi-data-table-container { width: 100%; overflow-x: auto; border-radius: var(--lumi-sys-shape--medium, 12px); border: 1px solid var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)); }
+.lumi-data-table { width: 100%; border-collapse: collapse; font-family: var(--ff-sans, sans-serif); font-size: 14px; text-align: left; }
+.lumi-data-table th { padding: 12px 16px; font-weight: 600; background-color: var(--lumi-sys-color--surface-container, #f2f0f0); border-bottom: 1px solid var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)); color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-data-table td { padding: 12px 16px; border-bottom: 1px solid var(--lumi-sys-color--stroke-default, rgba(0, 0, 0, 0.12)); color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-data-table tr:last-child td { border-bottom-width: medium; border-bottom-style: none; border-bottom-color: currentcolor; }
+
+/* --- Table widget (prose-style) --- */
+.lumi-table-widget { display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--xxl, 24px); width: 100%; }
+.lumi-table-title { margin: 0px; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-table { width: 100%; border-collapse: collapse; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); text-align: left; }
+.lumi-table th { padding: 12px 16px 12px 0px; font-size: 17px; line-height: 24px; font-weight: 540; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 17; color: var(--lumi-sys-color--on-surface-default, #000000); border-bottom: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-table td { padding: 16px 16px 16px 0px; font-size: 17px; line-height: 24px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 17; color: var(--lumi-sys-color--on-surface-default, #000000); border-bottom: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); }
+.lumi-table td:last-child, .lumi-table th:last-child { padding-right: 0px; }
+.lumi-table tr.lumi-table-ellipsis-row td { padding: 16px 0 0; border-bottom-width: medium; border-bottom-style: none; border-bottom-color: currentcolor; color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); }
+
+/* --- Luminous Spec Table (Figma 8543-1878) --- */
+.lumi-spec-table-container { width: 100%; overflow-x: auto; background: transparent; }
+.lumi-spec-table { width: 100%; border-collapse: collapse; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); text-align: left; background: transparent; }
+.lumi-spec-table th { padding: 12px 28px 16px 0px; font-size: 17px; line-height: 24px; font-weight: 540; font-variation-settings: "wght" 540, "wdth" 100, "opsz" 17; color: var(--lumi-sys-color--on-surface-default, #000000); border-bottom: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); background: transparent; }
+.lumi-spec-table td { padding: 16px 28px 16px 0px; border-bottom: 1px solid var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.08)); vertical-align: top; background: transparent; }
+.lumi-spec-table th:last-child, .lumi-spec-table td:last-child { padding-right: 0px; }
+.lumi-spec-label { display: block; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 13px; line-height: 17px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 13; color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); margin-bottom: 2px; }
+.lumi-spec-value { display: block; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 15px; line-height: 20px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 15; color: var(--lumi-sys-color--on-surface-default, #000000); }
+.lumi-spec-table-more { display: flex; align-items: center; justify-content: center; padding: 12px; color: var(--lumi-sys-color--on-surface-variant, rgba(0, 0, 0, 0.62)); font-size: 15px; line-height: 20px; cursor: pointer; }
+
+/* --- Sortable Table Headers --- */
+th[aria-sort] { color: var(--lumi-sys-color--on-surface-default, #000000); }
+button.lumi-sort-btn, .lumi-sort-btn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; text-align: inherit; width: 100%; justify-content: inherit; border-radius: var(--lumi-sys-shape--small, 4px); }
+button.lumi-sort-btn:hover, .lumi-sort-btn:hover { background-color: var(--lumi-sys-color--on-surface-low, rgba(0, 0, 0, 0.06)) !important; }
+button.lumi-sort-btn:focus-visible, .lumi-sort-btn:focus-visible { outline: 2px solid var(--lumi-sys-color--on-surface-default, #000000) !important; outline-offset: 2px !important; }
+
+/* --- Code block --- */
+.lumi-code-block { background-color: var(--lumi-sys-color--code-background, #000000); border-radius: var(--lumi-sys-shape--xl-max, 40px); padding: 32px; display: flex; flex-direction: column; gap: var(--lumi-sys-spacing--l, 16px); width: 100%; box-sizing: border-box; }
+.lumi-code-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.lumi-code-lang { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 15px; font-weight: 500; font-variation-settings: "wght" 540, "wdth" 92, "opsz" 15; color: var(--lumi-sys-color--code-primary-text, #ffffff); }
+.lumi-code-copy { background: transparent; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; color: var(--lumi-sys-color--code-primary-text, #ffffff); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: var(--lumi-sys-shape--full, 999px); transition: background-color 0.2s; }
+.lumi-code-copy:hover { background-color: rgba(255, 255, 255, 0.1); }
+.lumi-code-snippet { margin: 0px; overflow-x: auto; width: 100%; }
+.lumi-code-snippet code { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-size: 15px; line-height: 20px; color: var(--lumi-sys-color--code-primary-text, #ffffff); display: block; white-space: pre; }
+
+/* --- Section / prose --- */
+.lumi-section { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
+.lumi-section h1 { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 28px; line-height: 36px; font-weight: 350; font-variation-settings: "wght" 350, "wdth" 100, "opsz" 28; color: var(--lumi-sys-color--on-surface, #000000); margin-top: var(--lumi-sys-spacing--m, 12px); margin-bottom: var(--lumi-sys-spacing--xxl, 24px); }
+.lumi-section h1:first-child { margin-top: 0px; }
+.lumi-section h2 { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 24px; line-height: 28px; font-weight: 380; font-variation-settings: "wght" 380, "wdth" 100, "opsz" 24; color: var(--lumi-sys-color--on-surface, #000000); margin-top: var(--lumi-sys-spacing--m, 12px); margin-bottom: var(--lumi-sys-spacing--m, 12px); }
+.lumi-section h2:first-child { margin-top: 0px; }
+.lumi-section h3 { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 20px; line-height: 24px; font-weight: 470; font-variation-settings: "wght" 470, "wdth" 94, "opsz" 20; color: var(--lumi-sys-color--on-surface, #000000); margin-top: var(--lumi-sys-spacing--m, 12px); margin-bottom: var(--lumi-sys-spacing--xs, 4px); }
+.lumi-section h3:first-child { margin-top: 0px; }
+.lumi-section p { font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 17px; line-height: 24px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 17; color: var(--lumi-sys-color--on-surface, #000000); margin-top: 0px; margin-bottom: var(--lumi-sys-spacing--m, 12px); }
+.lumi-section p:last-child { margin-bottom: 0px; }
+.lumi-section ul { list-style: none; padding: 0px; margin: 0 0 var(--lumi-sys-spacing--m, 12px) 0; width: 100%; }
+.lumi-section ul:last-child { margin-bottom: 0px; }
+.lumi-section li { position: relative; padding-left: 40px; padding-bottom: 12px; font-family: var(--ff-sans, 'Google Sans Flex', sans-serif); font-size: 17px; line-height: 24px; font-weight: 400; font-variation-settings: "wght" 400, "wdth" 92, "opsz" 17; color: var(--lumi-sys-color--on-surface, #000000); box-sizing: border-box; }
+.lumi-section li:last-child { padding-bottom: 0px; }
+.lumi-section li::before { content: "○"; position: absolute; left: 3.5px; top: 0px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-family: var(--ff-mono, 'Google Sans Code', monospace); font-size: 15px; font-weight: 650; font-variation-settings: "MONO" 1, "wght" 650; color: var(--lumi-sys-color--on-surface, #000000); }
+.lumi-section li ul { margin-top: 12px; margin-bottom: 0px; padding-left: 40px; }
+
+/* --- Chart legend (1:1 series color match) --- */
+.lumi-chart-header, .lumi-chart-title { margin-bottom: 32px; }
+.lumi-chart-legend { display: flex; justify-content: center; align-items: center; gap: 24px; margin-top: 32px; padding-top: 0px; width: 100%; flex-wrap: wrap; }
+.lumi-legend-item { display: inline-flex; align-items: center; gap: 8px; }
+.lumi-legend-dot { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.lumi-legend-dot-swatch { width: 20px; height: 20px; border-radius: 50%; display: block; }
+span.lumi-legend-dot[style*="background"] { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.lumi-legend-label { font-family: var(--ff-mono, 'Google Sans Code', monospace); font-style: italic; font-size: 13px; font-weight: 400; line-height: 20px; color: var(--lumi-sys-color--on-surface, #000000); font-variation-settings: "wght" 400, "opsz" 13, "MONO" 0; font-feature-settings: "kern" 1, "liga" 1; white-space: nowrap; }
+
+/* Canonical themed <select>. Uses element+class specificity (select.lumi-select)
+   so it intentionally wins over any model hand-rolled `.lumi-select` rule: the
+   runtime stylesheet is injected before widget <style> blocks, so a bare
+   `.lumi-select` (same specificity, later) would otherwise override it. This
+   provides appearance:none + a theme-neutral chevron so no native OS arrow leaks. */
+select.lumi-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  padding: var(--lumi-sys-spacing--s, 8px) 40px var(--lumi-sys-spacing--s, 8px)
+    var(--lumi-sys-spacing--m, 12px);
+  border: 1px solid var(--stroke-default);
+  border-radius: var(--r-full, 999px);
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--ff-sans, 'Google Sans Flex', sans-serif);
+  font-size: 15px;
+  line-height: 20px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2380868b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+}
+select.lumi-select:focus-visible {
+  outline: 2px solid var(--lumi-sys-color--accent-fixed, #3186ff);
+  outline-offset: 2px;
+}
+
+/* Toggle / filter chip. Models frequently emit `<button class="lumi-chip">`
+   (or `.lumi-chip-btn`, `.lumi-filter-btn`, `[class^="lumi-chip-"]`, with
+   `.is-active`/`.active`/`.is-selected`) for toggle pills; without a
+   canonical rule these fall back to native (retro) browser button chrome.
+   Theme-aware via runtime tokens so it is correct in light and dark. */
+.lumi-chip,
+[class^="lumi-chip"],
+[class*=" lumi-chip"],
+[class^="lumi-pill"],
+[class*=" lumi-pill"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lumi-sys-spacing--s, 8px);
+  min-height: 32px;
+  padding: 0 16px;
+  font-family: var(--ff-sans, 'Google Sans Flex', 'Google Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--lumi-sys-color--on-surface-default, #1f1f1f);
+  background: var(--lumi-sys-color--surface-dim, #f2f0f0);
+  border: 1px solid transparent;
+  border-radius: var(--lumi-sys-shape--full, 999px);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lumi-chip:hover,
+[class^="lumi-chip"]:hover,
+[class*=" lumi-chip"]:hover,
+[class^="lumi-pill"]:hover,
+[class*=" lumi-pill"]:hover {
+  background: var(--lumi-sys-color--surface-container-high, #e6e6e6);
+}
+.lumi-chip.is-active,
+.lumi-chip.active,
+.lumi-chip.is-selected,
+.lumi-chip.selected,
+.lumi-chip[aria-pressed="true"],
+.lumi-chip[aria-selected="true"],
+.lumi-chip[aria-checked="true"],
+[class^="lumi-chip"].is-active,
+[class^="lumi-chip"].active,
+[class^="lumi-chip"].is-selected,
+[class^="lumi-chip"].selected,
+[class^="lumi-chip"][aria-pressed="true"],
+[class^="lumi-chip"][aria-selected="true"],
+[class^="lumi-chip"][aria-checked="true"],
+[class*=" lumi-chip"].is-active,
+[class*=" lumi-chip"].active,
+[class*=" lumi-chip"].is-selected,
+[class*=" lumi-chip"].selected,
+[class*=" lumi-chip"][aria-pressed="true"],
+[class*=" lumi-chip"][aria-selected="true"],
+[class*=" lumi-chip"][aria-checked="true"],
+[class^="lumi-pill"].is-active,
+[class^="lumi-pill"].active,
+[class^="lumi-pill"].is-selected,
+[class^="lumi-pill"].selected,
+[class^="lumi-pill"][aria-pressed="true"],
+[class^="lumi-pill"][aria-selected="true"],
+[class^="lumi-pill"][aria-checked="true"],
+[class*=" lumi-pill"].is-active,
+[class*=" lumi-pill"].active,
+[class*=" lumi-pill"].is-selected,
+[class*=" lumi-pill"].selected,
+[class*=" lumi-pill"][aria-pressed="true"],
+[class*=" lumi-pill"][aria-selected="true"],
+[class*=" lumi-pill"][aria-checked="true"] {
+  color: var(--lumi-sys-color--on-surface-default, #000000);
+  background: var(--lumi-sys-color--accent-container, #dcf1ff);
+  border-color: var(--lumi-sys-color--primary, #3186ff);
+  font-weight: 600;
+}
+.lumi-chip:focus-visible,
+[class^="lumi-chip"]:focus-visible,
+[class*=" lumi-chip"]:focus-visible,
+[class^="lumi-pill"]:focus-visible,
+[class*=" lumi-pill"]:focus-visible {
+  outline: 2px solid var(--lumi-sys-color--accent-fixed, #3186ff);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+ * DIAGRAM GUARD — SVG <text> is fill-only.
+ *   An inherited group stroke (e.g. `.node:hover { stroke }` on a <g>)
+ *   otherwise cascades into child <text>, thickening glyph outlines
+ *   (fake-bold) and recoloring the label. Highlight strokes belong on
+ *   shapes (rect/path); text never paints a stroke.
+ * ============================================================ */
+svg text { stroke: none; paint-order: fill; }
+
+/* ============================================================
+ * 6. HIGH CONTRAST MODE (Windows Forced Colors)
+ *    Ensures buttons, selectable pills/tabs/segments, sliders, and switches
+ *    remain clearly identifiable and convey active/selected state in
+ *    @media (forced-colors: active).
+ * ============================================================ */
+@media (forced-colors: active) {
+  button,
+  .lumi-btn,
+  [class^="lumi-btn-"],
+  [class*=" lumi-btn-"],
+  .lumi-chip,
+  [class^="lumi-chip"],
+  [class*=" lumi-chip"],
+  [class^="lumi-pill"],
+  [class*=" lumi-pill"],
+  .lumi-segmented-btn,
+  .lumi-tab {
+    border: 1px solid ButtonBorder !important;
+  }
+
+  button.active,
+  button.is-active,
+  button.selected,
+  button.is-selected,
+  button[aria-pressed="true"],
+  button[aria-selected="true"],
+  button[aria-checked="true"],
+  .lumi-btn.active,
+  .lumi-btn.is-active,
+  .lumi-btn.selected,
+  .lumi-btn.is-selected,
+  .lumi-btn[aria-pressed="true"],
+  .lumi-btn[aria-selected="true"],
+  .lumi-btn[aria-checked="true"],
+  .lumi-chip.active,
+  .lumi-chip.is-active,
+  .lumi-chip.selected,
+  .lumi-chip.is-selected,
+  .lumi-chip[aria-pressed="true"],
+  .lumi-chip[aria-selected="true"],
+  .lumi-chip[aria-checked="true"],
+  [class^="lumi-chip"].active,
+  [class^="lumi-chip"].is-active,
+  [class^="lumi-chip"].selected,
+  [class^="lumi-chip"].is-selected,
+  [class^="lumi-chip"][aria-pressed="true"],
+  [class^="lumi-chip"][aria-checked="true"],
+  [class*=" lumi-chip"].active,
+  [class*=" lumi-chip"].is-active,
+  [class*=" lumi-chip"].selected,
+  [class*=" lumi-chip"].is-selected,
+  [class*=" lumi-chip"][aria-pressed="true"],
+  [class*=" lumi-chip"][aria-checked="true"],
+  [class^="lumi-pill"].active,
+  [class^="lumi-pill"].is-active,
+  [class^="lumi-pill"][aria-pressed="true"],
+  [class^="lumi-pill"][aria-checked="true"],
+  [class*=" lumi-pill"].active,
+  [class*=" lumi-pill"].is-active,
+  [class*=" lumi-pill"][aria-pressed="true"],
+  [class*=" lumi-pill"][aria-checked="true"],
+  .lumi-segmented-btn.active,
+  .lumi-segmented-btn.is-active,
+  .lumi-segmented-btn.selected,
+  .lumi-segmented-btn.is-selected,
+  .lumi-segmented-btn[aria-pressed="true"],
+  .lumi-segmented-btn[aria-selected="true"],
+  .lumi-segmented-btn[aria-checked="true"],
+  .lumi-tab.active,
+  .lumi-tab.is-active,
+  .lumi-tab.selected,
+  .lumi-tab.is-selected,
+  .lumi-tab[aria-pressed="true"],
+  .lumi-tab[aria-selected="true"],
+  .lumi-tab[aria-checked="true"] {
+    forced-color-adjust: none;
+    background-color: Highlight !important;
+    color: HighlightText !important;
+    border-color: Highlight !important;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  input[type="range"],
+  .lumi-slider {
+    forced-color-adjust: none;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  input[type="range"]::-webkit-slider-runnable-track,
+  .lumi-slider::-webkit-slider-runnable-track {
+    background-image: none !important;
+    background-color: Canvas !important;
+    border: 1px solid ButtonBorder !important;
+    height: 6px !important;
+  }
+  input[type="range"]::-webkit-slider-thumb,
+  .lumi-slider::-webkit-slider-thumb {
+    background-image: none !important;
+    background-color: ButtonText !important;
+    border: 2px solid Canvas !important;
+    outline: 2px solid ButtonBorder !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin-top: -8px !important;
+  }
+  input[type="range"]:hover::-webkit-slider-thumb,
+  input[type="range"]:focus-visible::-webkit-slider-thumb,
+  .lumi-slider:hover::-webkit-slider-thumb,
+  .lumi-slider:focus-visible::-webkit-slider-thumb {
+    background-color: Highlight !important;
+    outline-color: Highlight !important;
+  }
+
+  .lumi-progress-bar {
+    forced-color-adjust: none;
+    background-color: Canvas !important;
+    border: 1px solid ButtonBorder !important;
+  }
+  .lumi-progress-fill {
+    forced-color-adjust: none;
+    background-color: Highlight !important;
+  }
+
+  .lumi-switch__track {
+    forced-color-adjust: none;
+    background-color: Canvas !important;
+    border: 2px solid ButtonBorder !important;
+  }
+  .lumi-switch__thumb,
+  .lumi-switch__track::after {
+    background-color: ButtonText !important;
+  }
+  .lumi-switch input[type="checkbox"]:checked + .lumi-switch__track {
+    background-color: Highlight !important;
+    border-color: Highlight !important;
+  }
+  .lumi-switch input[type="checkbox"]:checked + .lumi-switch__track .lumi-switch__thumb,
+  .lumi-switch input[type="checkbox"]:checked + .lumi-switch__track::after {
+    background-color: HighlightText !important;
+  }
+
+  .lumi-checkbox {
+    forced-color-adjust: none;
+    border: 2px solid ButtonBorder !important;
+    background-color: Canvas !important;
+  }
+  .lumi-checkbox-label input[type="checkbox"]:checked ~ .lumi-checkbox,
+  .lumi-checkbox-label input[type="checkbox"]:indeterminate ~ .lumi-checkbox {
+    background-color: Highlight !important;
+    border-color: Highlight !important;
+  }
+  .lumi-checkbox .lumi-checkmark {
+    color: HighlightText !important;
+    fill: HighlightText !important;
+  }
+}
+
+</style>
+<style id="lumi-surface-button-fallbacks">
+.widget-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-inline: 0 !important;
+  box-sizing: border-box;
+}
+:root {
+  --lumi-sys-color--surface-translucent: rgba(255, 255, 255, 0.88);
+  --surface-translucent: var(--lumi-sys-color--surface-translucent, rgba(255, 255, 255, 0.88));
+  --surface-glass: var(--lumi-sys-color--surface-translucent, rgba(255, 255, 255, 0.88));
+}
+:root[data-theme="dark"], body.dark-mode {
+  --lumi-sys-color--surface-translucent: rgba(24, 24, 27, 0.88);
+  --surface-translucent: rgba(24, 24, 27, 0.88);
+  --surface-glass: rgba(24, 24, 27, 0.88);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lumi-sys-color--surface-translucent: rgba(24, 24, 27, 0.88);
+    --surface-translucent: rgba(24, 24, 27, 0.88);
+    --surface-glass: rgba(24, 24, 27, 0.88);
+  }
+}
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 8px 18px;
+  font-family: var(--ff-sans, 'Google Sans Flex', sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--on-surface, #000000);
+  background-color: var(--lumi-sys-color--surface-bright, #ffffff);
+  border: 1px solid var(--stroke-default, #e3e3e3);
+  border-radius: 999px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+button:hover {
+  background-color: var(--surface-container-high, #e6e6e6);
+}
+button.active, button.is-active, button.selected, button.is-selected, button[aria-pressed="true"], button[aria-selected="true"], button[aria-checked="true"] {
+  background-color: var(--accent-container, #dcf1ff);
+  color: var(--on-surface, #000000);
+  border-color: var(--primary, #3186ff);
+}
+[role="application"]:focus-visible, [aria-roledescription*="chart"]:focus-visible {
+  outline: 2px solid var(--primary, #3186ff) !important;
+  outline-offset: 4px !important;
+}
+button.lumi-sort-btn, .lumi-sort-btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  width: 100%;
+  justify-content: inherit;
+  border-radius: 4px;
+}
+button.lumi-sort-btn:focus-visible, .lumi-sort-btn:focus-visible {
+  outline: 2px solid var(--on-surface, #000000) !important;
+  outline-offset: 2px !important;
+}
+.lumi-segmented-btn, .lumi-tab {
+  border: 1px solid transparent;
+}
+.lumi-btn, [class^="lumi-btn-"], [class*=" lumi-btn-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 18px;
+  background-color: var(--lumi-sys-color--surface-bright, #ffffff);
+  color: var(--on-surface, #000000);
+  border: 1px solid var(--stroke-default, #e3e3e3);
+  border-radius: 999px;
+  box-sizing: border-box;
+}
+.lumi-btn--primary, .lumi-btn-primary {
+  background-color: var(--lumi-sys-color--accent, #9dd2ff);
+  color: var(--lumi-sys-color--on-surface-default, #000000);
+  border-color: transparent;
+}
+.lumi-btn--primary:hover, .lumi-btn-primary:hover {
+  background-color: var(--lumi-sys-color--accent-container, #dcf1ff);
+}
+:where(.lumi-chip, [class^="lumi-chip"], [class*=" lumi-chip"], [class^="lumi-pill"], [class*=" lumi-pill"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 16px;
+  font-family: var(--ff-sans, 'Google Sans Flex', sans-serif);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface, #1f1f1f);
+  background: var(--surface-dim, #f2f0f0);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.lumi-chip.is-active, .lumi-chip.active, .lumi-chip.is-selected, .lumi-chip.selected, .lumi-chip[aria-pressed="true"], .lumi-chip[aria-selected="true"], .lumi-chip[aria-checked="true"],
+[class^="lumi-chip"].is-active, [class^="lumi-chip"].active, [class^="lumi-chip"].is-selected, [class^="lumi-chip"].selected, [class^="lumi-chip"][aria-pressed="true"], [class^="lumi-chip"][aria-selected="true"], [class^="lumi-chip"][aria-checked="true"],
+[class*=" lumi-chip"].is-active, [class*=" lumi-chip"].active, [class*=" lumi-chip"].is-selected, [class*=" lumi-chip"].selected, [class*=" lumi-chip"][aria-pressed="true"], [class*=" lumi-chip"][aria-selected="true"], [class*=" lumi-chip"][aria-checked="true"],
+[class^="lumi-pill"].is-active, [class^="lumi-pill"].active, [class^="lumi-pill"].is-selected, [class^="lumi-pill"].selected, [class^="lumi-pill"][aria-pressed="true"], [class^="lumi-pill"][aria-selected="true"], [class^="lumi-pill"][aria-checked="true"],
+[class*=" lumi-pill"].is-active, [class*=" lumi-pill"].active, [class*=" lumi-pill"].is-selected, [class*=" lumi-pill"].selected, [class*=" lumi-pill"][aria-pressed="true"], [class*=" lumi-pill"][aria-selected="true"], [class*=" lumi-pill"][aria-checked="true"] {
+  color: var(--on-surface, #000000);
+  background: var(--accent-container, #dcf1ff);
+  border-color: var(--primary, #3186ff);
+  font-weight: 600;
+}
+@media (forced-colors: active) {
+  button, .lumi-btn, .lumi-chip, [class^="lumi-chip"], [class*=" lumi-chip"], [class^="lumi-pill"], [class*=" lumi-pill"], .lumi-segmented-btn, .lumi-tab {
+    border: 1px solid ButtonText !important;
+  }
+  button.active, button.is-active, button.selected, button.is-selected, button[aria-pressed="true"], button[aria-selected="true"], button[aria-checked="true"], .lumi-btn.active, .lumi-btn.is-active, .lumi-btn.selected, .lumi-btn.is-selected, .lumi-btn[aria-pressed="true"], .lumi-btn[aria-selected="true"], .lumi-btn[aria-checked="true"], .lumi-chip.is-active, .lumi-chip.active, .lumi-chip.is-selected, .lumi-chip.selected, .lumi-chip[aria-pressed="true"], .lumi-chip[aria-selected="true"], .lumi-chip[aria-checked="true"], .lumi-segmented-btn.is-active, .lumi-segmented-btn.active, .lumi-segmented-btn.is-selected, .lumi-segmented-btn.selected, .lumi-segmented-btn[aria-pressed="true"], .lumi-segmented-btn[aria-selected="true"], .lumi-segmented-btn[aria-checked="true"], .lumi-tab.active, .lumi-tab.is-active, .lumi-tab.selected, .lumi-tab.is-selected, .lumi-tab[aria-pressed="true"], .lumi-tab[aria-selected="true"], .lumi-tab[aria-checked="true"] {
+    border: 2px solid Highlight !important;
+  }
+  .lumi-slider::-webkit-slider-runnable-track {
+    border: 1px solid ButtonText !important;
+  }
+  .lumi-slider::-webkit-slider-thumb {
+    border: 2px solid Highlight !important;
+    background-color: ButtonText !important;
+  }
+}
+</style>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026학년도 국어정서법 심화 평가</title>
+  <style>
+    .widget-container {
+      width: 100%;
+      max-width: 708px;
+      margin: 0 auto;
+      min-height: 280px;
+      padding-inline: 0;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-l, 16px);
+      color: var(--on-surface);
+    }
+
+    .exam-paper-header {
+      background: var(--surface-dim);
+      border-radius: var(--r-container, 40px);
+      padding: var(--lumi-sys-spacing--xl, 24px);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-m, 12px);
+    }
+
+    .exam-top-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .exam-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-radius: var(--r-full, 999px);
+      background: var(--surface-bright);
+      color: var(--on-surface);
+    }
+
+    .exam-timer {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: var(--r-full, 999px);
+      background: var(--surface-bright);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .candidate-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--spacing-m, 12px);
+      margin-top: 4px;
+    }
+
+    @media (max-width: 480px) {
+      .candidate-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .grade-scale-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: var(--spacing-s, 8px);
+      border-top: 1px solid var(--on-surface-low);
+    }
+
+    .grade-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: var(--r-full, 999px);
+      background: var(--surface-bright);
+      color: var(--on-surface-variant);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .omr-dock {
+      background: var(--surface-bright);
+      border-radius: var(--r-l, 24px);
+      padding: var(--spacing-l, 16px);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-m, 12px);
+    }
+
+    .omr-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .omr-grid {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    @media (max-width: 520px) {
+      .omr-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+
+    .omr-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 2px;
+      border-radius: var(--r-s, 8px);
+      background: var(--surface-dim);
+      color: var(--on-surface);
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-variant-numeric: tabular-nums;
+      transition: background-color 0.15s ease;
+    }
+
+    .omr-cell:hover {
+      background: var(--surface-container-high);
+    }
+
+    .omr-cell.is-marked {
+      background: var(--accent-container);
+      border-color: var(--primary);
+    }
+
+    .omr-cell.is-correct {
+      background: var(--positive-container);
+      border-color: var(--positive);
+    }
+
+    .omr-cell.is-wrong {
+      background: var(--error-container);
+      border-color: var(--error);
+    }
+
+    .omr-num {
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      line-height: 1.2;
+    }
+
+    .omr-val {
+      font-size: 13px;
+      font-weight: 540;
+      line-height: 1.3;
+    }
+
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .result-summary-card {
+      background: var(--surface-dim);
+      border-radius: var(--r-container, 40px);
+      padding: var(--lumi-sys-spacing--xl, 24px);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-l, 16px);
+    }
+
+    .result-summary-card[hidden] {
+      display: none;
+    }
+
+    .result-hero-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-l, 16px);
+    }
+
+    .result-metrics {
+      display: flex;
+      align-items: baseline;
+      gap: var(--lumi-sys-spacing--xl, 24px);
+      flex-wrap: wrap;
+    }
+
+    .metric-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .category-bars {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--spacing-m, 12px);
+      background: var(--surface-bright);
+      border-radius: var(--r-l, 24px);
+      padding: var(--spacing-l, 16px);
+    }
+
+    @media (max-width: 540px) {
+      .category-bars {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .cat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cat-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cat-track {
+      width: 100%;
+      height: 6px;
+      border-radius: var(--r-full, 999px);
+      background: var(--surface-dim);
+      overflow: hidden;
+    }
+
+    .cat-fill {
+      height: 100%;
+      border-radius: var(--r-full, 999px);
+      background: var(--chart-1);
+    }
+
+    .questions-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-m, 12px);
+    }
+
+    .question-card {
+      background: var(--surface-bright);
+      border-radius: var(--r-l, 24px);
+      padding: var(--spacing-xl, 20px);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-m, 12px);
+    }
+
+    .question-card[hidden] {
+      display: none;
+    }
+
+    .q-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--spacing-s, 8px);
+      flex-wrap: wrap;
+    }
+
+    .q-meta-left {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .q-number-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 10px;
+      border-radius: var(--r-full, 999px);
+      background: var(--surface-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .q-status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: var(--r-full, 999px);
+    }
+
+    .q-status-badge.is-correct {
+      background: var(--positive-container);
+      color: var(--positive);
+    }
+
+    .q-status-badge.is-wrong {
+      background: var(--error-container);
+      color: var(--error);
+    }
+
+    .choices-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .choice-btn {
+      width: 100%;
+      text-align: start;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--r-m, 16px);
+      background: var(--surface-dim);
+      color: var(--on-surface);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .choice-btn:hover:not(:disabled) {
+      background: var(--surface-container-high);
+    }
+
+    .choice-btn:disabled {
+      cursor: default;
+    }
+
+    .choice-btn.is-selected {
+      background: var(--accent-container);
+      border-color: var(--primary);
+    }
+
+    .choice-btn.is-answer-correct {
+      background: var(--positive-container);
+      border-color: var(--positive);
+    }
+
+    .choice-btn.is-answer-wrong {
+      background: var(--error-container);
+      border-color: var(--error);
+    }
+
+    .choice-circle {
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.45;
+    }
+
+    .choice-text {
+      flex: 1;
+      line-height: 1.45;
+      word-break: keep-all;
+    }
+
+    .explanation-box {
+      padding: 14px 16px;
+      border-radius: var(--r-m, 16px);
+      background: var(--surface-dim);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .explanation-box[hidden] {
+      display: none;
+    }
+
+    .action-deck {
+      background: var(--surface-bright);
+      border-radius: var(--r-l, 24px);
+      padding: var(--spacing-l, 16px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--spacing-m, 12px);
+    }
+
+    .action-buttons {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--spacing-s, 8px);
+    }
+
+    .hidden-export-canvas {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+<script id="lumi-os-theme-init">
+(function() {
+  function syncBody() {
+    var dt = document.documentElement.getAttribute('data-theme');
+    if (document.body && (dt === 'dark' || dt === 'light')) {
+      document.body.classList.toggle('dark-mode', dt === 'dark');
+    }
+  }
+  function syncTheme(theme) {
+    if (theme !== 'dark' && theme !== 'light') return;
+    document.documentElement.setAttribute('data-theme', theme);
+    syncBody();
+  }
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(syncBody).observe(document.documentElement, {
+      attributes: true, attributeFilter: ['data-theme']
+    });
+  }
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', syncBody);
+  }
+  try {
+    var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq) {
+      var cur = document.documentElement.getAttribute('data-theme');
+      if (!cur) {
+        syncTheme(mq.matches ? 'dark' : 'light');
+      } else {
+        syncTheme(cur);
+      }
+      if (mq.addEventListener) {
+        mq.addEventListener('change', function(e) {
+          syncTheme(e.matches ? 'dark' : 'light');
+        });
+      }
+    }
+  } catch (e) {}
+  window.addEventListener('message', function(e) {
+    if (e.data && (e.data.type === 'set-theme' || e.data.type === 'APPLY_THEME') && e.data.theme) {
+      syncTheme(e.data.theme);
+    }
+  });
+})();
+</script>
+</head>
+<body>
+<a href="../" style="position:fixed;left:12px;top:12px;z-index:9999;font:600 13px/1 -apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',system-ui,sans-serif;color:#666c7a;text-decoration:none;background:rgba(255,255,255,.88);border:1px solid #e4e6ee;border-radius:999px;padding:7px 13px;backdrop-filter:blur(6px)">← 테스트 모음</a>
+
+  <div class="widget-container" id="exam-root">
+    <!-- 1. Exam Paper Header -->
+    <header class="exam-paper-header">
+      <div class="exam-top-meta">
+        <span class="exam-badge lumi-body-s-emphasized">제1교시 국어영역 (심화)</span>
+        <div class="exam-timer lumi-code" aria-live="off">
+          <span class="material-icon" aria-hidden="true">⏱</span>
+          <span id="timer-display">00:00</span>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="lumi-headline-m" style="margin: 0;">2026학년도 국어정서법 심화 평가</h2>
+        <p class="lumi-body-m" style="margin: 6px 0 0 0; color: var(--on-surface-variant);">고어투 어미 · 보조 용언 띄어쓰기 예외 · 사이시옷 · 형태소 및 준말 규정 판별 (20문항 · 문항당 5점)</p>
+      </div>
+
+      <div class="candidate-row">
+        <div class="lumi-input-group">
+          <label class="lumi-input-label" for="candidate-name">성명</label>
+          <input type="text" id="candidate-name" class="lumi-input" placeholder="수험자 성명 입력 (예: 김정서)" maxlength="20">
+        </div>
+        <div class="lumi-input-group">
+          <label class="lumi-input-label" for="candidate-id">수험번호</label>
+          <input type="text" id="candidate-id" class="lumi-input" placeholder="예: 2026-0419" maxlength="20">
+        </div>
+      </div>
+
+      <div class="grade-scale-strip" aria-label="학점 환산 기준표">
+        <span class="grade-pill lumi-body-s">95점 이상: A+</span>
+        <span class="grade-pill lumi-body-s">90점 이상: A0</span>
+        <span class="grade-pill lumi-body-s">85점 이상: B+</span>
+        <span class="grade-pill lumi-body-s">80점 이상: B0</span>
+        <span class="grade-pill lumi-body-s">70점 이상: C+</span>
+        <span class="grade-pill lumi-body-s">70점 미만: F (재수강)</span>
+      </div>
+    </header>
+
+    <!-- 2. OMR Answer Sheet Status & Filter Bar -->
+    <section class="omr-dock" aria-label="OMR 답안 마킹 현황">
+      <div class="omr-header">
+        <span class="lumi-body-m-emphasized">OMR 답안 현황 (<span id="marked-count">0</span> / 20문항 응답)</span>
+        <div class="filter-chips" role="group" aria-label="문항 보기 필터">
+          <button type="button" class="lumi-chip is-active" data-filter="all" aria-pressed="true">전체 문항</button>
+          <button type="button" class="lumi-chip" data-filter="unanswered" aria-pressed="false">미응답 문항만 보기</button>
+          <button type="button" class="lumi-chip" data-filter="wrong" aria-pressed="false" id="filter-wrong-btn" hidden>틀린 문항만 보기</button>
+        </div>
+      </div>
+      <div class="omr-grid" id="omr-grid"></div>
+    </section>
+
+    <!-- 3. Grading Result Summary Card (Shown after submit) -->
+    <section class="result-summary-card" id="result-card" hidden aria-live="polite">
+      <div class="result-hero-row">
+        <div class="result-metrics">
+          <div class="metric-block">
+            <span class="lumi-body-s" style="color: var(--on-surface-variant);">원점수 (100점 만점)</span>
+            <span class="lumi-display-l" id="result-score">0점</span>
+          </div>
+          <div class="metric-block">
+            <span class="lumi-body-s" style="color: var(--on-surface-variant);">산출 학점</span>
+            <span class="lumi-display-l" id="result-grade">-</span>
+          </div>
+          <div class="metric-block">
+            <span class="lumi-body-s" style="color: var(--on-surface-variant);">정답 문항</span>
+            <span class="lumi-headline-m" id="result-correct-count">0 / 20</span>
+          </div>
+        </div>
+        <div class="action-buttons">
+          <button type="button" class="lumi-btn lumi-btn--accent" id="btn-download-png">
+            <span class="material-icon" aria-hidden="true">↓</span>
+            성적표 이미지 저장 (PNG)
+          </button>
+          <button type="button" class="lumi-btn lumi-btn--bright" id="btn-retake-top">
+            <span class="material-icon" aria-hidden="true">↻</span>
+            새로 응시 (선지 섞기)
+          </button>
+        </div>
+      </div>
+
+      <p class="lumi-body-l" id="result-comment" style="margin: 0;"></p>
+
+      <div class="category-bars" id="category-bars"></div>
+    </section>
+
+    <!-- 4. Questions Container (Rendered dynamically from QUESTIONS with shuffled choices) -->
+    <main class="questions-list" id="questions-container" aria-label="시험 문항 목록"></main>
+
+    <!-- 5. Bottom Submit & Control Deck -->
+    <footer class="action-deck">
+      <span class="lumi-body-m" id="footer-status-text" style="color: var(--on-surface-variant);">모든 문항을 마킹한 뒤 답안지를 제출하세요.</span>
+      <div class="action-buttons">
+        <button type="button" class="lumi-btn lumi-btn--tonal" id="btn-retake-bottom">
+          <span class="material-icon" aria-hidden="true">↻</span>
+          새로 응시 (선지 섞기)
+        </button>
+        <button type="button" class="lumi-btn lumi-btn--accent" id="btn-submit">
+          <span class="material-icon" aria-hidden="true">✓</span>
+          OMR 답안지 제출 및 채점하기
+        </button>
+      </div>
+    </footer>
+
+    <!-- Offscreen Canvas for PNG Score Report Generation -->
+    <canvas id="report-canvas" class="hidden-export-canvas" width="960" height="680"></canvas>
+  </div>
+
+  <script>
+    const EXAM_META = {
+      title: "2026학년도 국어정서법 심화 평가",
+      subtitle: "고어투 어미 · 보조 용언 띄어쓰기 예외 · 사이시옷 · 형태소 및 준말 규정 판별",
+      pointsPerQuestion: 5,
+      totalQuestions: 20
+    };
+
+    const GRADE_SCALE = [
+      { min: 95, grade: "A+", comment: "국립국어원 편수관 수준입니다. 고어투 어미와 어문 규정의 미세한 경계까지 완벽히 꿰뚫고 있습니다." },
+      { min: 90, grade: "A0", comment: "최상위권 실력입니다. 현직 교열 기자나 국어학 전공자 못지않은 정서법 감각을 갖추었습니다." },
+      { min: 85, grade: "B+", comment: "우수한 성적이나, 보조 용언 띄어쓰기 예외나 한자어 사이시옷 6개 규칙 한두 문제에서 아쉽게 실점했습니다." },
+      { min: 80, grade: "B0", comment: "기본 정서법은 탄탄하지만 문어체 어미와 준말 규정에서 보완이 필요합니다." },
+      { min: 70, grade: "C+", comment: "일상 표기는 무난하나 고난도 어문 규정 함정에 많이 흔들렸습니다. 오답 해설을 꼼꼼히 점검하세요." },
+      { min: 0, grade: "F (재수강)", comment: "어문 규정의 예외 조항과 형태소 분석부터 다시 다져야 하는 수준입니다. 재응시에 도전해 보세요!" }
+    ];
+
+    const RAW_QUESTIONS = [
+      {
+        id: 1,
+        category: "고어투 어미",
+        question: "다음 중 양보의 연결 어미 '-다손'과 염려의 연결 어미 '-ㄹ세라'의 표기 및 띄어쓰기가 모두 바른 문장은?",
+        options: [
+          { text: "천 리 길을 마다하지 않고 달려간다손 치더라도 제시간에 닿을세라 조바심이 났다.", isCorrect: true },
+          { text: "천 리 길을 마다하지 않고 달려간다손치더라도 제시간에 닿을세라 조바심이 났다.", isCorrect: false },
+          { text: "천 리 길을 마다하지 않고 달려간다손 치더라도 제시간에 닿을 세라 조바심이 났다.", isCorrect: false },
+          { text: "천 리 길을 마다하지 않고 달려간 다손 치더라도 제시간에 닿을세라 조바심이 났다.", isCorrect: false },
+          { text: "천 리 길을 마다하지 않고 달려간다손 치더라도 제시간에 닿으ㄹ세라 조바심이 났다.", isCorrect: false }
+        ],
+        explanation: "양보 어미 '-다손'은 어간에 붙여 쓰고 뒤의 보조 동사 '치더라도'와는 띄어 '달려간다손 치더라도'로 적습니다. 염려를 나타내는 연결 어미 '-ㄹ세라'는 앞말에 붙여 '닿을세라'로 씁니다."
+      },
+      {
+        id: 2,
+        category: "고어투 어미",
+        question: "문어체 연결 어미 '-ㄹ진대', '-ㄹ망정', '-려니와'의 표기가 모두 옳은 문장은?",
+        options: [
+          { text: "이미 엎질러진 물일진대 구차하게 변명할망정 거짓을 고하지는 않으려니와 책임 또한 회피하지 않겠다.", isCorrect: true },
+          { text: "이미 엎질러진 물일진데 구차하게 변명할망정 거짓을 고하지는 않으려니와 책임 또한 회피하지 않겠다.", isCorrect: false },
+          { text: "이미 엎질러진 물일진대 구차하게 변명할 망정 거짓을 고하지는 않으려니와 책임 또한 회피하지 않겠다.", isCorrect: false },
+          { text: "이미 엎질러진 물일진대 구차하게 변명할망정 거짓을 고하지는 않으려늬와 책임 또한 회피하지 않겠다.", isCorrect: false },
+          { text: "이미 엎질러진 물일 진대 구차하게 변명할망정 거짓을 고하지는 않으려니와 책임 또한 회피하지 않겠다.", isCorrect: false }
+        ],
+        explanation: "조건·이유를 나타내는 어미는 '-ㄹ진대'('-ㄹ진데'는 비표준), 양보 어미 '-ㄹ망정'은 하나의 어미이므로 붙여 쓰며, 연결 어미는 '-려니와'로 적습니다."
+      },
+      {
+        id: 3,
+        category: "사이시옷 규정",
+        question: "한글 맞춤법 제30항(사이시옷) 규정에 비추어 표기가 모두 바른 것끼리 묶인 것은?",
+        options: [
+          { text: "곳간, 셋방, 숫자, 찻간, 툇간, 횟수", isCorrect: true },
+          { text: "곳간, 댓가, 숫자, 촛점, 툇간, 횟수", isCorrect: false },
+          { text: "갯수, 셋방, 숫자, 찻간, 툇간, 촛점", isCorrect: false },
+          { text: "곳간, 셋방, 윗층, 찻간, 툇간, 횟수", isCorrect: false },
+          { text: "곳간, 셋방, 숫자, 찻간, 툇마루, 댓가", isCorrect: false }
+        ],
+        explanation: "두 음절로 된 한자어 중 사이시옷을 받치어 적는 단어는 '곳간, 셋방, 숫자, 찻간, 툇간, 횟수' 단 6개뿐입니다. '대가, 초점, 개수, 위층'에는 사이시옷을 적지 않습니다."
+      },
+      {
+        id: 4,
+        category: "사이시옷·파생어",
+        question: "합성어 및 파생어 표기가 모두 옳은 문장은?",
+        options: [
+          { text: "머리말을 고쳐 쓰고 인사말을 건넨 뒤 최댓값을 구했다.", isCorrect: true },
+          { text: "머릿말을 고쳐 쓰고 인사말을 건넨 뒤 최댓값을 구했다.", isCorrect: false },
+          { text: "머리말을 고쳐 쓰고 인삿말을 건넨 뒤 최댓값을 구했다.", isCorrect: false },
+          { text: "머리말을 고쳐 쓰고 인사말을 건넨 뒤 최대값을 구했다.", isCorrect: false },
+          { text: "머릿말을 고쳐 쓰고 인삿말을 건넨 뒤 최대값을 구했다.", isCorrect: false }
+        ],
+        explanation: "'머리말'과 '인사말'은 사잇소리 현상이 일어나지 않는 표준어이므로 사이시옷을 적지 않으며, '최댓값'은 고유어 '값'이 결합한 합성어로 된소리되기가 일어나 사이시옷을 받쳐 적습니다."
+      },
+      {
+        id: 5,
+        category: "보조 용언 띄어쓰기",
+        question: "한글 맞춤법 제47항(보조 용언 띄어쓰기)에 따라 붙여 씀이 허용되지 않는(반드시 띄어 써야 하는) 문장은?",
+        options: [
+          { text: "그 사람은 자기가 다 아는 양하다가 결국 실수를 저질렀다.", isCorrect: true },
+          { text: "밤새워 공부하느라 피곤할 법하다마는 내색하지 않았다.", isCorrect: false },
+          { text: "그 정도 성적이면 합격할 만하다며 다들 격려했다.", isCorrect: false },
+          { text: "아까부터 창밖을 내다보며 누군가를 기다리는 듯하다.", isCorrect: false },
+          { text: "모르는 척하지 말고 솔직하게 털어놓는 편이 낫다.", isCorrect: false }
+        ],
+        explanation: "'-는 양하다'의 '양'은 의존 명사이므로 '아는 양하다'처럼 반드시 띄어 써야 합니다. 나머지 '피곤할 법하다, 합격할 만하다, 기다리는 듯하다, 모르는 척하다'는 원칙적으로 띄어 쓰되 붙여 씀도 허용됩니다."
+      },
+      {
+        id: 6,
+        category: "보조 용언 띄어쓰기",
+        question: "다음 중 보조 용언의 띄어쓰기가 어문 규정에 완전히 부합하는 문장은?",
+        options: [
+          { text: "이 책은 한 번쯤 읽어 볼 만하다.", isCorrect: true },
+          { text: "이 책은 한 번쯤 읽어볼만하다.", isCorrect: false },
+          { text: "그는 합격할만도 한데 뜻밖에 떨어졌다.", isCorrect: false },
+          { text: "불이 꺼져간다더니 결국 완전히 꺼져버렸다.", isCorrect: false },
+          { text: "책을 읽어도보고 요약도 해보았다.", isCorrect: false }
+        ],
+        explanation: "'읽어 볼 만하다'는 원칙대로 띄어 쓴 바른 표기입니다. 본용언에 보조 용언이 거듭 연결될 때 세 용언을 모두 붙인 '읽어볼만하다'는 불가하며, 보조사 '도'가 개입된 '합격할 만도 한데', '읽어도 보고'와 앞말이 합성 동사인 '꺼져 간다더니 / 꺼져 버렸다'는 반드시 띄어야 합니다."
+      },
+      {
+        id: 7,
+        category: "어미·조사 구분",
+        question: "연결어미 '-ㄹ수록'과 '-므로', 명사형 어미+조사 '-ㅁ으로'의 표기가 모두 바른 문장은?",
+        options: [
+          { text: "벼는 익을수록 고개를 숙이므로 겸손함으로 사람을 대해야 한다.", isCorrect: true },
+          { text: "벼는 익을수록 고개를 숙임으로 겸손함으로 사람을 대해야 한다.", isCorrect: false },
+          { text: "벼는 익을 수록 고개를 숙이므로 겸손함으로 사람을 대해야 한다.", isCorrect: false },
+          { text: "벼는 익을수록 고개를 숙이므로 겸손하므로 사람을 대해야 한다.", isCorrect: false },
+          { text: "벼는 익으ㄹ수록 고개를 숙이므로 겸손함으로 사람을 대해야 한다.", isCorrect: false }
+        ],
+        explanation: "'-을수록'은 하나의 연결어미이므로 붙여 씁니다. 까닭을 나타내는 어미는 '-(으)므로'('숙이므로')이고, 명사형 어미 '-(으)ㅁ'에 조사 '으로'가 붙은 형태('겸손함으로')는 수단·자격을 나타냅니다."
+      },
+      {
+        id: 8,
+        category: "어미 구분",
+        question: "관형사형·회상 어미 '-던(지)'와 선택·불문의 어미 '-든(지)'의 쓰임이 모두 옳은 문장은?",
+        options: [
+          { text: "어제 얼마나 춥던지 집에 가든 말든 상관없이 난로부터 켰다.", isCorrect: true },
+          { text: "어제 얼마나 춥든지 집에 가던 말던 상관없이 난로부터 켰다.", isCorrect: false },
+          { text: "어제 얼마나 춥던지 집에 가던 말든 상관없이 난로부터 켰다.", isCorrect: false },
+          { text: "어제 얼마나 춥든지 집에 가든 말든 상관없이 난로부터 켰다.", isCorrect: false },
+          { text: "어제 얼마나 춥던지 집에 가든 말던 상관없이 난로부터 켰다.", isCorrect: false }
+        ],
+        explanation: "과거의 회상·감탄을 나타낼 때는 '-던지'('춥던지')를 쓰고, 선택·불문(가리지 않음)을 나타낼 때는 '-든(지)'('가든 말든')을 씁니다."
+      },
+      {
+        id: 9,
+        category: "표준어·형태소",
+        question: "다음 중 표준어 표기와 띄어쓰기가 모두 옳은 문장은?",
+        options: [
+          { text: "어이없는 변명을 늘어놓으며 구시렁거리더니 며칠 뒤 깨끗이 사과했다.", isCorrect: true },
+          { text: "어의없는 변명을 늘어놓으며 구시렁거리더니 며칠 뒤 깨끗이 사과했다.", isCorrect: false },
+          { text: "어이없는 변명을 늘어놓으며 구시렁거리더니 몇일 뒤 깨끗이 사과했다.", isCorrect: false },
+          { text: "어이없는 변명을 늘어놓으며 구시렁거리더니 며칠 뒤 깨끗히 사과했다.", isCorrect: false },
+          { text: "어이없는 변명을 늘어놓으며 궁시렁거리더니 며칠 뒤 깨끗이 사과했다.", isCorrect: false }
+        ],
+        explanation: "'어이없다', '구시렁거리다'('궁시렁거리다'는 비표준어), '며칠'('몇일'은 비표준어), '깨끗이'('ㅅ' 받침 뒤 부사 파생 접미사는 '-이')가 모두 표준 표기입니다."
+      },
+      {
+        id: 10,
+        category: "접미사 -이/-히",
+        question: "한글 맞춤법 제51항(부사 파생 접미사 '-이'와 '-히')의 표기가 모두 옳은 것끼리 묶인 것은?",
+        options: [
+          { text: "곰곰이, 틈틈이, 일찍이, 지긋이, 번번이", isCorrect: true },
+          { text: "곰곰히, 틈틈이, 일찍이, 지긋이, 번번이", isCorrect: false },
+          { text: "곰곰이, 틈틈히, 일찍이, 지긋히, 번번이", isCorrect: false },
+          { text: "곰곰이, 틈틈이, 일찍히, 지긋이, 번번이", isCorrect: false },
+          { text: "곰곰히, 틈틈히, 일찍히, 지긋이, 번번이", isCorrect: false }
+        ],
+        explanation: "부사 끝에 '-이'가 붙어 뜻을 더하는 경우('곰곰이, 일찍이')와 첩어·준첩어 명사 뒤('틈틈이, 번번이'), 'ㅅ' 받침 뒤('지긋이')는 모두 '-이'로 적습니다."
+      },
+      {
+        id: 11,
+        category: "고어투 어미",
+        question: "다음 중 문어체 어미 '-노라니', '-거니와', '-느니만큼'의 표기와 띄어쓰기가 모두 정확한 문장은?",
+        options: [
+          { text: "세월의 무상함을 되뇌노라니 마음이 착잡하거니와 책임감 또한 무거워지느니만큼 신중히 처신하겠다.", isCorrect: true },
+          { text: "세월의 무상함을 되뇌노라니 마음이 착잡하거니와 책임감 또한 무거워지는니만큼 신중히 처신하겠다.", isCorrect: false },
+          { text: "세월의 무상함을 되뇌느라니 마음이 착잡하거늬와 책임감 또한 무거워지느니만큼 신중히 처신하겠다.", isCorrect: false },
+          { text: "세월의 무상함을 되뇌노라니 마음이 착잡하거니와 책임감 또한 무거워지느니 만큼 신중히 처신하겠다.", isCorrect: false },
+          { text: "세월의 무상함을 되뇌노라늬 마음이 착잡하거니와 책임감 또한 무거워지느니만큼 신중히 처신하겠다.", isCorrect: false }
+        ],
+        explanation: "화자 자신의 행위를 나타내는 '-노라니', 두 사실을 아울러 인정하는 '-거니와', 앞 절이 뒤 절의 근거가 됨을 나타내는 '-느니만큼'은 모두 하나의 연결 어미이므로 변형하거나 띄어 쓰지 않습니다."
+      },
+      {
+        id: 12,
+        category: "사이시옷·합성어",
+        question: "접두사 '웃-'과 '윗-'의 구별 및 합성어 표기가 모두 옳은 문장은?",
+        options: [
+          { text: "웃어른께 예의를 갖추고 윗니와 아랫니를 꽉 물었다.", isCorrect: true },
+          { text: "윗어른께 예의를 갖추고 윗니와 아랫니를 꽉 물었다.", isCorrect: false },
+          { text: "웃어른께 예의를 갖추고 웃니와 아랫니를 꽉 물었다.", isCorrect: false },
+          { text: "웃어른께 예의를 갖추고 윗니와 아래니를 꽉 물었다.", isCorrect: false },
+          { text: "윗어른께 예의를 갖추고 웃니와 아래니를 꽉 물었다.", isCorrect: false }
+        ],
+        explanation: "위아래의 대립이 없는 단어('웃어른, 웃옷, 웃돈')는 '웃-'으로 적고, 위아래의 대립이 있는 단어('윗니/아랫니, 윗입술/아랫입술')는 '윗-'으로 적습니다."
+      },
+      {
+        id: 13,
+        category: "표준어·형태소",
+        question: "용언의 활용 및 어간·어미 결합 표기가 모두 옳은 문장은?",
+        options: [
+          { text: "날이 개어 찌푸렸던 미간을 펴고 설레는 마음으로 발걸음을 내디뎠다.", isCorrect: true },
+          { text: "날이 개여 찌푸렸던 미간을 펴고 설레는 마음으로 발걸음을 내디뎠다.", isCorrect: false },
+          { text: "날이 개어 찌푸렸던 미간을 펴고 설레이는 마음으로 발걸음을 내디뎠다.", isCorrect: false },
+          { text: "날이 개어 찌푸렸던 미간을 펴고 설레는 마음으로 발걸음을 내딛었다.", isCorrect: false },
+          { text: "날이 개어 찌푸렸던 미간을 펴고 설레이는 마음으로 발걸음을 내딛었다.", isCorrect: false }
+        ],
+        explanation: "'개다'의 어간 '개-'에 '-어'가 결합해 '개어'('개여'는 비표준), 기본형은 '설레다'('설레이다' 비표준)이므로 '설레는', '내딛다'에 '-었-'이 결합해 '내디뎠다'로 적습니다."
+      },
+      {
+        id: 14,
+        category: "보조 용언 띄어쓰기",
+        question: "의존 명사와 조사, 어미의 띄어쓰기가 모두 옳은 문장은?",
+        options: [
+          { text: "떠난 지 사흘 만에 그가 돌아올 줄은 꿈에도 몰랐다.", isCorrect: true },
+          { text: "떠난지 사흘 만에 그가 돌아올 줄은 꿈에도 몰랐다.", isCorrect: false },
+          { text: "떠난 지 사흘만에 그가 돌아올 줄은 꿈에도 몰랐다.", isCorrect: false },
+          { text: "떠난 지 사흘 만에 그가 돌아올줄은 꿈에도 몰랐다.", isCorrect: false },
+          { text: "떠난지 사흘만에 그가 돌아올 줄은 꿈에도 몰랐다.", isCorrect: false }
+        ],
+        explanation: "시간의 경과를 나타내는 의존 명사 '지', 시간 경과의 의존 명사 '만', 관형사형 뒤 의존 명사 '줄'은 모두 앞말과 띄어 씁니다."
+      },
+      {
+        id: 15,
+        category: "어미·조사 구분",
+        question: "격 조사 '-로서'와 '-로써'의 구별이 모두 정확한 문장은?",
+        options: [
+          { text: "공직자로서 청렴을 실천함으로써 국민의 신뢰를 얻어야 한다.", isCorrect: true },
+          { text: "공직자로써 청렴을 실천함으로써 국민의 신뢰를 얻어야 한다.", isCorrect: false },
+          { text: "공직자로서 청렴을 실천함으로서 국민의 신뢰를 얻어야 한다.", isCorrect: false },
+          { text: "공직자로써 청렴을 실천함으로서 국민의 신뢰를 얻어야 한다.", isCorrect: false },
+          { text: "공직자로써 청렴을 실천함으로써 국민의 신뢰를 얻어야 한다.", isCorrect: false }
+        ],
+        explanation: "지위·신분·자격을 나타낼 때는 '-로서'('공직자로서')를 쓰고, 수단·도구·방법을 나타낼 때는 '-로써'('실천함으로써')를 씁니다."
+      },
+      {
+        id: 16,
+        category: "표준어·형태소",
+        question: "한글 맞춤법 제40항(준말 규정)에 따른 표기가 모두 옳은 문장은?",
+        options: [
+          { text: "생각건대 그 일은 결코 만만치 않으니 서둘러 넉넉지 않은 예산을 아껴야 한다.", isCorrect: true },
+          { text: "생각컨대 그 일은 결코 만만치 않으니 서둘러 넉넉지 않은 예산을 아껴야 한다.", isCorrect: false },
+          { text: "생각건대 그 일은 결코 만만치 않으니 서둘러 넉넉치 않은 예산을 아껴야 한다.", isCorrect: false },
+          { text: "생각건대 그 일은 결코 만만지 않으니 서둘러 넉넉지 않은 예산을 아껴야 한다.", isCorrect: false },
+          { text: "생각컨대 그 일은 결코 만만치 않으니 서둘러 익숙치 않은 일을 익혀야 한다.", isCorrect: false }
+        ],
+        explanation: "'생각하건대'는 '하'가 통째로 줄어 '생각건대'가 표준이고, '만만하다'는 울림소리('ㄴ') 뒤이므로 '만만치'가 되지만, '넉넉하다, 익숙하다'는 안울림소리('ㄱ') 뒤이므로 'ㅎ'이 남아 '넉넉지, 익숙지'로 적어야 합니다."
+      },
+      {
+        id: 17,
+        category: "사이시옷 규정",
+        question: "다음 중 표준어 및 사이시옷 표기가 모두 바른 문장은?",
+        options: [
+          { text: "깍두기와 육개장을 먹으며 오랫동안 밀린 이야기를 나누었다.", isCorrect: true },
+          { text: "깍뚜기와 육개장을 먹으며 오랫동안 밀린 이야기를 나누었다.", isCorrect: false },
+          { text: "깍두기와 육계장을 먹으며 오랫동안 밀린 이야기를 나누었다.", isCorrect: false },
+          { text: "깍두기와 육개장을 먹으며 오랜동안 밀린 이야기를 나누었다.", isCorrect: false },
+          { text: "깍뚜기와 육계장을 먹으며 오랜동안 밀린 이야기를 나누었다.", isCorrect: false }
+        ],
+        explanation: "'깍두기', '육개장'(개장국에서 유래), '오랫동안'(부사 '오래' + 사이시옷 + '동안')이 표준 표기입니다."
+      },
+      {
+        id: 18,
+        category: "어미·조사 구분",
+        question: "어미 '-ㄹ게', '-ㄹ걸', '-ㄹ쏘냐', '-ㄹ지언정'의 표기와 띄어쓰기가 모두 바른 문장은?",
+        options: [
+          { text: "내가 먼저 사과할게, 괜히 고집부리지 말걸 그랬어. 어찌 신의를 저버릴쏘냐, 차라리 손해를 볼지언정 약속은 지키마.", isCorrect: true },
+          { text: "내가 먼저 사과할께, 괜히 고집부리지 말걸 그랬어. 어찌 신의를 저버릴쏘냐, 차라리 손해를 볼지언정 약속은 지키마.", isCorrect: false },
+          { text: "내가 먼저 사과할게, 괜히 고집부리지 말껄 그랬어. 어찌 신의를 저버릴쏘냐, 차라리 손해를 볼지언정 약속은 지키마.", isCorrect: false },
+          { text: "내가 먼저 사과할게, 괜히 고집부리지 말걸 그랬어. 어찌 신의를 저버릴소냐, 차라리 손해를 볼지언정 약속은 지키마.", isCorrect: false },
+          { text: "내가 먼저 사과할게, 괜히 고집부리지 말걸 그랬어. 어찌 신의를 저버릴쏘냐, 차라리 손해를 볼 지언정 약속은 지키마.", isCorrect: false }
+        ],
+        explanation: "한글 맞춤법 제53항에 따라 '-(으)ㄹ' 뒤에 연결되는 어미는 예사소리로 적으므로 '-ㄹ게, -ㄹ걸, -ㄹ지언정'으로 적습니다. 단, 의문형 어미 '-ㄹ쏘냐'는 예외적으로 된소리로 적습니다."
+      },
+      {
+        id: 19,
+        category: "보조 용언 띄어쓰기",
+        question: "합성 동사와 구 구성의 띄어쓰기가 모두 옳은 문장은?",
+        options: [
+          { text: "빌려준 책을 돌려받으려고 찾아갔으나 이미 고향으로 돌아가고 없었다.", isCorrect: true },
+          { text: "빌려 준 책을 돌려 받으려고 찾아갔으나 이미 고향으로 돌아가고 없었다.", isCorrect: false },
+          { text: "빌려준 책을 돌려받으려고 찾아 갔으나 이미 고향으로 돌아 가고 없었다.", isCorrect: false },
+          { text: "빌려준 책을 돌려 받으려고 찾아갔으나 이미 고향으로 돌아가고 없었다.", isCorrect: false },
+          { text: "빌려 준 책을 돌려받으려고 찾아 갔으나 이미 고향으로 돌아가고 없었다.", isCorrect: false }
+        ],
+        explanation: "'빌려주다', '돌려받다', '찾아가다', '돌아가다'는 모두 국어사전에 등재된 한 단어(합성 동사)이므로 붙여 써야 합니다."
+      },
+      {
+        id: 20,
+        category: "표준어·형태소",
+        question: "다음 중 어문 규정에 어긋난 곳이 전혀 없는 완벽한 문장은?",
+        options: [
+          { text: "설거지를 마친 뒤 금세 곯아떨어졌는데 자칫하면 큰일 날 뻔했다.", isCorrect: true },
+          { text: "설겆이를 마친 뒤 금세 곯아떨어졌는데 자칫하면 큰일 날 뻔했다.", isCorrect: false },
+          { text: "설거지를 마친 뒤 금새 곯아떨어졌는데 자칫하면 큰일 날 뻔했다.", isCorrect: false },
+          { text: "설거지를 마친 뒤 금세 곯아떨어졌는데 자칫하면 큰일 날뻔했다.", isCorrect: false },
+          { text: "설거지를 마친 뒤 금세 골아떨어졌는데 자칫하면 큰일 날 뻔했다.", isCorrect: false }
+        ],
+        explanation: "'설거지', '금세'(금시에의 준말), '곯아떨어지다', '큰일 날 뻔했다'(의존 명사 '뻔'은 띄어 씀)가 모두 바른 표기입니다."
+      }
+    ];
+
+    const CIRCLED_NUMS = ["①", "②", "③", "④", "⑤"];
+
+    function getCssVar(name) {
+      if (!name) return '';
+      const clean = name.replace(/^var\(/, '').replace(/\)$/, '').trim();
+      return getComputedStyle(document.documentElement).getPropertyValue(clean.startsWith('--') ? clean : '--' + clean).trim();
+    }
+
+    function shuffleChoices(q, qIdx) {
+      if (q.shuffle === false || q.options.length < 3) return q.options.slice();
+      let h = 2166136261, s = qIdx + ':' + q.question, out = q.options.slice();
+      for (let k = 0; k < s.length; k++) h = Math.imul(h ^ s.charCodeAt(k), 16777619) >>> 0;
+      for (let x = h || 0x6d2b79f5, i = out.length - 1; i > 0; i--) {
+        x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+        const j = (x >>> 0) % (i + 1);
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    }
+
+    const state = {
+      seedOffset: 0,
+      questions: [],
+      answers: new Array(20).fill(null),
+      submitted: false,
+      filter: "all",
+      elapsedSeconds: 0,
+      timerInterval: null,
+      scoreResult: null
+    };
+
+    function buildShuffledQuestions() {
+      state.questions = RAW_QUESTIONS.map((q, idx) => {
+        const cloned = {
+          id: q.id,
+          category: q.category,
+          question: q.question,
+          options: q.options.map(o => ({ text: o.text, isCorrect: o.isCorrect })),
+          explanation: q.explanation
+        };
+        cloned.options = shuffleChoices(cloned, idx + state.seedOffset * 31);
+        return cloned;
+      });
+    }
+
+    function formatTime(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, "0");
+      const s = String(sec % 60).padStart(2, "0");
+      return (typeof m === 'number' ? Math.round(m * 100) / 100 : m) + ":" + s;
+    }
+
+    function startTimer() {
+      if (state.timerInterval) clearInterval(state.timerInterval);
+      state.elapsedSeconds = 0;
+      document.getElementById("timer-display").textContent = "00:00";
+      state.timerInterval = setInterval(() => {
+        if (!state.submitted) {
+          state.elapsedSeconds += 1;
+          document.getElementById("timer-display").textContent = formatTime(state.elapsedSeconds);
+        }
+      }, 1000);
+    }
+
+    function renderOmrGrid() {
+      const grid = document.getElementById("omr-grid");
+      if (grid) grid.innerHTML = "";
+      state.questions.forEach((q, idx) => {
+        const chosen = state.answers[idx];
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "omr-cell";
+        btn.setAttribute("aria-label", `${q.id}번 문항으로 이동`);
+
+        if (state.submitted) {
+          const isRight = chosen !== null && q.options[chosen] && q.options[chosen].isCorrect;
+          btn.classList.add(isRight ? "is-correct" : "is-wrong");
+        } else if (chosen !== null) {
+          btn.classList.add("is-marked");
+        }
+
+        const numSpan = document.createElement("span");
+        numSpan.className = "omr-num";
+        if (numSpan) numSpan.textContent = String(q.id).padStart(2, "0");
+
+        const valSpan = document.createElement("span");
+        valSpan.className = "omr-val";
+        if (valSpan) valSpan.textContent = chosen !== null ? CIRCLED_NUMS[chosen] : "·";
+
+        btn.appendChild(numSpan);
+        btn.appendChild(valSpan);
+        btn.addEventListener("click", () => {
+          const card = document.getElementById(`question-card-${q.id}`);
+          if (card) {
+            if (card.hidden) {
+              setFilter("all");
+            }
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+        grid.appendChild(btn);
+      });
+
+      const markedCount = state.answers.filter(v => v !== null).length;
+      document.getElementById("marked-count").textContent = String(markedCount);
+    }
+
+    function renderQuestions() {
+      const container = document.getElementById("questions-container");
+      if (container) container.innerHTML = "";
+
+      state.questions.forEach((q, qIdx) => {
+        const chosen = state.answers[qIdx];
+        const isCorrect = chosen !== null && q.options[chosen] && q.options[chosen].isCorrect;
+
+        const card = document.createElement("article");
+        card.className = "question-card";
+        card.id = `question-card-${q.id}`;
+
+        // Filter visibility
+        if (state.filter === "unanswered" && chosen !== null) {
+          card.hidden = true;
+        } else if (state.filter === "wrong" && (!state.submitted || isCorrect)) {
+          card.hidden = true;
+        }
+
+        // Question Header
+        const header = document.createElement("div");
+        header.className = "q-header";
+
+        const metaLeft = document.createElement("div");
+        metaLeft.className = "q-meta-left";
+
+        const numPill = document.createElement("span");
+        numPill.className = "q-number-pill lumi-body-s-emphasized";
+        if (numPill) numPill.textContent = `문항 ${q.id}`;
+
+        const catLabel = document.createElement("span");
+        catLabel.className = "lumi-body-s";
+        catLabel.style.color = getCssVar('--on-surface-variant');
+        if (catLabel) catLabel.textContent = q.category;
+
+        metaLeft.appendChild(numPill);
+        metaLeft.appendChild(catLabel);
+        header.appendChild(metaLeft);
+
+        if (state.submitted) {
+          const badge = document.createElement("span");
+          badge.className = "q-status-badge lumi-body-s-emphasized " + (isCorrect ? "is-correct" : "is-wrong");
+          if (badge) badge.textContent = isCorrect ? "정답 (+5점)" : (chosen === null ? "미응답 (0점)" : "오답 (0점)");
+          header.appendChild(badge);
+        } else {
+          const ptLabel = document.createElement("span");
+          ptLabel.className = "lumi-body-s";
+          ptLabel.style.color = getCssVar('--on-surface-variant');
+          if (ptLabel) ptLabel.textContent = "5점";
+          header.appendChild(ptLabel);
+        }
+
+        // Prompt
+        const promptEl = document.createElement("h3");
+        promptEl.className = "lumi-body-l";
+        promptEl.style.margin = "0";
+        promptEl.style.wordBreak = "keep-all";
+        if (promptEl) promptEl.textContent = q.question;
+
+        // Choices
+        const choicesGroup = document.createElement("div");
+        choicesGroup.className = "choices-group";
+        choicesGroup.setAttribute("role", "radiogroup");
+        choicesGroup.setAttribute("aria-label", `문항 ${q.id} 선지`);
+
+        q.options.forEach((opt, optIdx) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "choice-btn lumi-body-m";
+          btn.setAttribute("role", "radio");
+          const isSelected = chosen === optIdx;
+          btn.setAttribute("aria-checked", isSelected ? "true" : "false");
+          btn.disabled = state.submitted;
+
+          if (!state.submitted) {
+            if (isSelected) btn.classList.add("is-selected");
+          } else {
+            if (opt.isCorrect) {
+              btn.classList.add("is-answer-correct");
+            } else if (isSelected && !opt.isCorrect) {
+              btn.classList.add("is-answer-wrong");
+            }
+          }
+
+          const circle = document.createElement("span");
+          circle.className = "choice-circle lumi-body-m-emphasized";
+          if (circle) circle.textContent = CIRCLED_NUMS[optIdx];
+
+          const text = document.createElement("span");
+          text.className = "choice-text";
+          if (text) text.textContent = opt.text;
+
+          btn.appendChild(circle);
+          btn.appendChild(text);
+
+          btn.addEventListener("click", () => {
+            if (state.submitted) return;
+            state.answers[qIdx] = optIdx;
+            updateViz();
+          });
+
+          choicesGroup.appendChild(btn);
+        });
+
+        // Explanation (revealed upon submit)
+        const expBox = document.createElement("div");
+        expBox.className = "explanation-box";
+        expBox.hidden = !state.submitted;
+
+        const expTitle = document.createElement("span");
+        expTitle.className = "lumi-body-s-emphasized";
+        if (expTitle) expTitle.textContent = "어문 규정 해설";
+
+        const expBody = document.createElement("p");
+        expBody.className = "lumi-body-m";
+        expBody.style.margin = "0";
+        expBody.style.wordBreak = "keep-all";
+        if (expBody) expBody.textContent = q.explanation;
+
+        expBox.appendChild(expTitle);
+        expBox.appendChild(expBody);
+
+        card.appendChild(header);
+        card.appendChild(promptEl);
+        card.appendChild(choicesGroup);
+        card.appendChild(expBox);
+        container.appendChild(card);
+      });
+    }
+
+    function computeResult() {
+      let correctCount = 0;
+      const catStats = {};
+
+      state.questions.forEach((q, idx) => {
+        if (!catStats[q.category]) {
+          catStats[q.category] = { total: 0, correct: 0 };
+        }
+        catStats[q.category].total += 1;
+
+        const chosen = state.answers[idx];
+        if (chosen !== null && q.options[chosen] && q.options[chosen].isCorrect) {
+          correctCount += 1;
+          catStats[q.category].correct += 1;
+        }
+      });
+
+      const score = correctCount * EXAM_META.pointsPerQuestion;
+      const gradeInfo = GRADE_SCALE.find(g => score >= g.min) || GRADE_SCALE[GRADE_SCALE.length - 1];
+
+      return {
+        score,
+        correctCount,
+        totalQuestions: EXAM_META.totalQuestions,
+        grade: gradeInfo.grade,
+        comment: gradeInfo.comment,
+        catStats
+      };
+    }
+
+    function renderResultCard() {
+      const card = document.getElementById("result-card");
+      const wrongFilterBtn = document.getElementById("filter-wrong-btn");
+      const submitBtn = document.getElementById("btn-submit");
+      const footerStatus = document.getElementById("footer-status-text");
+
+      if (!state.submitted || !state.scoreResult) {
+        card.hidden = true;
+        wrongFilterBtn.hidden = true;
+        submitBtn.disabled = false;
+        const remaining = state.answers.filter(v => v === null).length;
+        if (footerStatus) footerStatus.textContent = remaining === 0
+          ? "모든 문항을 마킹했습니다. 답안지를 제출하세요."
+          : `미응답 문항이 ${remaining}개 남아 있습니다.`;
+        return;
+      }
+
+      card.hidden = false;
+      wrongFilterBtn.hidden = false;
+      submitBtn.disabled = true;
+      if (footerStatus) footerStatus.textContent = `채점이 완료되었습니다. (최종 점수 ${state.scoreResult.score}점 / ${state.scoreResult.grade})`;
+
+      document.getElementById("result-score").textContent = `${state.scoreResult.score}점`;
+      document.getElementById("result-grade").textContent = state.scoreResult.grade;
+      document.getElementById("result-correct-count").textContent = `${state.scoreResult.correctCount} / ${state.scoreResult.totalQuestions}`;
+      document.getElementById("result-comment").textContent = state.scoreResult.comment;
+
+      const barsContainer = document.getElementById("category-bars");
+      if (barsContainer) barsContainer.innerHTML = "";
+      Object.entries(state.scoreResult.catStats).forEach(([catName, stat]) => {
+        const pct = Math.round((stat.correct / stat.total) * 100);
+        const item = document.createElement("div");
+        item.className = "cat-item";
+
+        const labelRow = document.createElement("div");
+        labelRow.className = "cat-label-row lumi-body-s";
+
+        const nameSpan = document.createElement("span");
+        if (nameSpan) nameSpan.textContent = catName;
+
+        const valSpan = document.createElement("span");
+        valSpan.className = "lumi-body-s-emphasized";
+        if (valSpan) valSpan.textContent = `${stat.correct}/${stat.total} (${pct}%)`;
+
+        labelRow.appendChild(nameSpan);
+        labelRow.appendChild(valSpan);
+
+        const track = document.createElement("div");
+        track.className = "cat-track";
+
+        const fill = document.createElement("div");
+        fill.className = "cat-fill";
+        fill.style.width = pct + "%";
+
+        track.appendChild(fill);
+        item.appendChild(labelRow);
+        item.appendChild(track);
+        barsContainer.appendChild(item);
+      });
+    }
+
+    function setFilter(newFilter) {
+      state.filter = newFilter;
+      document.querySelectorAll(".filter-chips .lumi-chip").forEach(chip => {
+        const isTarget = chip.dataset.filter === newFilter;
+        chip.classList.toggle("is-active", isTarget);
+        chip.setAttribute("aria-pressed", isTarget ? "true" : "false");
+      });
+      renderQuestions();
+    }
+
+    function submitExam() {
+      if (state.submitted) return;
+      state.submitted = true;
+      state.scoreResult = computeResult();
+      setFilter("all");
+      updateViz();
+      const resultEl = document.getElementById("result-card");
+      if (resultEl) {
+        resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function retakeExam() {
+      state.seedOffset += 1;
+      state.answers = new Array(20).fill(null);
+      state.submitted = false;
+      state.scoreResult = null;
+      buildShuffledQuestions();
+      setFilter("all");
+      startTimer();
+      updateViz();
+      const rootEl = document.getElementById("exam-root");
+      if (rootEl) {
+        rootEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function downloadScoreReportPng() {
+      if (!state.submitted || !state.scoreResult) return;
+      const canvas = document.getElementById("report-canvas");
+      const ctx = canvas.getContext("2d");
+      const dpr = 2;
+      const w = 960;
+      const h = 680;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const bgSurface = getCssVar("--surface") || "#fdfcfc";
+      const bgDim = getCssVar("--surface-dim") || "#f2f0f0";
+      const bgBright = getCssVar("--surface-bright") || "#ffffff";
+      const inkPrimary = getCssVar("--on-surface") || "#000000";
+      const inkMuted = getCssVar("--on-surface-variant") || "rgba(0,0,0,0.62)";
+      const chartBar = getCssVar("--chart-1") || "#2575fc";
+      const positiveColor = getCssVar("--positive") || "#008052";
+      const errorColor = getCssVar("--error") || "#de2d29";
+
+      function roundRect(x, y, rw, rh, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + rw, y, x + rw, y + rh, r);
+        ctx.arcTo(x + rw, y + rh, x, y + rh, r);
+        ctx.arcTo(x, y + rh, x, y, r);
+        ctx.arcTo(x, y, x + rw, y, r);
+        ctx.closePath();
+      }
+
+      // Outer background
+      ctx.fillStyle = bgSurface;
+      ctx.fillRect(0, 0, w, h);
+
+      // Header container
+      ctx.fillStyle = bgDim;
+      roundRect(36, 32, w - 72, 180, 32);
+      ctx.fill();
+
+      ctx.fillStyle = inkMuted;
+      ctx.font = "600 15px 'Google Sans Flex', sans-serif";
+      ctx.fillText("제1교시 국어영역 (심화) · 공식 성적통지표", 68, 72);
+
+      ctx.fillStyle = inkPrimary;
+      ctx.font = "700 28px 'Google Sans Flex', sans-serif";
+      ctx.fillText(EXAM_META.title, 68, 112);
+
+      const rawName = document.getElementById("candidate-name").value.trim() || "미기재 수험자";
+      const rawId = document.getElementById("candidate-id").value.trim() || "2026-0000";
+      const elapsedText = formatTime(state.elapsedSeconds);
+
+      ctx.fillStyle = inkMuted;
+      ctx.font = "500 16px 'Google Sans Flex', sans-serif";
+      ctx.fillText(`성명: ${rawName}   |   수험번호: ${rawId}   |   소요 시간: ${elapsedText}`, 68, 152);
+
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
+      ctx.fillText(`발급일자: ${dateStr}`, 68, 182);
+
+      // Score & Grade Cards
+      ctx.fillStyle = bgBright;
+      roundRect(36, 232, 430, 170, 24);
+      ctx.fill();
+
+      ctx.fillStyle = inkMuted;
+      ctx.font = "500 15px 'Google Sans Flex', sans-serif";
+      ctx.fillText("원점수 (100점 만점)", 68, 270);
+      ctx.fillText("최종 산출 학점", 268, 270);
+
+      ctx.fillStyle = inkPrimary;
+      ctx.font = "700 44px 'Google Sans Flex', sans-serif";
+      ctx.fillText(`${state.scoreResult.score}점`, 68, 326);
+      ctx.fillText(state.scoreResult.grade, 268, 326);
+
+      ctx.fillStyle = inkMuted;
+      ctx.font = "500 14px 'Google Sans Flex', sans-serif";
+      ctx.fillText(`정답 문항: ${state.scoreResult.correctCount} / ${state.scoreResult.totalQuestions}문항`, 68, 372);
+
+      // OMR Summary Card on Right
+      ctx.fillStyle = bgBright;
+      roundRect(486, 232, 438, 170, 24);
+      ctx.fill();
+
+      ctx.fillStyle = inkMuted;
+      ctx.font = "500 15px 'Google Sans Flex', sans-serif";
+      ctx.fillText("문항별 정·오답 현황 (1~20번)", 514, 270);
+
+      state.questions.forEach((q, idx) => {
+        const col = idx % 10;
+        const row = Math.floor(idx / 10);
+        const bx = 514 + col * 39;
+        const by = 290 + row * 48;
+        const chosen = state.answers[idx];
+        const isRight = chosen !== null && q.options[chosen] && q.options[chosen].isCorrect;
+
+        ctx.fillStyle = isRight ? positiveColor : errorColor;
+        roundRect(bx, by, 32, 38, 8);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "600 12px 'Google Sans Code', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(String(q.id).padStart(2, "0"), bx + 16, by + 16);
+        ctx.fillText(isRight ? "O" : "X", bx + 16, by + 31);
+      });
+      ctx.textAlign = "start";
+
+      // Category Performance Card
+      ctx.fillStyle = bgBright;
+      roundRect(36, 422, w - 72, 224, 24);
+      ctx.fill();
+
+      ctx.fillStyle = inkPrimary;
+      ctx.font = "600 16px 'Google Sans Flex', sans-serif";
+      ctx.fillText("영역별 성취도 분석", 68, 460);
+
+      const entries = Object.entries(state.scoreResult.catStats);
+      entries.forEach(([catName, stat], i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const cx = 68 + col * 425;
+        const cy = 492 + row * 36;
+        const pct = Math.round((stat.correct / stat.total) * 100);
+
+        ctx.fillStyle = inkPrimary;
+        ctx.font = "500 14px 'Google Sans Flex', sans-serif";
+        ctx.fillText(catName, cx, cy);
+
+        ctx.fillStyle = inkMuted;
+        ctx.fillText(`${stat.correct}/${stat.total} (${pct}%)`, cx + 145, cy);
+
+        // Bar track
+        ctx.fillStyle = bgDim;
+        roundRect(cx + 225, cy - 11, 165, 10, 5);
+        ctx.fill();
+
+        // Bar fill
+        if (pct > 0) {
+          ctx.fillStyle = chartBar;
+          roundRect(cx + 225, cy - 11, Math.max(10, Math.round(165 * (pct / 100))), 10, 5);
+          ctx.fill();
+        }
+      });
+
+      // Trigger PNG download
+      const link = document.createElement("a");
+      link.download = `국어정서법_심화평가_성적표_${rawName}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    }
+
+    function updateViz() {
+      renderOmrGrid();
+      renderQuestions();
+      renderResultCard();
+    }
+
+    // Event bindings
+    document.querySelectorAll(".filter-chips .lumi-chip").forEach(chip => {
+      chip.addEventListener("click", (e) => {
+        setFilter(e.currentTarget.dataset.filter);
+      });
+    });
+
+    document.getElementById("btn-submit").addEventListener("click", submitExam);
+    document.getElementById("btn-retake-top").addEventListener("click", retakeExam);
+    document.getElementById("btn-retake-bottom").addEventListener("click", retakeExam);
+    document.getElementById("btn-download-png").addEventListener("click", downloadScoreReportPng);
+
+    // Initialize immediately
+    buildShuffledQuestions();
+    startTimer();
+    updateViz();
+
+    const applyTheme = t => { document.documentElement.setAttribute('data-theme', t); if (typeof updateViz === 'function') updateViz(); };
+    if (!document.documentElement.hasAttribute('data-theme') && window.matchMedia?.('(prefers-color-scheme: dark)').matches) applyTheme('dark');
+    window.addEventListener('message', e => { if (e.data?.type === 'set-theme' || e.data?.type === 'APPLY_THEME') applyTheme(e.data.theme); });
+    (function autoResize() {
+      function notifyHeight() {
+        const root = document.querySelector('.widget-container') || document.body;
+        const h = Math.ceil(Math.max(root.getBoundingClientRect().bottom, root.scrollHeight));
+        window.parent.postMessage({type: 'widget-resize', height: h}, '*');
+      }
+      window.addEventListener('load', () => setTimeout(notifyHeight, 120));
+      new ResizeObserver(notifyHeight).observe(document.documentElement);
+    })();
+  </script>
+
+<script>/*luminous-slider-normalizer*/(function(){function f(r){if(!r||r.type!=='range')return;var mn=parseFloat(r.min||'0'),mx=parseFloat(r.max||'100'),v=parseFloat(r.value);if(isNaN(v))v=(mn+mx)/2;var rt=mx>mn?Math.max(0,Math.min(1,(v-mn)/(mx-mn))):0.5,pv=(rt*100)+'%',rv=String(rt);if(r.style.getPropertyValue('--progress')!==pv)r.style.setProperty('--progress',pv);if(r.style.getPropertyValue('--progress-ratio')!==rv)r.style.setProperty('--progress-ratio',rv);if(r.style.getPropertyValue('--slider-fill'))r.style.removeProperty('--slider-fill');}function all(){document.querySelectorAll('input[type="range"], .lumi-slider').forEach(f);}document.addEventListener('input',function(e){f(e.target);});document.addEventListener('change',function(e){f(e.target);});window.addEventListener('message',function(e){var d=e&&e.data;if(d&&(d.type==='SUPPLEMENTAL_DATA_UPDATE'||d.type==='RESTORE_STATE')){all();setTimeout(all,0);setTimeout(all,50);}});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){all();setTimeout(all,0);});else{all();setTimeout(all,0);}})();</script>
+
+<script id="lumi-a11y-normalizer">(function(){
+var lastLiveMsg='';
+var liveToggle=false;
+function getOrCreateChartLive(){
+  var live=document.getElementById('lumi-chart-live');
+  if(!live&&document.body){
+    live=document.createElement('div');
+    live.id='lumi-chart-live';
+    live.setAttribute('role','status');
+    live.setAttribute('aria-live','polite');
+    live.setAttribute('aria-atomic','true');
+    live.style.cssText='position:absolute;width:1px;height:1px;padding:0;margin:-1px;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0;';
+    document.body.appendChild(live);
+  }
+  return live;
+}
+function announceChartMsg(msg){
+  var live=getOrCreateChartLive();
+  if(!live||!msg)return;
+  if(msg===lastLiveMsg)liveToggle=!liveToggle;
+  else{lastLiveMsg=msg;liveToggle=false;}
+  while(live.childNodes.length)live.removeChild(live.childNodes[0]);
+  live.appendChild(document.createTextNode(liveToggle?(msg+'\u00a0'):msg));
+}
+function showChartKbdBadge(anchorEl,msg){
+  try{
+    var wrap=(anchorEl&&anchorEl.parentElement)||document.body;
+    if(!wrap)return;
+    var cs=window.getComputedStyle?window.getComputedStyle(wrap):null;
+    if(cs&&cs.position==='static')wrap.style.position='relative';
+    var badge=wrap.querySelector('.lumi-chart-kbd-tip');
+    if(!msg){
+      if(badge)badge.style.display='none';
+      return;
+    }
+    if(!badge){
+      badge=document.createElement('div');
+      badge.className='lumi-chart-kbd-tip';
+      badge.setAttribute('aria-hidden','true');
+      badge.style.cssText='position:absolute;top:8px;right:8px;z-index:20;max-width:88%;padding:6px 12px;border-radius:8px;font-family:var(--ff-sans,sans-serif);font-size:13px;font-weight:500;line-height:18px;background:var(--surface-bright,#ffffff);color:var(--on-surface,#000000);border:1px solid var(--primary,#3186ff);box-shadow:0 2px 8px rgba(0,0,0,0.14);pointer-events:none;';
+      wrap.appendChild(badge);
+    }
+    badge.style.display='block';
+    while(badge.childNodes.length)badge.removeChild(badge.childNodes[0]);
+    badge.appendChild(document.createTextNode(msg));
+  }catch(e){}
+}
+function syncSliders(){
+  try{
+    document.querySelectorAll('input[type="range"], .lumi-slider').forEach(function(r){
+      if(!r||r.type!=='range')return;
+      var mn=parseFloat(r.min||'0'),mx=parseFloat(r.max||'100'),v=parseFloat(r.value);
+      if(isNaN(v))v=(mn+mx)/2;
+      var rt=mx>mn?Math.max(0,Math.min(1,(v-mn)/(mx-mn))):0.5;
+      var pv=(rt*100)+'%',rv=String(rt);
+      if(r.style.getPropertyValue('--progress')!==pv)r.style.setProperty('--progress',pv);
+      if(r.style.getPropertyValue('--progress-ratio')!==rv)r.style.setProperty('--progress-ratio',rv);
+      if(r.style.getPropertyValue('--slider-fill'))r.style.removeProperty('--slider-fill');
+    });
+  }catch(e){}
+}
+var isSyncingA11y=false;
+var kSelectableClsRe=new RegExp('\\b(lumi-segmented-\\w+|lumi-'+'chip\\S*|lumi-pill\\S*|togglable|toggle-btn|filter-btn|mode-btn|strategy-btn|tab-btn|option-btn|pill|chip)\\b','i');
+var kActiveTokenRe=/^(?:is-|btn-|chip-|tab-|pill-|mode-|seg-|filter-|opt-|strategy-)?(?:active|selected|current)(?:-\w+)?$/i;
+var kActionBtnTxtRe=/^(?:reset|clear|cancel|submit|apply|calculate|run|play|pause|stop|step|next|prev|previous|back|close|delete|remove|add|export|copy|share|download|save|undo|redo|randomize)\b/i;
+function hasActiveClass(b){
+  if(!b||b.nodeType!==1)return false;
+  if(b.getAttribute('data-active')==='true'||b.getAttribute('data-selected')==='true')return true;
+  var cls=typeof b.className==='string'?b.className:'';
+  if(!cls)return false;
+  var toks=cls.trim().split(/\s+/);
+  for(var i=0;i<toks.length;i++){
+    if(kActiveTokenRe.test(toks[i]))return true;
+  }
+  return false;
+}
+function hasSelectableDataAttr(b){
+  return b&&(b.hasAttribute('data-filter')||b.hasAttribute('data-mode')||b.hasAttribute('data-strategy')||b.hasAttribute('data-view')||b.hasAttribute('data-category')||b.hasAttribute('data-period')||b.hasAttribute('data-option')||b.hasAttribute('data-tab')||b.hasAttribute('data-term'));
+}
+function getBtnGroup(b){
+  if(!b)return null;
+  return b.closest('[role="radiogroup"], [role="tablist"], [role="toolbar"], [class*="segmented"], [class*="tab-bar"], [class*="toggle-group"], [class*="btn-group"], [class*="filter-group"], [class*="pill-group"], [class*="chip-group"]')||b.parentElement;
+}
+function getGroupButtons(b){
+  var grp=getBtnGroup(b);
+  if(!grp)return b?[b]:[];
+  if(grp===b.parentElement){
+    return Array.from(grp.children).filter(function(c){return c.tagName==='BUTTON';});
+  }
+  return Array.from(grp.querySelectorAll('button'));
+}
+function detectVisualActiveInGroup(sibs){
+  if(sibs.some(hasActiveClass)){
+    return{hasSignal:true,isActive:function(b){return hasActiveClass(b);}};
+  }
+  if(sibs.length>=2){
+    var kTonalCls='lumi-'+'btn--tonal';
+    var kPrimCls='lumi-'+'btn--primary';
+    var tonal=sibs.filter(function(s){return s.classList&&s.classList.contains(kTonalCls);});
+    if(tonal.length>=1&&tonal.length<sibs.length){
+      return{hasSignal:true,isActive:function(b){return b.classList&&b.classList.contains(kTonalCls);}};
+    }
+    var hasActionTxt=sibs.some(function(s){return kActionBtnTxtRe.test((s.textContent||'').trim());});
+    if(!hasActionTxt){
+      var prim=sibs.filter(function(s){return s.classList&&s.classList.contains(kPrimCls);});
+      if(prim.length>=1&&prim.length<sibs.length){
+        return{hasSignal:true,isActive:function(b){return b.classList&&b.classList.contains(kPrimCls);}};
+      }
+      var withBg=sibs.filter(function(s){
+        var bg=(s.style&&(s.style.backgroundColor||s.style.background)||'').trim();
+        return bg&&bg!=='transparent'&&bg!=='none'&&!/surface|fff|0000/i.test(bg);
+      });
+      if(withBg.length===1){
+        return{hasSignal:true,isActive:function(b){return withBg.indexOf(b)>=0;}};
+      }
+    }
+  }
+  return{hasSignal:false,isActive:function(){return false;}};
+}
+function isSelectableBtn(b){
+  if(!b||b.tagName!=='BUTTON')return false;
+  var role=b.getAttribute('role');
+  if(role==='tab'||role==='radio'||role==='switch'||role==='menuitem'||b.hasAttribute('aria-expanded')||b.hasAttribute('aria-selected')||b.hasAttribute('aria-checked')||b.classList.contains('lumi-sort-btn'))return false;
+  var cls=typeof b.className==='string'?b.className:'';
+  if(kSelectableClsRe.test(cls)||hasActiveClass(b)||b.hasAttribute('aria-pressed')||hasSelectableDataAttr(b))return true;
+  var sibs=getGroupButtons(b);
+  if(sibs.length>=2){
+    if(sibs.some(function(s){return kSelectableClsRe.test(typeof s.className==='string'?s.className:'')||hasActiveClass(s)||s.hasAttribute('aria-pressed')||hasSelectableDataAttr(s);})){
+      return true;
+    }
+    if(detectVisualActiveInGroup(sibs).hasSignal)return true;
+  }
+  return false;
+}
+function fixDeleteButtons(){
+  try{
+    document.querySelectorAll('button:not([aria-label]):not([aria-labelledby])').forEach(function(b){
+      var t=(b.textContent||'').trim();
+      if(t==='\u00d7'||t==='✕'||t==='✖'||t==='&times;'||((t==='x'||t==='X')&&!isSelectableBtn(b))){
+        b.setAttribute('aria-label','Delete');
+      }
+    });
+  }catch(e){}
+}
+function fixFormGroups(){
+  try{
+    document.querySelectorAll('input:not([type="hidden"]):not([aria-label]):not([aria-labelledby]), select:not([aria-label]):not([aria-labelledby]), textarea:not([aria-label]):not([aria-labelledby])').forEach(function(inp){
+      if(inp.id&&document.querySelector('label[for="'+CSS.escape(inp.id)+'"]'))return;
+      if(inp.closest('label'))return;
+      var ph=inp.getAttribute('placeholder');
+      if(ph)inp.setAttribute('aria-label',ph);
+    });
+    var rawCandidates=new Set();
+    document.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function(inp){
+      var row=inp.parentElement;
+      while(row&&row!==document.body){
+        var p=row.parentElement;
+        if(p&&p!==document.body&&p.children.length>=2){
+          rawCandidates.add(p);
+        }
+        row=p;
+      }
+    });
+    var validContainers=[];
+    rawCandidates.forEach(function(container){
+      var rows=Array.from(container.children).filter(function(ch){
+        return ch.querySelectorAll&&ch.querySelectorAll('input:not([type="hidden"]), select, textarea').length>=2;
+      });
+      if(rows.length>=2)validContainers.push({container:container,rows:rows});
+    });
+    validContainers.forEach(function(entry){
+      var container=entry.container;
+      var hasInnerCandidate=validContainers.some(function(other){
+        return other.container!==container&&container.contains(other.container);
+      });
+      if(hasInnerCandidate)return;
+      var baseLabel='Item';
+      var prev=container.previousElementSibling;
+      if(prev){
+        var hdr=(/^H[1-6]$/.test(prev.tagName)||prev.matches('[role="heading"], [class*="card-title"]'))?prev:prev.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"], [class*="card-title"]');
+        if(hdr){
+          baseLabel=(hdr.textContent||'').trim().replace(/s$/i,'')||'Item';
+        }
+      }
+      entry.rows.forEach(function(r,idx){
+        if(!r.hasAttribute('role')&&r.tagName!=='FIELDSET'){
+          r.setAttribute('role','group');
+        }
+        if(r.getAttribute('role')==='group'&&(!r.hasAttribute('aria-label')||r.dataset.lumiAutoGroup==='1')&&!r.hasAttribute('aria-labelledby')){
+          r.setAttribute('aria-label',baseLabel+' '+(idx+1));
+          r.dataset.lumiAutoGroup='1';
+        }
+      });
+    });
+  }catch(e){}
+}
+function isBtnActiveState(b){
+  return hasActiveClass(b)||b.getAttribute('aria-checked')==='true'||b.getAttribute('aria-selected')==='true'||b.getAttribute('aria-pressed')==='true';
+}
+function syncSelectableButtons(){
+  if(isSyncingA11y)return;
+  isSyncingA11y=true;
+  try{
+    document.querySelectorAll('[role="radiogroup"]').forEach(function(rg){
+      rg.querySelectorAll('button').forEach(function(b){
+        if(!b.hasAttribute('role'))b.setAttribute('role','radio');
+      });
+    });
+    document.querySelectorAll('[role="tablist"], [class*="tab-bar"]').forEach(function(tl){
+      if(!tl.hasAttribute('role'))tl.setAttribute('role','tablist');
+      tl.querySelectorAll('button').forEach(function(b){
+        if(!b.hasAttribute('role'))b.setAttribute('role','tab');
+      });
+    });
+    document.querySelectorAll('button[role="radio"]').forEach(function(b){
+      var p=getBtnGroup(b);
+      if(p&&!p.hasAttribute('role'))p.setAttribute('role','radiogroup');
+      var sibs=p?Array.from(p.querySelectorAll('button[role="radio"]')):[b];
+      var sig=detectVisualActiveInGroup(sibs);
+      if(sig.hasSignal){
+        var wanted=sig.isActive(b)?'true':'false';
+        if(b.getAttribute('aria-checked')!==wanted)b.setAttribute('aria-checked',wanted);
+      }else if(sibs.some(function(s){return s.dataset&&s.dataset.lumiClickedActive==='1';})){
+        var cWanted=(b.dataset&&b.dataset.lumiClickedActive==='1')?'true':'false';
+        if(b.getAttribute('aria-checked')!==cWanted)b.setAttribute('aria-checked',cWanted);
+      }else if(!b.hasAttribute('aria-checked')){
+        var pressed=b.getAttribute('aria-pressed');
+        b.setAttribute('aria-checked',pressed==='true'?'true':'false');
+      }
+      if(b.hasAttribute('aria-pressed'))b.removeAttribute('aria-pressed');
+    });
+    document.querySelectorAll('button[role="tab"]').forEach(function(b){
+      var p=getBtnGroup(b);
+      if(p&&!p.hasAttribute('role'))p.setAttribute('role','tablist');
+      var sibs=p?Array.from(p.querySelectorAll('button[role="tab"]')):[b];
+      var sig=detectVisualActiveInGroup(sibs);
+      if(sig.hasSignal){
+        var wanted=sig.isActive(b)?'true':'false';
+        if(b.getAttribute('aria-selected')!==wanted)b.setAttribute('aria-selected',wanted);
+      }else if(sibs.some(function(s){return s.dataset&&s.dataset.lumiClickedActive==='1';})){
+        var cWanted=(b.dataset&&b.dataset.lumiClickedActive==='1')?'true':'false';
+        if(b.getAttribute('aria-selected')!==cWanted)b.setAttribute('aria-selected',cWanted);
+      }else if(!b.hasAttribute('aria-selected')){
+        var pressed=b.getAttribute('aria-pressed');
+        b.setAttribute('aria-selected',pressed==='true'?'true':'false');
+      }
+      if(b.hasAttribute('aria-pressed'))b.removeAttribute('aria-pressed');
+    });
+    document.querySelectorAll('button').forEach(function(b){
+      if(!isSelectableBtn(b))return;
+      var sibs=getGroupButtons(b);
+      if(sibs.length>=2){
+        var p=getBtnGroup(b);
+        if(p&&p!==document.body&&!p.hasAttribute('role'))p.setAttribute('role','group');
+      }
+      var sig=detectVisualActiveInGroup(sibs);
+      if(sig.hasSignal){
+        var wanted=sig.isActive(b)?'true':'false';
+        if(b.getAttribute('aria-pressed')!==wanted){
+          b.setAttribute('aria-pressed',wanted);
+          b.setAttribute('data-lumi-auto-pressed','1');
+        }
+        return;
+      }
+      if(sibs.some(function(s){return s.dataset&&s.dataset.lumiClickedActive!==undefined;})){
+        var cWanted=(b.dataset&&b.dataset.lumiClickedActive==='1')?'true':'false';
+        if(b.getAttribute('aria-pressed')!==cWanted){
+          b.setAttribute('aria-pressed',cWanted);
+          b.setAttribute('data-lumi-auto-pressed','1');
+        }
+        return;
+      }
+      if(b.hasAttribute('aria-pressed')&&b.getAttribute('data-lumi-auto-pressed')!=='1')return;
+      var anyAuthorPressed=sibs.some(function(s){return s.getAttribute('aria-pressed')==='true'&&s.getAttribute('data-lumi-auto-pressed')!=='1';});
+      var defActive=!anyAuthorPressed&&sibs.length>=2&&sibs[0]===b&&hasSelectableDataAttr(b);
+      var defWanted=defActive?'true':'false';
+      if(b.getAttribute('aria-pressed')!==defWanted){
+        b.setAttribute('aria-pressed',defWanted);
+        b.setAttribute('data-lumi-auto-pressed','1');
+      }
+    });
+    document.querySelectorAll('[role="radiogroup"], [role="tablist"], [role="toolbar"], [role="group"], [class*="segmented-group"], [class*="tab-bar"], [class*="chip-group"]').forEach(function(grp){
+      var gRole=grp.getAttribute('role');
+      var btns=Array.from(grp.querySelectorAll('button:not([disabled])')).filter(function(b){
+        return gRole==='radiogroup'||gRole==='tablist'||gRole==='toolbar'||b.hasAttribute('aria-pressed')||b.hasAttribute('aria-checked')||b.hasAttribute('aria-selected')||isSelectableBtn(b);
+      });
+      if(btns.length<2)return;
+      var focusedIdx=btns.indexOf(document.activeElement);
+      var activeIdx=-1;
+      if(gRole==='toolbar'&&focusedIdx>=0){
+        activeIdx=focusedIdx;
+      }else{
+        for(var i=0;i<btns.length;i++){
+          if(isBtnActiveState(btns[i])){activeIdx=i;break;}
+        }
+        if(activeIdx<0)activeIdx=focusedIdx>=0?focusedIdx:0;
+      }
+      btns.forEach(function(b,idx){
+        b.setAttribute('tabindex',idx===activeIdx?'0':'-1');
+      });
+    });
+  }catch(e){}
+  isSyncingA11y=false;
+}
+document.addEventListener('keydown',function(ev){
+  if(ev.key!=='ArrowRight'&&ev.key!=='ArrowLeft'&&ev.key!=='ArrowDown'&&ev.key!=='ArrowUp'&&ev.key!=='Home'&&ev.key!=='End')return;
+  var btn=ev.target&&ev.target.closest?ev.target.closest('button'):null;
+  if(!btn||btn.classList.contains('lumi-sort-btn'))return;
+  var grp=btn.closest('[role="radiogroup"], [role="tablist"], [role="toolbar"], [role="group"], [class*="segmented-group"], [class*="tab-bar"], [class*="chip-group"]');
+  var btns=[];
+  if(grp){
+    var grpRole=grp.getAttribute('role');
+    btns=Array.from(grp.querySelectorAll('button:not([disabled])')).filter(function(b){
+      return grpRole==='radiogroup'||grpRole==='tablist'||grpRole==='toolbar'||b.hasAttribute('aria-pressed')||b.hasAttribute('aria-checked')||b.hasAttribute('aria-selected')||isSelectableBtn(b);
+    });
+  }else{
+    var sibs=getGroupButtons(btn).filter(function(c){return !c.disabled;});
+    if(sibs.length>=2&&sibs.some(function(s){return isSelectableBtn(s)||s.getAttribute('role')==='radio'||s.getAttribute('role')==='tab';})){
+      grp=getBtnGroup(btn);
+      btns=sibs;
+    }
+  }
+  if(btns.length<2)return;
+  var cur=btns.indexOf(btn);
+  if(cur<0)return;
+  ev.preventDefault();
+  var next=cur;
+  if(ev.key==='ArrowRight'||ev.key==='ArrowDown')next=(cur+1)%btns.length;
+  else if(ev.key==='ArrowLeft'||ev.key==='ArrowUp')next=(cur-1+btns.length)%btns.length;
+  else if(ev.key==='Home')next=0;
+  else if(ev.key==='End')next=btns.length-1;
+  var target=btns[next];
+  if(!target)return;
+  var gRole=grp?grp.getAttribute('role'):null;
+  if(gRole==='radiogroup'||gRole==='tablist'||gRole==='toolbar'||gRole==='group'||(grp&&grp.matches&&grp.matches('[class*="segmented-group"], [class*="tab-bar"], [class*="chip-group"]'))){
+    btns.forEach(function(b,i){b.setAttribute('tabindex',i===next?'0':'-1');});
+  }
+  target.focus();
+  var tRole=target.getAttribute('role');
+  var activeSibs=btns.filter(isBtnActiveState);
+  var isMultiSelect=gRole==='toolbar'||btns.some(function(b){return b.classList&&b.classList.contains('togglable');});
+  if(tRole==='radio'||tRole==='tab'||gRole==='radiogroup'||gRole==='tablist'||(grp&&grp.matches&&grp.matches('[class*="segmented-group"], [class*="tab-bar"]'))||(!isMultiSelect&&activeSibs.length===1)){
+    target.click();
+  }
+  setTimeout(syncSelectableButtons,0);
+});
+var lastSortedColIndex=-1;
+var lastSortedTable=null;
+function isThExplicitlySortable(th){
+  return th.hasAttribute('onclick')||th.hasAttribute('data-sort')||th.hasAttribute('data-col')||th.hasAttribute('data-key')||th.matches('.sortable, .is-sortable, [aria-sort]')||(window.getComputedStyle&&window.getComputedStyle(th).cursor==='pointer');
+}
+function syncSortableTables(){
+  try{
+    document.querySelectorAll('table').forEach(function(tbl){
+      var hdrRow=tbl.querySelector('thead tr')||tbl.querySelector('tr');
+      var ths=hdrRow?Array.from(hdrRow.querySelectorAll('th')):[];
+      if(!ths.length)return;
+      var explicitCount=ths.filter(isThExplicitlySortable).length;
+      if(!explicitCount)return;
+      var hasPerColHints=ths.some(function(th){
+        return th.hasAttribute('onclick')||th.hasAttribute('data-sort')||th.hasAttribute('data-col')||th.hasAttribute('data-key')||th.matches('.sortable, .is-sortable');
+      });
+      ths.forEach(function(th,idx){
+        var txt=(th.textContent||'').trim();
+        if(!txt||th.matches('.no-sort, [data-sortable="false"]')||th.querySelector('input, select, textarea'))return;
+        if(hasPerColHints&&!isThExplicitlySortable(th))return;
+        var isAsc=/[▲▴↑]/.test(txt)||th.matches('.asc, .sort-asc, .is-asc, [data-order="asc"], [data-dir="asc"]');
+        var isDesc=/[▼▾↓]/.test(txt)||th.matches('.desc, .sort-desc, .is-desc, [data-order="desc"], [data-dir="desc"]');
+        var sortVal=isAsc?'ascending':(isDesc?'descending':'none');
+        th.setAttribute('aria-sort',sortVal);
+        var walker=document.createTreeWalker(th,NodeFilter.SHOW_TEXT,null,false);
+        var tnodes=[];
+        while(walker.nextNode())tnodes.push(walker.currentNode);
+        tnodes.forEach(function(tn){
+          if(tn.parentElement&&tn.parentElement.getAttribute('aria-hidden')==='true')return;
+          if(/[▲▼▴▾↑↓↕]/.test(tn.nodeValue)){
+            var frag=document.createDocumentFragment();
+            tn.nodeValue.split(/([▲▼▴▾↑↓↕]+)/).forEach(function(part){
+              if(!part)return;
+              if(/[▲▼▴▾↑↓↕]/.test(part)){
+                var sp=document.createElement('span');
+                sp.setAttribute('aria-hidden','true');
+                sp.appendChild(document.createTextNode(part));
+                frag.appendChild(sp);
+              }else{
+                frag.appendChild(document.createTextNode(part));
+              }
+            });
+            if(tn.parentNode)tn.parentNode.replaceChild(frag,tn);
+          }
+        });
+        var btn=th.querySelector('button');
+        if(!btn){
+          btn=document.createElement('button');
+          btn.type='button';
+          btn.className='lumi-sort-btn';
+          btn.style.cssText='all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-align:inherit;width:100%;justify-content:inherit;border-radius:4px;';
+          for(var a=0;a<th.attributes.length;a++){
+            var an=th.attributes[a].name;
+            if(an.indexOf('data-')===0)btn.setAttribute(an,th.attributes[a].value);
+          }
+          while(th.childNodes.length)btn.appendChild(th.childNodes[0]);
+          th.appendChild(btn);
+        }
+        if(!th.dataset.lumiSortBound){
+          th.dataset.lumiSortBound='1';
+          th.addEventListener('click',function(){
+            lastSortedTable=tbl;
+            lastSortedColIndex=idx;
+            setTimeout(function(){
+              syncSortableTables();
+              if(lastSortedTable===tbl&&lastSortedColIndex===idx){
+                var curRow=tbl.querySelector('thead tr')||tbl.querySelector('tr');
+                var curThs=curRow?curRow.querySelectorAll('th'):[];
+                var targetBtn=curThs[idx]&&curThs[idx].querySelector('button');
+                if(targetBtn&&document.activeElement!==targetBtn)targetBtn.focus();
+              }
+            },0);
+          });
+        }
+      });
+    });
+  }catch(e){}
+}
+function formatChartVal(v){
+  if(v===null||v===undefined)return '';
+  if(typeof v==='object'){
+    if(v.label||v.name){
+      var nm=v.label||v.name;
+      if(v.x!==undefined&&v.y!==undefined)return [nm,'('+v.x+', '+v.y+')'].join(' ');
+    }
+    if(v.y!==undefined&&v.x!==undefined&&typeof v.x==='number')return '('+v.x+', '+v.y+')';
+    if(v.y!==undefined)return String(v.y);
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+function buildChartSteps(chart){
+  var cfg=chart.config||{};
+  var data=chart.data||cfg.data||{};
+  var labels=Array.isArray(data.labels)?data.labels:[];
+  var dsList=Array.isArray(data.datasets)?data.datasets:[];
+  var type=(cfg.type||'').toString();
+  var visDs=[];
+  for(var d=0;d<dsList.length;d++){
+    var meta=chart.getDatasetMeta?chart.getDatasetMeta(d):null;
+    var hidden=(meta&&meta.hidden===true)||(dsList[d]&&dsList[d].hidden===true);
+    if(!hidden&&dsList[d]&&Array.isArray(dsList[d].data)&&dsList[d].data.length){
+      visDs.push(d);
+    }
+  }
+  if(!visDs.length)return[];
+  var steps=[];
+  if(type==='scatter'||type==='bubble'||!labels.length){
+    var maxLen=0;
+    visDs.forEach(function(d){if(dsList[d].data.length>maxLen)maxLen=dsList[d].data.length;});
+    if(type==='scatter'||type==='bubble'){
+      visDs.forEach(function(d){
+        var arr=dsList[d].data;
+        for(var i=0;i<arr.length;i++){
+          if(arr[i]!==null&&arr[i]!==undefined)steps.push([{datasetIndex:d,index:i}]);
+        }
+      });
+    }else{
+      for(var idx=0;idx<maxLen;idx++){
+        var els=[];
+        visDs.forEach(function(d){
+          if(idx<dsList[d].data.length&&dsList[d].data[idx]!==null&&dsList[d].data[idx]!==undefined){
+            els.push({datasetIndex:d,index:idx});
+          }
+        });
+        if(els.length)steps.push(els);
+      }
+    }
+  }else{
+    for(var c=0;c<labels.length;c++){
+      var cEls=[];
+      visDs.forEach(function(d){
+        if(c<dsList[d].data.length&&dsList[d].data[c]!==null&&dsList[d].data[c]!==undefined){
+          cEls.push({datasetIndex:d,index:c});
+        }
+      });
+      if(cEls.length)steps.push(cEls);
+    }
+  }
+  return steps;
+}
+function activateChartStep(chart,stepEls,stepIdx,totalSteps){
+  var cv=chart&&chart['can'+'vas'];
+  if(!stepEls||!stepEls.length)return;
+  var pos={x:0,y:0};
+  try{
+    var fEl=stepEls[0];
+    var meta=chart.getDatasetMeta?chart.getDatasetMeta(fEl.datasetIndex):null;
+    var el=meta&&meta.data&&meta.data[fEl.index];
+    if(el&&typeof el.tooltipPosition==='function')pos=el.tooltipPosition();
+    else if(el&&el.x!==undefined&&el.y!==undefined)pos={x:el.x,y:el.y};
+  }catch(e){}
+  if(chart.setActiveElements)chart.setActiveElements(stepEls);
+  if(chart.tooltip&&chart.tooltip.setActiveElements)chart.tooltip.setActiveElements(stepEls,pos);
+  if(chart.update)chart.update('none');
+  var msg='';
+  try{
+    var tt=chart.tooltip;
+    if(tt&&Array.isArray(tt.body)&&tt.body.length){
+      var tTitle=Array.isArray(tt.title)?tt.title.join(' '):'';
+      var tLines=[];
+      tt.body.forEach(function(b){
+        if(b&&Array.isArray(b.lines))b.lines.forEach(function(l){if(l)tLines.push(l);});
+      });
+      if(tLines.length)msg=(tTitle?(tTitle+': '):'')+tLines.join('; ');
+    }
+  }catch(e){}
+  if(!msg){
+    var data=chart.data||{};
+    var labels=Array.isArray(data.labels)?data.labels:[];
+    var dsList=Array.isArray(data.datasets)?data.datasets:[];
+    var f=stepEls[0];
+    var lbl=labels[f.index]!==undefined?String(labels[f.index]):('Point '+(stepIdx+1));
+    var parts=stepEls.map(function(item){
+      var ds=dsList[item.datasetIndex]||{};
+      var dsLbl=ds.label||('Series '+(item.datasetIndex+1));
+      var raw=ds.data&&ds.data[item.index];
+      return [dsLbl,formatChartVal(raw)].join(': ');
+    });
+    msg=lbl+' — '+parts.join(', ');
+  }
+  var fullMsg=msg+' ('+(stepIdx+1)+' of '+totalSteps+')';
+  announceChartMsg(fullMsg);
+  var ttOpts=chart.options&&chart.options.plugins&&chart.options.plugins.tooltip;
+  if(ttOpts&&ttOpts.enabled===false)showChartKbdBadge(cv,msg);
+}
+var kChartKbdHint=' Use Left and Right arrow keys to navigate data points.';
+function summarizeChart(chart){
+  try{
+    var cv=chart&&chart['can'+'vas'];
+    if(!cv)return;
+    cv.setAttribute('role','application');
+    cv.setAttribute('aria-roledescription','interactive chart');
+    if(!cv.hasAttribute('tabindex'))cv.setAttribute('tabindex','0');
+    if(cv.style&&cv.style.outline==='none')cv.style.outline='';
+    var cfg=chart.config||{};
+    var data=chart.data||cfg.data||{};
+    var labels=Array.isArray(data.labels)?data.labels:[];
+    var datasets=Array.isArray(data.datasets)?data.datasets:[];
+    var type=(cfg.type||'chart').toString();
+    var titleEl=cv.closest('[class*="lumi-card"], section, .widget-container, body');
+    var heading=titleEl?titleEl.querySelector('.lumi-chart-title, h1, h2, h3, h4'):null;
+    var titleTxt=heading?(heading.textContent||'').trim():'';
+    var parts=[];
+    if(titleTxt)parts.push(titleTxt+' ('+type+' chart).');
+    else parts.push(type.charAt(0).toUpperCase()+type.slice(1)+' chart.');
+    datasets.slice(0,4).forEach(function(ds,di){
+      var dsName=ds.label||('Series '+(di+1));
+      var vals=Array.isArray(ds.data)?ds.data:[];
+      var pairs=[];
+      for(var i=0;i<Math.min(vals.length,8);i++){
+        var valStr=formatChartVal(vals[i]);
+        var lbl=labels[i]!==undefined?String(labels[i]):('Point '+(i+1));
+        pairs.push(lbl+': '+valStr);
+      }
+      if(vals.length>8)pairs.push('and '+(vals.length-8)+' more');
+      if(pairs.length)parts.push(dsName+' — '+pairs.join(', ')+'.');
+    });
+    var summary=parts.join(' ').split(/\s+/).slice(0,130).join(' ')+kChartKbdHint;
+    if(!cv.hasAttribute('aria-label')||cv.dataset.lumiAutoLabel==='1'){
+      cv.setAttribute('aria-label',summary);
+      cv.dataset.lumiAutoLabel='1';
+    }else{
+      var curLbl=cv.getAttribute('aria-label')||'';
+      if(!/arrow keys/i.test(curLbl)){
+        cv.setAttribute('aria-label',curLbl.replace(/\.\s*$/,'')+'.'+kChartKbdHint);
+      }
+    }
+    if(!cv.dataset.lumiChartKeyBound&&!cv.dataset.lumiKbdBound&&!cv.dataset.lumiKeyA11y){
+      cv.dataset.lumiChartKeyBound='1';
+      cv.dataset.lumiKbdBound='1';
+      var stepCursor=-1;
+      cv.addEventListener('keydown',function(ev){
+        if(ev.defaultPrevented)return;
+        if(ev.key==='Escape'){
+          stepCursor=-1;
+          if(chart.setActiveElements)chart.setActiveElements([]);
+          if(chart.tooltip&&chart.tooltip.setActiveElements)chart.tooltip.setActiveElements([],{x:0,y:0});
+          if(chart.update)chart.update('none');
+          showChartKbdBadge(cv,'');
+          return;
+        }
+        if(ev.key!=='ArrowRight'&&ev.key!=='ArrowLeft'&&ev.key!=='ArrowDown'&&ev.key!=='ArrowUp'&&ev.key!=='Home'&&ev.key!=='End')return;
+        var steps=buildChartSteps(chart);
+        if(!steps.length)return;
+        ev.preventDefault();
+        if(ev.key==='ArrowRight'||ev.key==='ArrowDown')stepCursor=(stepCursor+1)%steps.length;
+        else if(ev.key==='ArrowLeft'||ev.key==='ArrowUp')stepCursor=stepCursor<=0?(steps.length-1):(stepCursor-1);
+        else if(ev.key==='Home')stepCursor=0;
+        else if(ev.key==='End')stepCursor=steps.length-1;
+        activateChartStep(chart,steps[stepCursor],stepCursor,steps.length);
+      });
+      cv.addEventListener('blur',function(){
+        stepCursor=-1;
+        try{
+          if(chart.setActiveElements)chart.setActiveElements([]);
+          if(chart.tooltip&&chart.tooltip.setActiveElements)chart.tooltip.setActiveElements([],{x:0,y:0});
+          if(chart.update)chart.update('none');
+          showChartKbdBadge(cv,'');
+        }catch(e){}
+      });
+    }
+  }catch(e){}
+}
+function describeSvgMark(m,idx){
+  var al=m.getAttribute('aria-label')||m.getAttribute('data-label')||m.getAttribute('data-name')||m.getAttribute('data-title');
+  var val=m.getAttribute('data-value')||m.getAttribute('data-val')||m.getAttribute('data-y');
+  if(al&&val)return [al,val].join(': ');
+  if(al)return al;
+  var tEl=m.querySelector('title');
+  if(tEl&&tEl.textContent)return tEl.textContent.trim();
+  if(m.__data__&&typeof m.__data__==='object'){
+    var d=(m.__data__.data&&typeof m.__data__.data==='object')?m.__data__.data:m.__data__;
+    var nm=d.name||d.label||d.title||d.id||d.category||d.item||d.food||d.country||d.state||d.group||'';
+    var v=d.value!==undefined?d.value:(d.y!==undefined&&typeof d.y!=='object'?d.y:'');
+    var kvs=[];
+    var skipKey=/^(?:name|label|title|id|category|item|food|country|state|group|x0|x1|y0|y1|vx|vy|fx|fy|index|depth|height|r|color|fill|stroke)$/;
+    Object.keys(d).forEach(function(k){
+      if(skipKey.test(k)||kvs.length>=4)return;
+      var kv=d[k];
+      if(typeof kv==='number'||(typeof kv==='string'&&kv.length<=32)){
+        kvs.push([k,kv].join(': '));
+      }
+    });
+    if(nm&&kvs.length)return [nm,kvs.join(', ')].join(' — ');
+    if(nm&&v!=='')return [nm,v].join(': ');
+    if(kvs.length)return kvs.join(', ');
+    if(nm)return String(nm);
+    if(v!=='')return ['Point '+(idx+1),v].join(': ');
+  }
+  var pG=m.closest('g');
+  if(pG){
+    var txt=(pG.textContent||'').trim().replace(/\s+/g,' ');
+    if(txt&&txt.length<=80)return txt;
+  }
+  return ['Data point',idx+1].join(' ');
+}
+function collectSvgMarks(svg){
+  return Array.from(svg.querySelectorAll('circle, rect, path, polygon, g[data-label], g[data-value]')).filter(function(el){
+    if(el.tagName==='RECT'&&(el.getAttribute('width')==='100%'||parseFloat(el.getAttribute('width')||'0')>450))return false;
+    if(el.hasAttribute('data-label')||el.hasAttribute('data-value')||el.hasAttribute('aria-label')||el.querySelector('title'))return true;
+    if(el.__data__!==undefined||el.__on!==undefined)return true;
+    var cs=window.getComputedStyle?window.getComputedStyle(el):null;
+    return cs&&cs.cursor==='pointer';
+  });
+}
+function hookSvgCharts(){
+  try{
+    document.querySelectorAll('svg').forEach(function(svg){
+      if(svg.closest('button, a, .lumi-icon, .lumi-pullquote-mark'))return;
+      var vb=svg.getAttribute('viewBox');
+      var w=svg.clientWidth||parseFloat(svg.getAttribute('width')||'0');
+      if(w>0&&w<64&&!vb)return;
+      var marks=collectSvgMarks(svg);
+      if(marks.length<2)return;
+      svg.setAttribute('role','application');
+      svg.setAttribute('aria-roledescription','interactive chart');
+      if(!svg.hasAttribute('tabindex'))svg.setAttribute('tabindex','0');
+      var curLbl=svg.getAttribute('aria-label')||'';
+      if(!curLbl){
+        var card=svg.closest('[class*="lumi-card"], section, .widget-container, body');
+        var hdr=card?card.querySelector('.lumi-chart-title, h1, h2, h3, h4'):null;
+        var hTxt=hdr?(hdr.textContent||'').trim():'Interactive chart';
+        var sample=marks.slice(0,6).map(function(m,i){return describeSvgMark(m,i);}).join(', ');
+        svg.setAttribute('aria-label',hTxt+'. '+(sample?(sample+'.'):'')+kChartKbdHint);
+      }else if(!/arrow keys/i.test(curLbl)){
+        svg.setAttribute('aria-label',curLbl.replace(/\.\s*$/,'')+'.'+kChartKbdHint);
+      }
+      if(!svg.dataset.lumiSvgKeyBound){
+        svg.dataset.lumiSvgKeyBound='1';
+        var activeMarkIdx=-1;
+        var prevMark=null;
+        var clearMark=function(){
+          if(prevMark){
+            prevMark.style.outline='';
+            try{prevMark.dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));prevMark.dispatchEvent(new MouseEvent('mouseleave',{bubbles:true}));}catch(e){}
+            prevMark=null;
+          }
+          showChartKbdBadge(svg,'');
+        };
+        svg.addEventListener('keydown',function(ev){
+          if(ev.defaultPrevented)return;
+          if(ev.key==='Escape'){activeMarkIdx=-1;clearMark();return;}
+          if(ev.key!=='ArrowRight'&&ev.key!=='ArrowLeft'&&ev.key!=='ArrowDown'&&ev.key!=='ArrowUp'&&ev.key!=='Home'&&ev.key!=='End')return;
+          var curMarks=collectSvgMarks(svg);
+          if(!curMarks.length)return;
+          ev.preventDefault();
+          clearMark();
+          if(ev.key==='ArrowRight'||ev.key==='ArrowDown')activeMarkIdx=(activeMarkIdx+1)%curMarks.length;
+          else if(ev.key==='ArrowLeft'||ev.key==='ArrowUp')activeMarkIdx=activeMarkIdx<=0?(curMarks.length-1):(activeMarkIdx-1);
+          else if(ev.key==='Home')activeMarkIdx=0;
+          else if(ev.key==='End')activeMarkIdx=curMarks.length-1;
+          var target=curMarks[activeMarkIdx];
+          if(!target)return;
+          prevMark=target;
+          target.style.outline='2px solid var(--primary, #3186ff)';
+          try{
+            var r=target.getBoundingClientRect();
+            var mOpts={bubbles:true,clientX:r.left+r.width/2,clientY:r.top+r.height/2};
+            target.dispatchEvent(new MouseEvent('mouseenter',mOpts));
+            target.dispatchEvent(new MouseEvent('mouseover',mOpts));
+            target.dispatchEvent(new MouseEvent('mousemove',mOpts));
+          }catch(e){}
+          var desc=describeSvgMark(target,activeMarkIdx);
+          try{
+            var domTts=document.querySelectorAll('.tooltip, [class*="tooltip"], #tooltip');
+            for(var ti=0;ti<domTts.length;ti++){
+              var ttEl=domTts[ti];
+              var ttCs=window.getComputedStyle?window.getComputedStyle(ttEl):null;
+              if(ttCs&&ttCs.display!=='none'&&ttCs.visibility!=='hidden'&&parseFloat(ttCs.opacity||'1')>0){
+                var ttTxt=(ttEl.textContent||'').trim().replace(/\s+/g,' ');
+                if(ttTxt&&ttTxt.length<=160){desc=ttTxt;break;}
+              }
+            }
+          }catch(e){}
+          announceChartMsg(desc+' ('+(activeMarkIdx+1)+' of '+curMarks.length+')');
+          showChartKbdBadge(svg,desc);
+        });
+        svg.addEventListener('blur',function(){activeMarkIdx=-1;clearMark();});
+      }
+    });
+  }catch(e){}
+}
+function wrapChartClass(C){
+  if(!C)return C;
+  if(typeof window.__lumiWrapChart==='function')C=window.__lumiWrapChart(C);
+  if(!C.__lumiA11yHooked&&C.prototype&&C.prototype.update){
+    var origUpdate=C.prototype.update;
+    C.prototype.update=function(){
+      var res=origUpdate.apply(this,arguments);
+      summarizeChart(this);
+      return res;
+    };
+    C.__lumiA11yHooked=true;
+  }
+  return C;
+}
+try{
+  var curChart=wrapChartClass(window.Chart);
+  if(!window.__lumiChartPropHooked){
+    window.__lumiChartPropHooked=true;
+    Object.defineProperty(window,'Chart',{
+      configurable:true,
+      enumerable:true,
+      get:function(){return curChart;},
+      set:function(v){curChart=wrapChartClass(v);}
+    });
+  }
+}catch(e){}
+function hookChartJs(){
+  try{
+    getOrCreateChartLive();
+    document.querySelectorAll('.lumi-chart-legend, [class*="chart-legend"]').forEach(function(el){
+      el.setAttribute('aria-hidden','true');
+    });
+    document.querySelectorAll('.lumi-chart-title').forEach(function(el){
+      if(!/^H[1-6]$/.test(el.tagName)&&!el.hasAttribute('role')){
+        el.setAttribute('role','heading');
+        el.setAttribute('aria-level','3');
+      }
+    });
+    if(window.Chart){
+      wrapChartClass(window.Chart);
+      if(window.Chart.instances){
+        Object.values(window.Chart.instances).forEach(summarizeChart);
+      }
+      document.querySelectorAll('can'+'vas').forEach(function(cv){
+        var inst=(window.Chart.getChart&&window.Chart.getChart(cv))||cv.__chartjs__||cv.$chartjs;
+        if(inst)summarizeChart(inst);
+      });
+    }
+    hookSvgCharts();
+  }catch(e){}
+}
+function all(){
+  syncSliders();
+  fixDeleteButtons();
+  fixFormGroups();
+  syncSelectableButtons();
+  syncSortableTables();
+  hookChartJs();
+}
+if(typeof MutationObserver==='function'&&document.documentElement){
+  var mo=new MutationObserver(function(){
+    if(isSyncingA11y)return;
+    syncSelectableButtons();
+    isSyncingA11y=true;
+    try{syncSliders();}finally{mo.takeRecords();isSyncingA11y=false;}
+  });
+  mo.observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class','style','value']});
+}
+window.addEventListener('message',function(e){
+  var d=e&&e.data;
+  if(d&&(d.type==='SUPPLEMENTAL_DATA_UPDATE'||d.type==='RESTORE_STATE')){
+    all();
+    setTimeout(all,0);
+    setTimeout(all,50);
+  }
+});
+document.addEventListener('focusin',function(e){
+  var t=e&&e.target;
+  if(t&&(t.tagName===('CAN'+'VAS')||t.tagName==='SVG'||t.tagName==='BUTTON')){
+    hookChartJs();
+    syncSelectableButtons();
+  }
+});
+document.addEventListener('click',function(e){
+  var btn=e.target&&e.target.closest?e.target.closest('button'):null;
+  if(!btn)return;
+  var txt=(btn.textContent||'').trim();
+  var isAdd=/^\+|^\+?\s*add\b/i.test(txt)||/\badd\b/i.test(btn.getAttribute('aria-label')||'');
+  var preInputs=isAdd?new Set(document.querySelectorAll('input:not([type="hidden"]), select, textarea')):null;
+  var wasSelectable=isSelectableBtn(btn)||btn.getAttribute('role')==='radio'||btn.getAttribute('role')==='tab';
+  var prevPressed=btn.getAttribute('aria-pressed');
+  var prevAria=[prevPressed,btn.getAttribute('aria-checked'),btn.getAttribute('aria-selected')].join('|');
+  setTimeout(function(){
+    if(wasSelectable&&btn.isConnected){
+      var sibs=getGroupButtons(btn);
+      var sig=detectVisualActiveInGroup(sibs);
+      var curAria=[btn.getAttribute('aria-pressed'),btn.getAttribute('aria-checked'),btn.getAttribute('aria-selected')].join('|');
+      var authorUpdatedAria=(curAria!==prevAria);
+      if(sig.hasSignal||authorUpdatedAria){
+        sibs.forEach(function(s){if(s.dataset)delete s.dataset.lumiClickedActive;});
+      }else if(sibs.length>=2){
+        sibs.forEach(function(s){
+          if(!s.dataset)return;
+          s.dataset.lumiClickedActive=(s===btn)?'1':'0';
+        });
+      }else{
+        btn.dataset.lumiClickedActive=(prevPressed==='true')?'0':'1';
+      }
+    }
+    fixDeleteButtons();
+    fixFormGroups();
+    syncSelectableButtons();
+    syncSortableTables();
+    hookChartJs();
+    if(preInputs){
+      var detached=0;
+      preInputs.forEach(function(el){if(!el.isConnected)detached++;});
+      var allNow=document.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])');
+      var fresh=[];
+      for(var i=0;i<allNow.length;i++){
+        if(!preInputs.has(allNow[i]))fresh.push(allNow[i]);
+      }
+      if(fresh.length>detached&&fresh[detached])fresh[detached].focus();
+    }
+  },0);
+},true);
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',function(){all();setTimeout(all,0);setTimeout(all,250);setTimeout(all,800);});
+}else{
+  all();
+  setTimeout(all,0);
+  setTimeout(all,250);
+  setTimeout(all,800);
+}
+window.addEventListener('load',function(){all();setTimeout(all,250);setTimeout(all,800);});
+})();</script>
+</body>
+</html>
